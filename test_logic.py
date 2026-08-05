@@ -1,7 +1,6 @@
 """
 Sanity-check strategies.py and backtest.py against synthetic price data,
-since this sandbox can't reach the Yahoo Finance API. Neil should run
-main.py directly on his own machine where live data is reachable.
+since this sandbox can't reach the Yahoo Finance API. 
 """
 import numpy as np
 import pandas as pd
