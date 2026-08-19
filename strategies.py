@@ -1,9 +1,6 @@
 """
 Each strategy function takes a price DataFrame (with a 'Close' column)
 and returns a pandas Series of positions: 1 = long, 0 = flat.
-
-Keeping this interface consistent is what makes it easy to add new
-strategies and plug any of them into the same backtest engine.
 """
 
 import numpy as np
@@ -40,8 +37,15 @@ def mean_reversion_rsi(
     avg_gain = gain.rolling(period).mean()
     avg_loss = loss.rolling(period).mean()
 
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100 - (100 / (1 + rs))
+    # NOTE (fixed after code review): avg_loss == 0 means every day in the
+    # window was a gain -- that's a legitimate, maximally overbought case
+    # and RSI should resolve to 100, not NaN. We handle it explicitly
+    # instead of blanket-replacing 0 with NaN, which silently discarded
+    # a mathematically valid answer.
+    rsi = pd.Series(index=df.index, dtype=float)
+    valid = avg_loss > 0
+    rsi[valid] = 100 - (100 / (1 + avg_gain[valid] / avg_loss[valid]))
+    rsi[avg_loss == 0] = 100
 
     signal = pd.Series(index=df.index, dtype=float)
     signal[rsi < oversold] = 1

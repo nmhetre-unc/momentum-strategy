@@ -1,7 +1,6 @@
 """
-Turns a price series + a position signal into an equity curve and
-summary stats. This is the piece every strategy shares, regardless of
-how its signal was generated.
+Turns a price series + a position signal into an equity curve and basic
+stats. See analytics.py for the richer risk-adjusted metrics layer.
 """
 
 import pandas as pd
@@ -33,6 +32,8 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series) -> pd.DataFrame:
 
 
 def summary_stats(result: pd.DataFrame) -> dict:
+    """Basic stats from a full-period backtest result. See analytics.full_report
+    for the richer version that's also safe to use on sliced sub-periods."""
     total_return = result["equity_curve"].iloc[-1] - 1
     benchmark_return = result["benchmark_curve"].iloc[-1] - 1
 
