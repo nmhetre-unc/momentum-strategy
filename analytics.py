@@ -39,11 +39,21 @@ def sortino_ratio(daily_returns: pd.Series, risk_free_rate: float = 0.0) -> floa
     return (excess.mean() / downside_std) * np.sqrt(TRADING_DAYS_PER_YEAR)
 
 
+def drawdown_series(equity_curve: pd.Series) -> pd.Series:
+    """
+    The full peak-to-trough decline at every point in time, as a negative
+    fraction (e.g. -0.23 = -23% below the running peak so far). This is
+    the single source of truth for the drawdown formula -- max_drawdown()
+    below and plot_drawdown() in visualize.py both call this rather than
+    each recomputing the same formula independently.
+    """
+    running_max = equity_curve.cummax()
+    return (equity_curve - running_max) / running_max
+
+
 def max_drawdown(equity_curve: pd.Series) -> float:
     """Largest peak-to-trough decline, as a negative fraction (e.g. -0.23 = -23%)."""
-    running_max = equity_curve.cummax()
-    drawdown = (equity_curve - running_max) / running_max
-    return drawdown.min()
+    return drawdown_series(equity_curve).min()
 
 
 def full_report(result: pd.DataFrame) -> dict:

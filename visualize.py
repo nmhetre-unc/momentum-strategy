@@ -6,6 +6,8 @@ up in an interactive window (this is meant to run from the command line).
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from analytics import drawdown_series
+
 
 def plot_equity_curve(result: pd.DataFrame, title: str, out_path: str = "equity_curve.png"):
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -21,9 +23,7 @@ def plot_equity_curve(result: pd.DataFrame, title: str, out_path: str = "equity_
 
 
 def plot_drawdown(result: pd.DataFrame, title: str, out_path: str = "drawdown.png"):
-    equity = result["equity_curve"]
-    running_max = equity.cummax()
-    drawdown = (equity - running_max) / running_max
+    drawdown = drawdown_series(result["equity_curve"])
 
     fig, ax = plt.subplots(figsize=(10, 3))
     ax.fill_between(result.index, drawdown, 0, color="crimson", alpha=0.4)
