@@ -1,7 +1,7 @@
-# Quant Strategy Dashboard (Week 2: Analytics & Rigor)
+# Quant Strategy Dashboard (Week 3: Interactive UI + Deployment)
 
-A multi-strategy backtesting engine with risk-adjusted performance metrics
-and walk-forward out-of-sample validation.
+A multi-strategy backtesting engine with risk-adjusted performance metrics,
+walk-forward validation, and a live interactive dashboard.
 
 ## Setup
 
@@ -11,50 +11,64 @@ source venv/bin/activate        # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
-## Usage
+## Usage — CLI (unchanged from Week 2)
 
 ```bash
 python main.py --ticker SPY --strategy sma_crossover
 python main.py --ticker AAPL --strategy momentum --walk-forward
 python main.py --ticker MSFT --strategy mean_reversion --plot
-python main.py --ticker SPY --strategy sma_crossover --walk-forward --plot
 ```
+
+## Usage — Interactive dashboard (new)
+
+```bash
+streamlit run app.py
+```
+
+This opens a local dashboard in your browser. From there:
+- Pick a ticker, date range, and strategy in the sidebar
+- Adjust strategy parameters with sliders (window sizes, RSI thresholds, etc.)
+- Click **Run Backtest** to see the equity curve, drawdown chart, and full metrics table
+- Toggle walk-forward validation to see in-sample vs. out-of-sample performance side by side
+
+## Deploying it live (free)
+
+1. Push this repo to GitHub (see below if you haven't already)
+2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub
+3. Click **New app**, select this repo, and set the main file path to `app.py`
+4. Deploy — you'll get a public URL like `https://your-app-name.streamlit.app`
+
+Put that live link at the top of your GitHub README and on your resume — this
+is what turns the project from "code someone would have to run themselves"
+into "something a recruiter can actually click and use."
 
 ## Structure
 
 - `data_loader.py` — fetches and locally caches OHLCV data via yfinance
-- `strategies.py` — strategy functions (`sma_crossover`, `momentum`, `mean_reversion_rsi`), all sharing the interface `fn(df, **params) -> pd.Series` (1 = long, 0 = flat)
+- `strategies.py` — strategy functions (`sma_crossover`, `momentum`, `mean_reversion_rsi`)
 - `backtest.py` — turns a signal into an equity curve; shifts signals forward one day to avoid lookahead bias
 - `analytics.py` — CAGR, annualized volatility, Sharpe ratio, Sortino ratio, max drawdown, trade count, win rate
-- `walk_forward.py` — splits a backtest chronologically into in-sample/out-of-sample periods and reports both, to check whether performance is real or just overfit to one lucky stretch
-- `visualize.py` — saves equity curve and drawdown charts as PNGs
+- `walk_forward.py` — in-sample/out-of-sample split to check for overfitting
+- `visualize.py` — static PNG charts (used by the CLI's `--plot` flag)
+- `app.py` — the interactive Streamlit dashboard (new this week)
 - `main.py` — CLI entry point
-- `test_logic.py` — sanity-checks everything against synthetic data (useful in any environment without live market data access)
+- `test_logic.py` — sanity-checks everything against synthetic data
 
-## Reading the walk-forward output
+## Notes on app.py
 
-If a strategy's Sharpe ratio is strong in-sample but collapses (or goes
-negative) out-of-sample, that's a sign the strategy was fit to noise in
-the earlier period rather than capturing something that generalizes.
-This is worth mentioning explicitly in an interview — it shows you're
-checking for overfitting, not just reporting the best-looking number.
+- `@st.cache_data` on `load_data()` means switching strategy or parameters
+  without changing the ticker/dates re-uses cached price data instead of
+  re-hitting the Yahoo Finance API.
+- Streamlit reruns the entire script top-to-bottom on every widget interaction
+  (every slider drag, every button click). Results are stashed in
+  `st.session_state` specifically so that adjusting an unrelated widget
+  (like toggling walk-forward) doesn't wipe the chart you just generated.
+- The walk-forward section automatically flags a warning if the Sharpe ratio
+  drops by more than 0.5 out-of-sample — a simple, honest heuristic for
+  "this might be overfit," worth explaining in an interview if asked.
 
-## Fixed since Week 1
+## Coming in Week 4
 
-`mean_reversion_rsi` previously used `avg_loss.replace(0, np.nan)` to
-avoid a divide-by-zero warning when computing RSI. That silently turned
-a legitimate case (zero average loss over the window = maximally
-overbought) into `NaN` instead of the mathematically correct `RSI = 100`.
-Now handled explicitly instead of papering over it.
-
-## Notes
-
-- `test_logic.py` uses synthetic random-walk data so the logic can be verified without
-  network access to Yahoo Finance. Run `main.py` directly on your own machine for real data.
-- `--plot` requires matplotlib (already in requirements.txt) and saves PNGs to the current directory.
-
-## Coming in Week 3
-
-An interactive Streamlit UI on top of this — deployed live, so the
-dashboard is something a recruiter can actually click and use, not just
-code they'd have to run themselves.
+An ML-driven strategy (logistic regression or random forest predicting
+next-day direction) added as a fourth option in the dashboard, tying back
+to the crypto ML research project.
