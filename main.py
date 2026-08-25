@@ -37,6 +37,8 @@ def main():
                          help="Split into in-sample/out-of-sample periods and evaluate both")
     parser.add_argument("--plot", action="store_true",
                          help="Save equity curve and drawdown charts as PNG files")
+    parser.add_argument("--model-report", action="store_true",
+                         help="For --strategy ml_direction: print train/test accuracy and feature importance")
     args = parser.parse_args()
 
     df = fetch_ohlcv(args.ticker, args.start, args.end)
@@ -60,6 +62,21 @@ def main():
         plot_equity_curve(result, header, out_path=equity_path)
         plot_drawdown(result, header, out_path=drawdown_path)
         print(f"\nSaved charts: {equity_path}, {drawdown_path}")
+
+    if args.model_report:
+        if args.strategy != "ml_direction":
+            print("\n--model-report only applies to --strategy ml_direction")
+        else:
+            from ml_strategy import model_report
+            report = model_report(df)
+            print(f"\n--- Model diagnostics (split at {report['split_date']}) ---")
+            print(f"  Train accuracy: {report['train_accuracy']:.2%}")
+            print(f"  Test accuracy:  {report['test_accuracy']:.2%}")
+            print(f"  Test confusion matrix [[TN, FP], [FN, TP]]: {report['test_confusion_matrix']}")
+            print("  Top features by importance:")
+            top_features = sorted(report["feature_importance"].items(), key=lambda kv: -abs(kv[1]))[:5]
+            for name, value in top_features:
+                print(f"    {name:20s} {value:+.4f}")
 
 
 if __name__ == "__main__":

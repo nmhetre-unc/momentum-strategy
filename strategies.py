@@ -6,6 +6,8 @@ and returns a pandas Series of positions: 1 = long, 0 = flat.
 import numpy as np
 import pandas as pd
 
+from ml_strategy import ml_direction_signal
+
 
 def sma_crossover(df: pd.DataFrame, short_window: int = 50, long_window: int = 200) -> pd.Series:
     """Long when the short-term SMA is above the long-term SMA, flat otherwise."""
@@ -58,4 +60,5 @@ STRATEGIES = {
     "sma_crossover": sma_crossover,
     "momentum": momentum,
     "mean_reversion": mean_reversion_rsi,
+    "ml_direction": ml_direction_signal,
 }

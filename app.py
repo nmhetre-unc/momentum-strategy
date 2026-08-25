@@ -44,6 +44,13 @@ with st.sidebar:
         params["period"] = st.slider("RSI period", 5, 30, 14)
         params["oversold"] = st.slider("Oversold threshold", 10, 40, 30)
         params["overbought"] = st.slider("Overbought threshold", 60, 90, 70)
+    elif strategy_name == "ml_direction":
+        params["model_type"] = st.selectbox("Model type", ["logistic", "random_forest"])
+        params["train_frac"] = st.slider("Train fraction", 0.5, 0.9, 0.7, step=0.05)
+        st.caption(
+            "⚠️ Only the out-of-sample period below reflects honest performance — "
+            "in-sample results are inflated because the model was trained on that data."
+        )
 
     show_walk_forward = st.checkbox("Show walk-forward validation", value=True)
     run_clicked = st.button("Run Backtest", type="primary", use_container_width=True)
@@ -155,5 +162,31 @@ if "result" in st.session_state:
                 f"Sharpe ratio dropped by {sharpe_drop:.2f} out-of-sample — "
                 "possible sign of overfitting to the in-sample period."
             )
+
+    if st.session_state["strategy_name"] == "ml_direction":
+        from ml_strategy import model_report
+
+        st.subheader("Model Diagnostics")
+        report = model_report(df, **st.session_state["params"])
+
+        mc1, mc2 = st.columns(2)
+        mc1.metric("Train Accuracy", f"{report['train_accuracy']:.1%}")
+        mc2.metric("Test Accuracy", f"{report['test_accuracy']:.1%}")
+
+        if report["train_accuracy"] - report["test_accuracy"] > 0.1:
+            st.warning(
+                f"Train accuracy ({report['train_accuracy']:.1%}) is well above test "
+                f"accuracy ({report['test_accuracy']:.1%}) — a classic overfitting signature. "
+                "Random forests are especially prone to this; logistic regression tends to "
+                "generalize more conservatively."
+            )
+
+        importance_df = pd.DataFrame(
+            sorted(report["feature_importance"].items(), key=lambda kv: -abs(kv[1])),
+            columns=["Feature", "Importance"],
+        )
+        fig = go.Figure(go.Bar(x=importance_df["Importance"], y=importance_df["Feature"], orientation="h"))
+        fig.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10), title="Feature Importance")
+        st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Configure a ticker and strategy in the sidebar, then click **Run Backtest**.")
