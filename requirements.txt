@@ -1,7 +1,16 @@
-yfinance
-pandas
-numpy
-matplotlib
-streamlit>=1.57
-altair
-scikit-learn
+# Python 3.12+ required (numpy 2.5 needs >=3.12; pandas 3 and scikit-learn 1.9
+# need >=3.11). On Streamlit Community Cloud set the Python version to 3.12 or
+# 3.13 under Advanced settings when you create the app -- the 3.9 default cannot
+# install streamlit>=1.62 and the build fails during pip install.
+#
+# Floors are the versions this project was developed and tested against. The
+# dashboard uses recent Streamlit APIs (st.navigation, tab.open, st.context.theme,
+# st.container(horizontal=...), width="stretch"), so an older resolve would import
+# fine and then crash at render time -- better to fail at install.
+yfinance>=0.2.40
+pandas>=2.2
+numpy>=1.26
+matplotlib>=3.8
+altair>=5.4
+scikit-learn>=1.4
+streamlit>=1.62
