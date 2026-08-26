@@ -1,7 +1,9 @@
 # Python 3.12+ required (numpy 2.5 needs >=3.12; pandas 3 and scikit-learn 1.9
-# need >=3.11). On Streamlit Community Cloud set the Python version to 3.12 or
-# 3.13 under Advanced settings when you create the app -- the 3.9 default cannot
-# install streamlit>=1.62 and the build fails during pip install.
+# need >=3.11). Developed and tested on 3.14. On Streamlit Community Cloud pick
+# the Python version under Advanced settings when you CREATE the app (it cannot
+# be changed afterwards) -- 3.14 matches this stack exactly and every compiled
+# dependency ships a cp314 wheel. The 3.9 default cannot install streamlit>=1.62
+# at all, and the build dies during pip install before the app ever starts.
 #
 # Floors are the versions this project was developed and tested against. The
 # dashboard uses recent Streamlit APIs (st.navigation, tab.open, st.context.theme,
