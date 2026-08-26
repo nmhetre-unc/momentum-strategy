@@ -1,192 +1,156 @@
 """
-Interactive dashboard on top of the existing backtest engine.
+Quant training terminal — entry point.
+
 Run with: streamlit run app.py
+
+This file owns everything shared across pages: the data selection, the
+regime-detection settings, and the navigation. Each page in app_pages/ is
+a plain script that reads that shared state and renders one workspace.
+
+The split exists for a performance reason as much as a tidiness one:
+Streamlit reruns everything visible on every widget interaction, and
+regime detection plus model fitting is far too expensive to run seven
+times per click. With st.navigation only the active page's script runs,
+and the expensive pieces are cached on their exact parameter sets.
 """
 
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
-from data_loader import fetch_ohlcv
-from strategies import STRATEGIES
-from backtest import run_backtest
-from analytics import full_report, drawdown_series
-from walk_forward import evaluate_out_of_sample
-
-st.set_page_config(page_title="Quant Strategy Dashboard", layout="wide")
-
-st.title("Quant Strategy Dashboard")
-st.caption(
-    "Backtest rule-based trading strategies with risk-adjusted performance "
-    "metrics and walk-forward validation."
+st.set_page_config(
+    page_title="Quant training terminal",
+    page_icon=":material/monitoring:",
+    layout="wide",
 )
 
-# ---------- Sidebar: configuration ----------
-with st.sidebar:
-    st.header("Configuration")
-    ticker = st.text_input("Ticker", value="SPY").upper().strip()
+from regime_dashboard import MAX_REGIMES, load_prices  # noqa: E402  (must follow set_page_config)
+from regime import REGIME_METHODS  # noqa: E402
 
-    col1, col2 = st.columns(2)
-    start = col1.date_input("Start date", value=pd.to_datetime("2015-01-01"))
-    end = col2.date_input("End date", value=pd.to_datetime("2025-01-01"))
-
-    strategy_name = st.selectbox("Strategy", list(STRATEGIES.keys()))
-
-    st.subheader("Parameters")
-    params = {}
-    if strategy_name == "sma_crossover":
-        params["short_window"] = st.slider("Short SMA window", 5, 100, 50)
-        params["long_window"] = st.slider("Long SMA window", 50, 300, 200)
-    elif strategy_name == "momentum":
-        params["lookback"] = st.slider("Lookback (days)", 5, 60, 20)
-        params["threshold"] = st.slider("Return threshold", -0.05, 0.05, 0.0, step=0.005)
-    elif strategy_name == "mean_reversion":
-        params["period"] = st.slider("RSI period", 5, 30, 14)
-        params["oversold"] = st.slider("Oversold threshold", 10, 40, 30)
-        params["overbought"] = st.slider("Overbought threshold", 60, 90, 70)
-    elif strategy_name == "ml_direction":
-        params["model_type"] = st.selectbox("Model type", ["logistic", "random_forest"])
-        params["train_frac"] = st.slider("Train fraction", 0.5, 0.9, 0.7, step=0.05)
-        st.caption(
-            "⚠️ Only the out-of-sample period below reflects honest performance — "
-            "in-sample results are inflated because the model was trained on that data."
-        )
-
-    show_walk_forward = st.checkbox("Show walk-forward validation", value=True)
-    run_clicked = st.button("Run Backtest", type="primary", use_container_width=True)
+# --------------------------------------------------------------------------
+# Shared state, initialized in one place
+# --------------------------------------------------------------------------
+st.session_state.setdefault("prices", None)
+st.session_state.setdefault("ticker", "SPY")
+st.session_state.setdefault("load_error", None)
+st.session_state.setdefault("regime_settings", {
+    "method": "hmm", "n_regimes": 3, "fit_frac": 0.6, "smooth": "min_duration",
+    "min_duration": 5, "decode": "filter", "walk_forward": False,
+})
 
 
-# ---------- Cached data fetch ----------
-@st.cache_data(show_spinner=False)
-def load_data(ticker: str, start, end) -> pd.DataFrame:
-    return fetch_ohlcv(ticker, str(start), str(end))
-
-
-# ---------- Chart + table builders ----------
-def metric_table(stats: dict) -> pd.DataFrame:
-    rows = [
-        ("Total Return", f"{stats['total_return']:.2%}"),
-        ("CAGR", f"{stats['cagr']:.2%}"),
-        ("Annualized Volatility", f"{stats['annualized_volatility']:.2%}"),
-        ("Sharpe Ratio", f"{stats['sharpe_ratio']:.2f}"),
-        ("Sortino Ratio", f"{stats['sortino_ratio']:.2f}"),
-        ("Max Drawdown", f"{stats['max_drawdown']:.2%}"),
-        ("Number of Trades", f"{stats['num_trades']}"),
-        ("Win Rate", f"{stats['win_rate']:.2%}"),
-    ]
-    return pd.DataFrame(rows, columns=["Metric", "Value"])
-
-
-def equity_chart(result: pd.DataFrame) -> go.Figure:
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=result.index, y=result["equity_curve"], name="Strategy"))
-    fig.add_trace(go.Scatter(
-        x=result.index, y=result["benchmark_curve"], name="Buy & Hold", line=dict(dash="dash")
-    ))
-    fig.update_layout(
-        height=380, margin=dict(l=10, r=10, t=30, b=10),
-        yaxis_title="Growth of $1", hovermode="x unified",
-    )
-    return fig
-
-
-def drawdown_chart(result: pd.DataFrame) -> go.Figure:
-    dd = drawdown_series(result["equity_curve"])
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=result.index, y=dd, fill="tozeroy", name="Drawdown"))
-    fig.update_layout(
-        height=200, margin=dict(l=10, r=10, t=30, b=10),
-        yaxis_title="Drawdown", yaxis_tickformat=".0%",
-    )
-    return fig
-
-
-# ---------- Run + persist across reruns ----------
-# Streamlit reruns the whole script on every widget interaction, so we
-# stash the last computed result in session_state -- otherwise moving a
-# slider elsewhere on the page would wipe the chart you just generated.
-if run_clicked:
+def _load(ticker: str, start, end):
+    """Fetches prices into session state, keeping any error for display."""
     try:
-        with st.spinner(f"Fetching {ticker} data..."):
-            df = load_data(ticker, start, end)
-    except Exception as e:
-        st.error(f"Couldn't load data for {ticker}: {e}")
-        st.stop()
+        with st.spinner(f"Fetching {ticker}..."):
+            st.session_state["prices"] = load_prices(ticker, str(start), str(end))
+        st.session_state["ticker"] = ticker
+        st.session_state["load_error"] = None
+    except Exception as exc:
+        st.session_state["prices"] = None
+        st.session_state["load_error"] = f"{type(exc).__name__}: {exc}"
 
-    strategy_fn = STRATEGIES[strategy_name]
-    signal = strategy_fn(df, **params)
-    result = run_backtest(df, signal)
 
-    st.session_state["result"] = result
-    st.session_state["df"] = df
-    st.session_state["strategy_fn"] = strategy_fn
-    st.session_state["params"] = params
-    st.session_state["ticker"] = ticker
-    st.session_state["strategy_name"] = strategy_name
+# --------------------------------------------------------------------------
+# Sidebar: data and regime settings, shared by every page
+# --------------------------------------------------------------------------
+with st.sidebar:
+    st.subheader("Data", divider="gray")
+    with st.form("data_form", border=False):
+        ticker = st.text_input("Ticker", value=st.session_state["ticker"]).upper().strip()
+        start = st.date_input("Start date", value=pd.to_datetime("2008-01-01"))
+        end = st.date_input("End date", value=pd.to_datetime("2025-01-01"))
+        loaded = st.form_submit_button("Load data", icon=":material/download:", width="stretch")
 
-if "result" in st.session_state:
-    result = st.session_state["result"]
-    df = st.session_state["df"]
-    stats = full_report(result)
+    if loaded:
+        _load(ticker, start, end)
+    elif st.session_state["prices"] is None and st.session_state["load_error"] is None:
+        # First visit: load the default so the terminal opens with something
+        # on screen rather than an empty shell.
+        _load(ticker, start, end)
 
-    st.subheader(f"{st.session_state['ticker']} — {st.session_state['strategy_name']}")
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Return", f"{stats['total_return']:.1%}")
-    c2.metric("Sharpe Ratio", f"{stats['sharpe_ratio']:.2f}")
-    c3.metric("Max Drawdown", f"{stats['max_drawdown']:.1%}")
-    c4.metric("Win Rate", f"{stats['win_rate']:.1%}")
-
-    st.plotly_chart(equity_chart(result), use_container_width=True)
-    st.plotly_chart(drawdown_chart(result), use_container_width=True)
-    st.dataframe(metric_table(stats), hide_index=True, use_container_width=True)
-
-    if show_walk_forward:
-        st.subheader("Walk-Forward Validation")
-        wf = evaluate_out_of_sample(
-            df, st.session_state["strategy_fn"], **st.session_state["params"]
+    if st.session_state["load_error"]:
+        st.error(st.session_state["load_error"], icon=":material/cloud_off:")
+        st.caption(
+            "No network here? Every page still works on synthetic data — run "
+            "`python test_logic.py` and `python test_regime.py` from a terminal instead."
         )
-        st.caption(f"Split date: {wf['split_date']} (70% in-sample / 30% out-of-sample)")
-
-        wf_col1, wf_col2 = st.columns(2)
-        with wf_col1:
-            st.markdown("**In-Sample**")
-            st.dataframe(metric_table(wf["in_sample"]), hide_index=True, use_container_width=True)
-        with wf_col2:
-            st.markdown("**Out-of-Sample**")
-            st.dataframe(metric_table(wf["out_sample"]), hide_index=True, use_container_width=True)
-
-        sharpe_drop = wf["in_sample"]["sharpe_ratio"] - wf["out_sample"]["sharpe_ratio"]
-        if sharpe_drop > 0.5:
-            st.warning(
-                f"Sharpe ratio dropped by {sharpe_drop:.2f} out-of-sample — "
-                "possible sign of overfitting to the in-sample period."
-            )
-
-    if st.session_state["strategy_name"] == "ml_direction":
-        from ml_strategy import model_report
-
-        st.subheader("Model Diagnostics")
-        report = model_report(df, **st.session_state["params"])
-
-        mc1, mc2 = st.columns(2)
-        mc1.metric("Train Accuracy", f"{report['train_accuracy']:.1%}")
-        mc2.metric("Test Accuracy", f"{report['test_accuracy']:.1%}")
-
-        if report["train_accuracy"] - report["test_accuracy"] > 0.1:
-            st.warning(
-                f"Train accuracy ({report['train_accuracy']:.1%}) is well above test "
-                f"accuracy ({report['test_accuracy']:.1%}) — a classic overfitting signature. "
-                "Random forests are especially prone to this; logistic regression tends to "
-                "generalize more conservatively."
-            )
-
-        importance_df = pd.DataFrame(
-            sorted(report["feature_importance"].items(), key=lambda kv: -abs(kv[1])),
-            columns=["Feature", "Importance"],
+    elif st.session_state["prices"] is not None:
+        prices = st.session_state["prices"]
+        st.caption(
+            f"{st.session_state['ticker']} · {len(prices):,} rows · "
+            f"{prices.index[0].date()} to {prices.index[-1].date()}"
         )
-        fig = go.Figure(go.Bar(x=importance_df["Importance"], y=importance_df["Feature"], orientation="h"))
-        fig.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10), title="Feature Importance")
-        st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("Configure a ticker and strategy in the sidebar, then click **Run Backtest**.")
+
+    st.subheader("Regime model", divider="gray")
+    st.caption("Shared by every page that shows regimes.")
+    settings = st.session_state["regime_settings"]
+
+    settings["method"] = st.selectbox(
+        "Detection method", REGIME_METHODS, index=list(REGIME_METHODS).index(settings["method"]),
+        help="Explained in full on the Regimes page. Start with 'rules' — it fits nothing, so nothing can leak.",
+    )
+    settings["n_regimes"] = st.slider(
+        "Number of regimes", 2, MAX_REGIMES, settings["n_regimes"],
+        help=(
+            "Ignored by 'rules' and 'supervised', which define four by construction. Capped at "
+            f"{MAX_REGIMES}: more than that over-segments a decade of daily data, and the ordinal "
+            "color ramp stops being distinguishable."
+        ),
+    )
+    settings["walk_forward"] = st.toggle(
+        "Walk-forward detection", value=settings["walk_forward"],
+        help=(
+            "Refit the regime model on an expanding window and label only forward. Slower, and it "
+            "produces no labels for the first two years — because you genuinely had no model then. "
+            "This is the honest setting."
+        ),
+    )
+    if not settings["walk_forward"]:
+        settings["fit_frac"] = st.slider(
+            "Fit fraction", 0.4, 1.0, settings["fit_frac"], step=0.05,
+            help=(
+                "Share of history the model is fitted on. At 1.0 the labels embed knowledge of the "
+                "future — useful for describing history, invalid for backtesting."
+            ),
+        )
+    settings["smooth"] = st.selectbox(
+        "Label smoothing", ["min_duration", "ema_prob", "median", "none"],
+        index=["min_duration", "ema_prob", "median", "none"].index(settings["smooth"]),
+        help="All options are backward-looking only. A centered filter would look tidier and be lookahead bias.",
+    )
+    settings["min_duration"] = st.slider(
+        "Confirmation days", 1, 21, settings["min_duration"],
+        help="How long a new regime must persist before it's accepted. Higher means fewer head-fakes and more lag.",
+    )
+    if settings["method"] == "hmm" and not settings["walk_forward"]:
+        settings["decode"] = st.selectbox(
+            "HMM decoding", ["filter", "smooth", "viterbi"],
+            index=["filter", "smooth", "viterbi"].index(settings["decode"]),
+            help=(
+                "'filter' uses data up to today only — the one you could have traded. 'smooth' and "
+                "'viterbi' condition on the whole sequence: cleaner labels, not available in real time."
+            ),
+        )
+
+# --------------------------------------------------------------------------
+# Navigation
+# --------------------------------------------------------------------------
+page = st.navigation(
+    {
+        "Research": [
+            st.Page("app_pages/backtest_lab.py", title="Backtest", icon=":material/query_stats:", default=True),
+            st.Page("app_pages/regimes.py", title="Regimes", icon=":material/layers:"),
+            st.Page("app_pages/adaptive_lab.py", title="Adaptive", icon=":material/tune:"),
+            st.Page("app_pages/ml_lab.py", title="ML lab", icon=":material/network_intelligence:"),
+            st.Page("app_pages/validation.py", title="Validation", icon=":material/fact_check:"),
+        ],
+        "Training": [
+            st.Page("app_pages/exercises_lab.py", title="Exercises", icon=":material/assignment:"),
+            st.Page("app_pages/learn.py", title="Learn", icon=":material/menu_book:"),
+        ],
+    },
+    position="sidebar",
+)
+
+st.title(page.title)
+page.run()
