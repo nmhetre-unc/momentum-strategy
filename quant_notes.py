@@ -1451,6 +1451,59 @@ bias for a large reduction in variance. On this problem that trade is
 almost always worth making.
 """,
     },
+    "overfitting": {
+        "title": "Overfitting: the one idea behind most bad backtests",
+        "body": """
+Overfitting is fitting the noise in your sample and mistaking it for
+signal. It is the single most common reason a beautiful backtest becomes a
+losing strategy, and it does not require a machine learning model — most
+overfitting in trading is done by hand.
+
+**Three forms, same mechanism.**
+
+1. **Parameter overfitting.** You try 20 moving-average windows and keep
+   the best. Their true edge might be zero; their measured Sharpes scatter
+   around zero; the best of 20 is meaningfully positive *by construction*.
+   You have reported the maximum of a search.
+2. **Strategy overfitting.** Same thing one level up. Try 20 strategies,
+   report the winner. The nineteen you discarded still spent your
+   statistical power — they just left no record.
+3. **Model overfitting.** A flexible model handed a low-signal problem
+   memorizes the training rows, because there are patterns in any sample of
+   noise and finding them is what capacity is for. See [[ml_overfitting]]
+   for the demonstration and [[bias_variance]] for why.
+
+**Why it is so hard to notice.** Overfitting doesn't produce errors. It
+produces *good results*. Every step feels reasonable — of course you
+should tune the parameter, of course you should pick the better strategy.
+The bias comes from the sequence of choices, each informed by the data you
+were trying to evaluate.
+
+**The tells, in order of usefulness.**
+
+- A large gap between in-sample and out-of-sample performance.
+- Results that change character with small parameter changes. Real effects
+  sit on plateaus; fitted ones sit on spikes.
+- A Sharpe ratio that seems too good. Above ~2 on daily equity data,
+  suspect [[lookahead_bias]] or overfitting before celebrating.
+- Very few trades. Ten trades cannot distinguish skill from luck.
+
+**The defences.**
+
+- **Hold out data and look once.** Looking repeatedly converts your holdout
+  into training data — see [[silent_fitting]].
+- **Prefer fewer parameters.** Every knob is a chance to fit noise.
+- **Count every comparison you ran**, including abandoned ones.
+- **Check it survives elsewhere** — a different ticker, a different period.
+- **Have a reason.** A hypothesis stated in advance costs far less
+  statistical power than one discovered by search, and it degrades more
+  gracefully when it stops working.
+
+**The mindset that actually prevents it.** Assume your result is wrong
+until you have tried to break it. Overfitting is what happens when you
+skip that step because the number looked good.
+""",
+    },
 }
 
 # --------------------------------------------------------------------------
