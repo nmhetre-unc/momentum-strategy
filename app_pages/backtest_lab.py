@@ -18,7 +18,7 @@ from backtest import run_backtest
 from quant_notes import METRIC_DOCS
 from regime_dashboard import (
     PERFORMANCE_CONFIG, cached_regimes, caveat, drawdown_chart, equity_chart,
-    metric_row, position_chart, quant_note, require_data, show_metric_table,
+    explainer, metric_row, position_chart, quant_note, require_data, show_metric_table,
 )
 from regime_features import efficiency_ratio
 from strategies import PARAM_SPECS, STRATEGIES, STRATEGY_DOCS, default_params
@@ -26,20 +26,6 @@ from walk_forward import evaluate_out_of_sample
 
 df = require_data()
 ticker = st.session_state["ticker"]
-
-
-# --------------------------------------------------------------------------
-# Local helper: a beginner explainer that leads with a visual metaphor
-# --------------------------------------------------------------------------
-def explainer(title: str, metaphor: str, body: str, icon: str = ":material/menu_book:"):
-    """
-    One collapsible teaching section. The metaphor goes first because a
-    concrete image is what makes the technical explanation underneath it
-    stick -- and because someone skimming will read one line, not five.
-    """
-    with st.expander(title, icon=icon):
-        st.markdown(f"> :material/lightbulb: **Picture it as:** {metaphor}")
-        st.markdown(body)
 
 
 # ---------- Controls ----------

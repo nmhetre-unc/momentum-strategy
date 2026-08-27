@@ -108,6 +108,30 @@ def quant_note(key: str, expanded: bool = False):
         st.markdown(note["body"])
 
 
+def explainer(title: str, metaphor: str, body: str, icon: str = ":material/menu_book:"):
+    """
+    One collapsible teaching section, opening with a visual metaphor.
+
+    The metaphor goes first because a concrete image is what makes the
+    technical explanation underneath it stick -- and because someone
+    skimming reads one line, not five.
+    """
+    with st.expander(title, icon=icon):
+        st.markdown(f"> :material/lightbulb: **Picture it as:** {metaphor}")
+        st.markdown(body)
+
+
+def how_to_read(body: str, title: str = "How to interpret this"):
+    """
+    A short, actionable reading guide placed directly under a chart or
+    table. Deliberately not an expander: the whole point is that it is
+    visible at the moment someone is looking at the thing it describes.
+    """
+    with st.container(border=True):
+        st.markdown(f"**{title}**")
+        st.markdown(body)
+
+
 def metric_row(stats: dict, keys: list, columns: int = 4):
     """
     A row of st.metric tiles with the tooltip for each pulled from

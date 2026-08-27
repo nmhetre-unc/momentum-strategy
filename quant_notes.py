@@ -500,6 +500,226 @@ looking for the lookahead bug, because that is much more often the
 explanation than genuine edge.
 """,
     },
+    "regime_volatility_clusters": {
+        "title": "Why volatility is the primary axis of every regime model",
+        "body": """
+Open any clustering model in this project, look at what actually separates
+the clusters, and it will be volatility. That isn't a modelling accident —
+it's the one property of markets that is reliably predictable.
+
+**Volatility clusters. Direction does not.** Tomorrow's direction is close
+to a coin flip: daily returns have almost no autocorrelation. Tomorrow's
+*volatility* is strongly predicted by today's. Quiet days follow quiet
+days; violent days follow violent days, for weeks at a time. This is one
+of the oldest and most robust findings in empirical finance — it's the
+observation the entire GARCH literature was built to model.
+
+**So volatility is what a regime model can actually find.** A model
+looking for persistent states in market data will land on volatility
+states, because those are the states that persist. If you build a
+three-regime model and the clusters differ mainly in volatility, the model
+is working correctly, not failing to find something more interesting.
+
+**Why this ordering is baked in here.** `regime.py` always renumbers
+regimes by realized volatility, so regime 0 is the calmest and the highest
+ID the most violent. That's what makes the IDs stable across refits,
+methods and tickers — and it's why the color ramp treats regimes as an
+*ordered* variable rather than as unrelated categories.
+
+**Direction is the secondary axis, and it's much weaker.** Trend
+separates regimes far less cleanly than volatility does, which is why the
+naming scheme combines both ("Calm Uptrend", "Crisis / Selloff") but the
+ordering uses only volatility. Be suspicious of any regime model that
+claims to cleanly separate future direction — that's the thing nobody can
+predict, and finding it usually means you leaked.
+
+**The practical consequence.** If volatility is what you can forecast,
+then sizing — not timing — is where the edge is. See
+[[position_sizing]]: plain volatility targeting frequently beats every
+regime-switching mechanism in this project, using no regime model at all.
+""",
+    },
+    "regime_transition_persistence": {
+        "title": "Persistence and transitions: reading the matrix",
+        "body": """
+The transition matrix answers one question per cell: given that today is
+regime *i*, what is the probability tomorrow is regime *j*?
+
+**Read the diagonal first, and read it before anything else on the page.**
+Those cells are the persistence probabilities — P(tomorrow is the same as
+today). On daily data they should be **0.95 or higher**. A regime that
+persists 97% of days lasts about a month; one that persists 99% lasts a
+quarter.
+
+**Expected duration falls straight out of it.** If a regime stays with
+probability `p`, its expected length is `1 / (1 - p)` days:
+
+| p_stay | Expected duration |
+|---|---|
+| 0.90 | 10 days |
+| 0.95 | 20 days |
+| 0.98 | 50 days |
+| 0.99 | 100 days |
+
+**What a bad matrix looks like.** A diagonal near `1/k` — 0.33 for three
+regimes — means tomorrow's regime is independent of today's. That is not a
+regime model. It is a noisy day-classifier, and every strategy built on it
+will do nothing but pay transaction costs. This is the single fastest
+check on whether regime detection worked.
+
+**The off-diagonal cells carry real information too.** Markets usually
+don't jump from calmest to most violent in one step — they escalate
+through the middle regime. If your matrix shows a large direct
+calm→crisis probability, either the model is mislabelling, or the asset
+genuinely gaps (which is itself worth knowing before you size a position
+in it).
+
+**Why persistence is the whole basis for acting on regimes.** Detecting
+that today is turbulent is only useful if tomorrow is likely turbulent
+too. If regimes didn't persist, the label would be a description of the
+past with no predictive content, and conditioning on it would be pointless.
+Persistence is what converts a *description* into something tradeable —
+and it is exactly what an HMM models and what k-means and GMM ignore.
+""",
+    },
+    "trend_vs_chop": {
+        "title": "The second axis: trending vs. choppy markets",
+        "body": """
+Volatility tells you *how much* the market is moving. It says nothing about
+whether that movement gets anywhere. Two markets can realize identical
+volatility while one grinds steadily upward and the other thrashes and ends
+where it started — and those two markets are opposite environments for
+almost every strategy here.
+
+**The efficiency ratio measures exactly this.** Kaufman's ratio is net
+movement divided by total distance travelled over a window:
+
+```
+|price_today - price_60d_ago|  /  sum of |daily changes| over 60 days
+```
+
+Near **1.0**: the market walked in a straight line. Near **0.0**: it
+travelled a long way and went nowhere. That second case is chop, and it is
+where trend-following goes to die.
+
+**The two families sit on opposite ends of this axis.**
+
+- *Trend-following* (SMA crossover, momentum) needs high efficiency. It
+  buys strength and needs that strength to continue. In chop it buys every
+  local top and sells every local bottom — see [[trend_in_chop]] for the
+  mechanism.
+- *Mean-reversion* (RSI) needs low efficiency. It bets moves overshoot and
+  get given back, which is precisely what chop does. In a strong trend it
+  fights the move the whole way down.
+
+**Which is why the pair is the motivating example for regime switching.**
+If you could reliably tell which environment you were in, you could run
+trend in one and reversion in the other and harvest both. The Adaptive page
+tests whether you actually can — and the usual answer is "less well than
+you'd hope", because labels arrive late and switching costs money.
+
+**The related feature to watch.** `autocorr_60` — rolling lag-1
+autocorrelation of returns — measures the same idea from the other
+direction. Positive means moves follow through (momentum-friendly);
+negative means they get reversed (reversion-friendly).
+
+**One caution.** Efficiency ratio is backward-looking, like everything
+else here. It tells you the last 60 days were choppy, not that the next 60
+will be. It is useful because chop, like volatility, is somewhat
+persistent — not because it forecasts.
+""",
+    },
+    "regime_drift": {
+        "title": "Regime drift: when the regimes themselves change",
+        "body": """
+There is a failure mode one level above "my strategy stopped working":
+**the regime structure itself changes**, so a model that correctly learned
+three regimes from 2008–2016 is describing a market that no longer exists.
+
+**How it happens.** A regime model learns cluster centres — what "calm"
+and "turbulent" *look like* — from its training window. But the meaning of
+those words drifts:
+
+- The 2017 volatility environment was so quiet that its "high volatility"
+  regime would be classified as calm by a model trained through 2008.
+- A model trained entirely on 2010–2019 never saw a genuine crisis, so it
+  has no cluster for one. In March 2020 it must assign those days to
+  *something*, and whatever it picks will be wrong.
+- Market microstructure changes over decades — decimalization, the growth
+  of ETFs, the rise of systematic flow. Relationships that held in 2005
+  need not hold now.
+
+**Why a single walk-forward split hides it.** One 70/30 split gives you one
+out-of-sample number, and it can't distinguish "works generally" from
+"worked until 2018 and never again". `rolling_walk_forward()` gives ten or
+fifteen consecutive holdouts; read the folds **in sequence**. A strategy
+that is positive early and negative late has drifted, and its average
+across folds is a meaningless blend of two different worlds.
+
+**Why walk-forward regime detection matters here specifically.**
+`detect_regimes_walk_forward()` refits on an expanding window, so the
+regime definitions themselves update as the market changes — which is both
+more honest and more robust than freezing 2008's idea of "calm" forever.
+The cost is noisier labels and no labels at all for the first two years.
+
+**Two ways to tell drift from ordinary decay.** The Validation page's
+regime-mix table is the diagnostic. If per-regime performance held up but
+the *mix* of regimes shifted, the strategy is intact and your expectations
+were built on a biased sample of history. If per-regime performance itself
+deteriorated, that's real decay and no amount of regime timing fixes it.
+
+**The uncomfortable implication.** Every backtest in this project is
+conditioned on the specific history it ran over. A fifteen-year sample of
+daily data contains perhaps three or four genuinely independent market
+environments — which is a much smaller effective sample than 3,700 rows
+suggests, and a much weaker basis for confidence than it feels like.
+""",
+    },
+    "lookahead_bias": {
+        "title": "Lookahead bias: the general case",
+        "body": """
+Lookahead bias is using information in a decision that was not available
+when the decision was made. It is the most expensive mistake in
+quantitative research, because it does not announce itself — it produces a
+*beautiful* backtest and a strategy that loses money.
+
+**The one question that catches almost all of it.** For every input to a
+decision, ask: **what date was this knowable?** If the answer is after the
+decision date, you have a leak. Applied honestly, that single question
+finds more bugs than any amount of code review.
+
+**Where it hides in a project like this one.**
+
+1. **Same-bar execution.** Computing a signal from today's close and
+   trading at today's close. This is why `backtest.py` shifts every signal
+   forward one day, and it is the single most common beginner error.
+2. **Full-sample preprocessing.** Any scaler, PCA, percentile rank, outlier
+   clip or feature selection fitted on the whole dataset. The sample mean
+   of 2010–2025 was not knowable in 2010. This project uses *expanding*
+   z-scores and *expanding* percentile ranks for exactly this reason.
+3. **Full-sample model fitting**, then backtesting over the same span — the
+   regime-specific version of which is [[regime_lookahead]].
+4. **Centered filters.** Any smoother that uses bars on both sides of the
+   current one. A centered rolling median looks tidier on the chart and is
+   pure leakage. Every smoother in `regime.py` is backward-looking only.
+5. **Survivorship in the universe.** Backtesting on today's index members
+   over ten years quietly excludes everything that went to zero.
+6. **Restated data.** Fundamentals get revised; the value you can download
+   today is not what was published then.
+7. **The human kind.** You already know 2020 crashed and 2021 rallied.
+   Choosing to test a crash filter is itself a decision informed by the
+   future, and no code change fixes it.
+
+**The tell.** Implausibly high Sharpe. Above ~2 on a daily equity
+strategy, assume a leak and go looking, because that is far more often the
+explanation than genuine edge. A suspiciously smooth equity curve is the
+same signal.
+
+**The habit worth building.** Ask of any result: *could I have produced
+this number on that date, with only what existed then?* If you cannot
+answer yes without qualification, the number is not evidence.
+""",
+    },
 }
 
 # --------------------------------------------------------------------------
