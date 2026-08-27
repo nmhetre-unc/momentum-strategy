@@ -720,6 +720,267 @@ this number on that date, with only what existed then?* If you cannot
 answer yes without qualification, the number is not evidence.
 """,
     },
+    "adaptive_filtering": {
+        "title": "Filtering: the mechanism most likely to survive",
+        "body": """
+Filtering keeps the strategy exactly as it is and simply refuses to trade
+it in regimes where it historically lost money. Of the four adaptive
+mechanisms, it is the one that most reliably holds up out-of-sample, and
+it should be the first thing you try.
+
+**Why it is the safest of the four.** Filtering only ever *removes*
+exposure. It never invents a new position, never picks a different rule,
+never introduces a parameter. Its downside is therefore bounded: at worst
+you remove the wrong days and give up some return. Compare that with
+switching, which can put you in an actively wrong position, or
+re-parameterizing, which hands you a fresh set of numbers to overfit.
+
+**What it is really doing.** You are not predicting anything new. You are
+acting on something you already knew — that this strategy is structurally
+broken in this environment — and declining to pay for that knowledge
+twice. Not trading is a legitimate position, and an underused one.
+
+**The three things to check before believing it.**
+
+1. **Exposure.** If filtering cuts you to 30% invested, every metric is now
+   computed on 30% of the days. It may be excellent; it is definitely being
+   measured on a smaller sample. See [[exposure_caveat]].
+2. **Was the allow-list learned honestly?** "Sit out the regimes where it
+   lost" is trivially profitable if you looked at the whole history to
+   decide which those were. That is a description of the past, not a
+   strategy. Everything here learns from the first 60% only, and
+   `describe_filter()` shows you the evidence.
+3. **Is the regime gap real?** If the best and worst regime Sharpes differ
+   by less than their combined standard error, you are filtering on noise.
+   The Regimes page computes that comparison for you.
+
+**The failure mode that looks like a bug and isn't.** If the base strategy
+had a negative Sharpe in *every* regime during the learning window, the
+allow-list comes back empty and the strategy stays flat forever, returning
+exactly 0%. That is the correct output: it means "on this data, there was
+no market condition in which this strategy worked." A framework that
+quietly traded anyway would be the broken one.
+""",
+    },
+    "adaptive_switching": {
+        "title": "Switching: the intuitive one that usually disappoints",
+        "body": """
+Switching runs a different strategy in each regime — trend-following when
+the market trends, mean-reversion when it ranges. It is the most
+appealing idea in the whole adaptive section and the one that most often
+fails to deliver.
+
+**The theory is genuinely sound.** Trend and mean-reversion profit from
+opposite market behaviours (see [[trend_vs_chop]]). If you could reliably
+tell which environment you were in, you could harvest both instead of
+picking one and suffering through the other half of the time.
+
+**Three costs eat the gains, and they compound.**
+
+1. **Labels arrive late.** Smoothing deliberately delays every regime
+   change by several days — that is the price of not being whipsawed. But
+   the first days of a new regime are frequently where the largest move
+   happens. You systematically miss the best part and arrive for the rest.
+2. **Switching flips the entire position.** Going from a long trend signal
+   to a flat reversion signal is a full round trip, not a marginal
+   adjustment. Do that at every regime change and turnover climbs sharply.
+   Run it with `cost_bps` at 5 or 10 before believing any result.
+3. **You now need two things right, not one.** The regime label must be
+   correct *and* the per-regime strategy choice must be stable. Each is
+   uncertain; the errors multiply rather than cancel.
+
+**The selection problem underneath it.** Choosing "the best strategy for
+this regime" from three candidates, in each of three regimes, is nine
+comparisons on a single price history. With that many comparisons some
+regime will show a winner by chance. Read the evidence table: if the
+winner beat the runner-up by 0.05 of Sharpe over 80 days, that is a coin
+flip wearing a decision's clothes.
+
+**How to evaluate it fairly.** Compare it against filtering alone, and
+against plain volatility targeting. If the simpler mechanism captured most
+of the benefit, say so and prefer it — that judgement is worth more than
+the extra complexity.
+""",
+    },
+    "adaptive_overfitting": {
+        "title": "How adaptive logic overfits (especially re-parameterizing)",
+        "body": """
+Every adaptive mechanism buys flexibility, and flexibility is exactly what
+lets a model fit noise. The order below is roughly the order of danger.
+
+**Re-parameterizing is the worst offender.** One strategy with
+regime-specific settings sounds modest. Count the degrees of freedom:
+three regimes times two window parameters is **six numbers fitted to one
+price history**, up from two. The in-sample equity curve will improve
+almost by construction. That improvement is not evidence of anything.
+
+**Regime-conditional models split your data while keeping the parameter
+count.** With 2,500 rows, a 70% train split and three regimes, each
+per-regime model sees roughly 580 rows to fit a dozen features on. You
+have not made the model smarter; you have made each copy of it hungrier
+and fed it a third as much. This is why `ml_regime_conditional` typically
+shows the worst in-sample-to-out-of-sample decay of anything here.
+
+**Auto-selection is a search, and searches find noise.** Picking the best
+of three candidates in each of three regimes is nine comparisons. Even on
+pure noise, the maximum of nine draws looks good. Reporting that maximum
+without accounting for the search is the strategy-mining version of
+p-hacking.
+
+**The compounding problem.** Stack switching on top of sizing on top of
+regime detection and you have stacked their assumptions too. Each layer
+was fitted, each has its own error, and the composite is far less robust
+than the sum of its parts appears.
+
+**Four defences, all cheap.**
+
+- **Attribute before you combine.** Run each mechanism alone first. If
+  volatility targeting explains the whole improvement, the switching layer
+  is adding complexity and turnover for nothing.
+- **Prefer mechanisms with fewer knobs.** Filtering adds an allow-list.
+  Re-parameterizing adds a parameter per regime. That difference is the
+  whole story.
+- **Read the evidence table, not just the choice.** A decision made on a
+  0.05 Sharpe difference over 80 days will not repeat.
+- **Count every comparison you ran**, including the ones you discarded.
+  They all spent statistical power whether or not you report them.
+""",
+    },
+    "volatility_targeting": {
+        "title": "Volatility targeting: the mechanism to beat",
+        "body": """
+Volatility targeting keeps the entry signal exactly as it is and scales
+the *size* of the position so that expected volatility stays near a target:
+
+```
+position = signal x clip(target_vol / trailing_realized_vol, 0, max_leverage)
+```
+
+When realized volatility doubles, the position halves. That is the whole
+idea, and it uses **no regime model at all** — which is precisely why it
+is the benchmark every regime-based mechanism on this page has to beat.
+
+**Why it works when regime switching often doesn't.** It leans on the one
+market property that is genuinely forecastable. Volatility clusters:
+today's realized volatility is a good predictor of tomorrow's. Direction
+is not (see [[regime_volatility_clusters]]). Targeting converts the
+forecastable quantity directly into a position size, with no intermediate
+classification step that can be wrong.
+
+**What it does to the return profile.** On most equity data, returns are
+roughly preserved while maximum drawdown falls noticeably. The reason is
+timing: the position was *already small* when the crash arrived, rather
+than being cut afterwards at the worst prices. Compare that with a
+stop-loss, which acts after the damage.
+
+**Four things to check.**
+
+1. **Exposure.** Targeting 15% on an asset that realizes 20% leaves you
+   persistently under a full position, so absolute return falls even as
+   Sharpe improves. Set the target near the asset's own realized
+   volatility to see the mechanism rather than the cap.
+2. **Turnover.** Continuous resizing trades every single day.
+   `regime_sized` is the discrete cousin that only resizes at regime
+   boundaries — far cheaper, and worth comparing directly.
+3. **The `max_leverage` cap.** Default 1.0 keeps output in [0, 1], so the
+   strategy is never more exposed than the unscaled version. Raising it
+   above 1.0 means borrowing, with everything that implies.
+4. **Causality.** The trailing volatility window ends at day *t* and the
+   whole signal is shifted forward a day in the backtest, so nothing here
+   sees the future.
+
+**The finding to be ready for.** Plain volatility targeting frequently
+beats every regime-based mechanism in this project. If that is what your
+data says, that is the result — report it. Preferring the simpler
+explanation of the same outcome is what good quant judgement looks like,
+and [[position_sizing]] makes the broader version of the argument.
+""",
+    },
+    "exposure_caveat": {
+        "title": "Exposure: the number that reframes every other number",
+        "body": """
+Exposure is the average absolute position — the share of the period you
+actually held risk. It is the most commonly ignored column on a results
+table, and it silently changes the meaning of everything beside it.
+
+**Two identical Sharpe ratios, two different results.** A Sharpe of 1.0 at
+100% exposure and a Sharpe of 1.0 at 20% exposure are not the same
+achievement. The second was earned on a fifth of the days, so it rests on
+a fifth of the evidence and carries a much wider error bar. It may be the
+better strategy; it is certainly the less well-established one.
+
+**Why adaptive strategies make this urgent.** Filtering, regime gating and
+volatility targeting all *reduce* exposure by design. That is the
+mechanism working. But it means the improved drawdown you are admiring
+may be partly — or entirely — the trivial consequence of holding less:
+
+> Any strategy can halve its drawdown by halving its position. That is not
+> skill, it is arithmetic.
+
+**How to tell skill from arithmetic.** Compare risk-*adjusted* metrics,
+not raw drawdown. If Sharpe improved, the strategy was out of the market
+at the *right* times. If only drawdown improved while Sharpe fell, it was
+simply out of the market — you could have achieved the same by trading the
+original at half size, with far less machinery.
+
+**The capital question nobody asks.** At 30% exposure, 70% of your capital
+sat idle. Real money needs somewhere to be. Either the return on *total*
+capital is much lower than the headline, or you need a second use for that
+capital — and that second use has its own risk.
+
+**Rules of thumb.** Below ~40% exposure, always report it alongside the
+headline metrics. Below ~25%, treat the metrics as provisional: they rest
+on a small sample of invested days. At exactly 0%, the strategy has
+concluded there was no condition in which it worked, which is a real
+answer rather than an error.
+""",
+    },
+    "turnover_costs": {
+        "title": "Turnover: what adaptation actually costs you",
+        "body": """
+Turnover is total position change per year in full-position units.
+Turnover of 20 means you replaced the entire book twenty times. It is the
+price tag attached to every adaptive mechanism, and it is usually left off
+the comparison.
+
+**The arithmetic.** Annual drag is roughly `turnover x cost_bps / 10,000`.
+
+| Turnover | at 5bps | at 10bps |
+|---|---|---|
+| 1x | 0.05% | 0.10% |
+| 10x | 0.50% | 1.00% |
+| 50x | 2.50% | 5.00% |
+
+Against a strategy with a 4% expected return, 50x turnover at 10bps
+consumes more than the entire edge.
+
+**Why this matters more on this page than anywhere else.** Adaptive
+strategies buy their improved risk profile *with extra trading*, and the
+mechanisms differ enormously in how much:
+
+- *Filtering* — trades only at regime boundaries. Cheap.
+- *Regime sizing* — resizes only at boundaries. Cheap.
+- *Volatility targeting* — resizes every day, but in small increments.
+  Moderate.
+- *Switching* — flips the entire position at every regime change.
+  Expensive.
+- *Regime-conditional ML* — trades on most days. Very expensive.
+
+A comparison run at 0bps systematically flatters the bottom of that list.
+Turn costs on and the ranking frequently reverses — which means the
+frictionless ranking was not merely optimistic, it was **wrong**.
+
+**The question to ask of any adaptive result.** Did the extra turnover buy
+anything? If the adaptation added 10x turnover and improved Sharpe by
+0.03, it did not. Reporting that plainly — "the added complexity did not
+pay for itself" — is a complete and useful finding.
+
+**The break-even habit.** For any strategy, compute the cost level at
+which it stops making money. If the answer is 3bps, it is a theoretical
+object that will not survive contact with a broker. If it survives 20bps,
+it deserves more of your time. See [[costs]] for the broader argument.
+""",
+    },
 }
 
 # --------------------------------------------------------------------------
