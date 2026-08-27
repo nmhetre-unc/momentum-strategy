@@ -1159,6 +1159,242 @@ importance in the forest may have a near-zero coefficient in the logistic
 model on identical data. Both are correct descriptions of different models.
 """,
     },
+    "walkforward_reason": {
+        "title": "Why a backtest on fixed history is not evidence",
+        "body": """
+Before walk-forward makes sense as a *solution*, it's worth being precise
+about the problem — because the problem is not "backtests can be buggy".
+It is structural, and it applies to a perfectly correct backtest.
+
+**The setup that guarantees a good result.** You have a strategy with
+parameters. You have one finite price history. Some setting of those
+parameters was, necessarily, the best one on that history. Find it and
+report its performance, and you have reported the maximum of a search —
+not the expected performance of a process.
+
+This is true even if you never ran an explicit optimizer. Choosing 50 and
+200 for your moving averages because "those are conventional" is still a
+choice informed by decades of other people searching the same history.
+
+**Why the number is biased upward, always.** Suppose you test 20 parameter
+sets on pure noise. Their true edge is zero. Their measured Sharpes will
+scatter around zero, and the best of the 20 will be meaningfully positive
+by construction. Report that one and you have reported a selection
+artifact. The more you tried, the more inflated it is — and the count
+includes every variant you tried and discarded.
+
+**The three searches that all count.**
+
+1. *Parameter search* — trying many windows, keeping the best.
+2. *Strategy search* — trying many strategies, keeping the best.
+3. *Silent search* — looking at a chart, disliking it, changing something.
+   This one leaves no record and is the hardest to account for. See
+   [[silent_fitting]].
+
+**Why "but it's ten years of data" doesn't rescue it.** Ten years of daily
+data is 2,500 rows but nothing like 2,500 independent observations.
+Returns are autocorrelated in volatility, regimes persist for months, and
+the whole sample contains perhaps three or four genuinely distinct market
+environments. Your effective sample size is far smaller than the row count
+suggests, and your confidence should shrink accordingly.
+
+**What walk-forward actually buys you.** It doesn't make a strategy good.
+It gives you one number that the search process could not have touched —
+and one honest number is worth more than a dozen flattering ones. See
+[[is_vs_oos]] for how to read it, and [[fold_uncertainty]] for why one
+such number still isn't enough.
+""",
+    },
+    "is_vs_oos": {
+        "title": "In-sample and out-of-sample: reading the two numbers",
+        "body": """
+**In-sample (IS)** is the period your strategy could have been influenced
+by — where parameters were chosen, models fitted, rules learned, and where
+you looked at charts while deciding what to build.
+
+**Out-of-sample (OOS)** is data that played no part in any of that.
+
+The split here is **chronological**, never random. Shuffling rows and
+holding out 30% at random would leak badly: neighbouring days share
+volatility regimes and overlapping rolling windows, so a "held-out"
+Tuesday sitting between two training days is not held out in any
+meaningful sense.
+
+**The gap is the metric, not either level.**
+
+| Pattern | Reading |
+|---|---|
+| IS 1.2 → OOS 1.0 | Small gap. The process generalizes. This is the good outcome. |
+| IS 1.8 → OOS 0.2 | Collapse. The IS number was mostly fitting. |
+| IS 1.8 → OOS −0.4 | Sign flip. Whatever was learned was actively wrong on new data. |
+| IS 0.3 → OOS 0.4 | No gap, but nothing to generalize either. Honest and unremarkable. |
+
+A **small gap with a modest level** beats a **large level with a large
+gap** every time. The first describes a process you can repeat; the second
+describes one lucky period.
+
+**Four things that make the comparison lie.**
+
+1. **Trade count.** Two trades OOS is two coin flips. Check `num_trades`
+   before reading any OOS Sharpe — this is the caveat people skip most.
+2. **Regime mix.** If the OOS period contained more of the environment
+   your strategy dislikes, per-regime performance may be perfectly intact
+   while the blended number falls. That's a changed market, not a broken
+   strategy — the regime-mix table settles which.
+3. **Drawdown.** A strategy that keeps its return but doubles its drawdown
+   OOS has still degraded. Don't read Sharpe alone.
+4. **Repeated looks.** See [[silent_fitting]]. Looking, adjusting, and
+   looking again converts OOS into IS silently.
+
+**One split is one draw.** Even a clean gap on a single split might be
+luck about *where the split landed*. That is what rolling walk-forward
+addresses — see [[fold_uncertainty]].
+""",
+    },
+    "fold_uncertainty": {
+        "title": "Why one split isn't enough, and what folds tell you",
+        "body": """
+A single 70/30 split produces exactly **one** out-of-sample number. One
+number cannot distinguish "this works" from "this happened to be tested on
+a friendly stretch of market".
+
+Rolling walk-forward fixes that by producing many consecutive out-of-sample
+blocks. Now you have a *distribution*, and a distribution answers questions
+a point estimate cannot.
+
+**Read the folds in three passes.**
+
+1. **The share positive.** Ten of twelve folds positive is a far better bet
+   than a high average driven by two enormous folds. Consistency is the
+   property that repeats; magnitude often isn't.
+2. **The spread.** The standard deviation across folds is your honest
+   uncertainty about the strategy. If fold Sharpes range from −1.5 to +2.0,
+   your "true" Sharpe is somewhere in a very wide band, and quoting a
+   single figure to two decimal places is false precision.
+3. **The sequence, not just the set.** This is the pass people skip. Folds
+   arrive in time order. Consistently positive early and consistently
+   negative later is not noise — it is [[regime_drift]], and averaging
+   across it produces a number describing a market that no longer exists.
+
+**Why fold Sharpes are so noisy.** Each fold is short. The standard error
+of an annualized Sharpe is roughly `sqrt(252/N)`, so a 126-day fold carries
+an error bar of about **±1.4**. Individual folds are almost uninformative
+on their own; the value is entirely in the pattern across them.
+
+**What a robust strategy looks like.** Most folds positive, the bad ones
+survivable, no trend across the sequence, and a spread you could live
+with. Notably, *not* a high average — a strategy averaging 0.4 across
+twelve folds with ten positive is a better bet than one averaging 0.8 off
+two spectacular folds and ten flat ones.
+
+**The stitched equity curve** concatenates only the out-of-sample days into
+one continuous record. It is the closest thing in this project to a paper
+trading log, and its shape matters more than its endpoint: long flat
+stretches are periods you would have had to sit through without knowing
+they would end.
+
+**One honest limitation here.** This implementation generates the signal
+once and evaluates it in rolling blocks; it does not refit fitted
+strategies per fold. That is stated in the returned `fitted_note`, and it
+means the folds are slightly optimistic for `ml_direction` and the
+auto-selecting wrappers.
+""",
+    },
+    "silent_fitting": {
+        "title": "Silent fitting: the leak with no code",
+        "body": """
+Every other bias in this project has a technical fix. This one doesn't,
+and it is probably the most common way research goes wrong.
+
+**The pattern.** You run walk-forward. The out-of-sample result is poor.
+You go back, change a parameter — or the feature set, or the date range,
+or the ticker — and run it again. The second result is better, so you keep
+it and report that out-of-sample number.
+
+**That number is no longer out-of-sample.** You used the holdout period to
+make a decision. It became training data the moment it influenced you. Do
+this three or four times and your carefully constructed holdout is
+thoroughly in-sample, with none of the code showing it.
+
+**Why it's so easy to do.** It doesn't feel like cheating. Each individual
+step is reasonable — "that parameter was clearly badly chosen", "of course
+I should exclude the COVID crash", "this ticker is more representative".
+The bias comes from the *sequence* of decisions, each informed by the
+result you were trying to validate, and no single step looks wrong.
+
+**The same thing at team scale.** Twenty people each testing one strategy
+on the same data is statistically identical to one person testing twenty.
+The winner gets published; the nineteen failures leave no trace. This is
+why published anomalies decay so reliably after publication.
+
+**What actually helps — none of it technical.**
+
+- **Write the decision rule down before you look.** "I will accept this if
+  OOS Sharpe > 0.5 with at least 30 trades" is a commitment. Deciding what
+  counts as success *after* seeing the number is not.
+- **Budget your looks.** Treat the holdout as a scarce resource. Two or
+  three evaluations, not thirty.
+- **Keep a log of everything you tried**, including what you abandoned.
+  Those attempts spent statistical power whether or not you report them.
+- **Hold back a second period you have never touched** and check once, at
+  the very end.
+- **Prefer strategies you can state a reason for.** A hypothesis specified
+  in advance costs far less statistical power than one found by search, and
+  degrades more gracefully.
+
+**The uncomfortable corollary.** If you have been iterating on this
+dashboard for an afternoon, the out-of-sample numbers you are looking at
+are already somewhat contaminated. That is not a reason to stop — it is a
+reason to say so when you report them.
+""",
+    },
+    "survivorship_bias": {
+        "title": "Survivorship bias: the sample you never see",
+        "body": """
+Every dataset here is a record of things that still exist. What's missing
+is everything that didn't make it, and its absence quietly inflates every
+result computed on what remains.
+
+**The classic form.** Backtest a strategy on today's S&P 500 members over
+the last twenty years and you have selected companies that survived and
+grew enough to still be in the index. Enron, Lehman, Wachovia, Bear
+Stearns are not in your sample. You have unintentionally built a strategy
+tested on the winners of a race whose result you already know.
+
+**Where it hides in this project specifically.**
+
+1. **The ticker.** Backtesting on SPY, 2010-2025, is backtesting on an
+   asset you already know roughly tripled. Any long-biased strategy
+   inherits that. Run the same strategy on something that went sideways or
+   down before believing it — the choice of ticker is itself a decision
+   informed by the future.
+2. **The date range.** The default here starts in 2008, which includes a
+   crisis. Start in 2010 instead and you exclude it, testing exclusively on
+   one long low-volatility bull market. Both are defensible; only one is
+   what you thought you were measuring.
+3. **Fund and index data generally.** Fund databases drop closed funds,
+   which is why the average reported fund return beats the average actual
+   investor experience by a wide margin.
+4. **Strategies you read about.** The moving-average crossover is famous
+   because it worked on some history someone looked at. The thousands of
+   rules that didn't were never written up. Every "classic" strategy you
+   test here reached you through that filter.
+
+**Why it interacts badly with everything else on this page.** Walk-forward
+protects you from fitting *within* a sample. It does nothing about the
+sample itself being selected. A strategy can pass every fold cleanly and
+still be an artifact of having chosen a survivor to test it on.
+
+**Partial defences.**
+
+- Test on several tickers, including ones that performed badly.
+- Test on several date ranges, including ones containing crises.
+- Always compare against buy-and-hold on the same asset — if the asset
+  tripled, your strategy needs to beat *that*, not zero.
+- State the universe and period you selected, and why, as part of any
+  result. Making the choice explicit is most of the remedy.
+""",
+    },
 }
 
 # --------------------------------------------------------------------------
