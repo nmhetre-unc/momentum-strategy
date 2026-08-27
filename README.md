@@ -6,12 +6,19 @@ traders and interns. Risk-adjusted metrics, walk-forward validation,
 market regime detection, adaptive strategies, guided exercises, and a
 dashboard that explains itself.
 
-**Live demo:** _add your Streamlit Community Cloud URL here_
+**Live demo:** https://momentum-strategy-zpgmmb89pfwjghigjk8soc.streamlit.app/
 
 The goal here is **exposure to the work, not production trading**. Every
 number in this repo is computed on free daily data with a simple cost
 model. What transfers is the reasoning: how to build a hypothesis, how to
 test it honestly, and how to recognize when you have fooled yourself.
+
+The dashboard explains itself as you use it: every metric carries a
+tooltip saying what it means *and what it hides*, every chart has a
+plain-language reading guide, and ~56 contextual warnings fire on your own
+numbers when they cross a threshold worth knowing about — too few trades,
+non-causal regime labels, an accuracy below its base rate, a Sharpe high
+enough to suspect a leak.
 
 ---
 
@@ -140,6 +147,9 @@ rather than its average.
 
 ### Setup
 
+**Python 3.12 or newer is required** — numpy 2.5 needs ≥3.12, pandas 3 and
+scikit-learn 1.9 need ≥3.11. Developed and tested on 3.14.
+
 ```bash
 python -m venv venv
 source venv/bin/activate        # or venv\Scripts\activate on Windows
@@ -152,25 +162,34 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Seven pages, sharing one data selection and one regime model configured
+Eight pages, sharing one data selection and one regime model configured
 in the sidebar:
 
+- **Start here** — the front door: what the platform teaches, a roadmap
+  through the other pages with a "why this matters" on each, the common
+  beginner traps, and an eight-item first-session checklist that tracks
+  your progress.
 - **Backtest** — one strategy, its equity curve, drawdown, position, and
   an unavoidable comparison against buy-and-hold. Walk-forward is always
-  shown, not hidden behind a toggle.
+  shown, not hidden behind a toggle. Ends with "What this backtest tells
+  you" — five questions answered from the computed numbers, including
+  whether the strategy bleeds in chop and whether costs bit.
 - **Regimes** — detect regimes five ways, check whether they're actually
   regimes (persistence, duration, distinctness), see what the asset and
-  your strategy did in each, and run the lookahead demonstration.
+  your strategy did in each, and run the lookahead demonstration side by
+  side.
 - **Adaptive** — the four adaptation mechanisms, each with its learned
-  rule and the evidence behind it exposed.
+  rule and the evidence behind it exposed, plus adapted-vs-unadapted
+  performance broken down by regime.
 - **ML lab** — train the classifier, watch the train/test gap, compare
   against the base rate, and break accuracy down by regime.
 - **Validation** — rolling walk-forward, regime-attributed decay, and a
   fair side-by-side comparison of all eleven strategies.
 - **Exercises** — ten guided exercises with automated checks against
   whatever data you have loaded.
-- **Learn** — the learning path, the pitfalls, every quant note, and a
-  glossary.
+- **Learn** — the learning path, the pitfalls, all 35 quant notes grouped
+  by theme, and a glossary. Includes an opt-in health check that measures
+  the six warning thresholds against your own loaded data.
 
 ### The CLI
 
@@ -200,6 +219,46 @@ python test_regime.py    # regimes, adaptive strategies, validation layer
 Both run offline on synthetic data. `test_regime.py` builds a series with
 *known* regime structure, which is the only place the detection machinery
 can be checked against ground truth — on real data you never have it.
+
+### Deploying it (Streamlit Community Cloud)
+
+1. Push to GitHub
+2. [share.streamlit.io](https://share.streamlit.io) → **Create app** →
+   deploy from GitHub, main file path `app.py`
+3. **Open "Advanced settings" and set the Python version to 3.12 or
+   newer.** The default is 3.9, which cannot install `streamlit>=1.62` at
+   all — pip errors out and the build dies before your code runs. The
+   version can only be set at creation, so an existing app must be deleted
+   and recreated to change it.
+
+If the build succeeds but the app shows a data error, that is Yahoo
+Finance blocking cloud IP ranges rather than a bug. The repo ships cached
+CSVs for SPY and AAPL; pick a matching range or commit the cache file for
+the range you want.
+
+---
+
+## The teaching layer
+
+Every page carries the same four devices, so the platform explains itself
+rather than assuming a reader who already knows what to look for.
+
+| Device | What it does |
+|---|---|
+| **Tooltips** | Every metric, everywhere, from one shared `METRIC_DOCS` dict — what the number means *and what it conceals*. |
+| **Contextual caveats** | ~56 warnings that compute a number rather than restate a rule: "only 6 trades out-of-sample", "persistence is 0.91 for Turbulent", "regime filtering leaves you 22% invested". |
+| **Reading guides** | A short, actionable "how to interpret this" beside each chart and table — including what it means when the expected effect is *absent*. |
+| **Quant notes** | 35 collapsible explanations in `quant_notes.py`, surfaced in context on each page and browsable by theme on the Learn page. |
+
+Three principles the content follows:
+
+- **A negative result is a result.** The honest outcome of most work here
+  is "this doesn't beat buy-and-hold" or "this model learned nothing", and
+  the platform says so plainly instead of hiding it.
+- **Sample size before conclusions.** Almost every caveat is some version
+  of *you have fewer independent observations than you think*.
+- **Prefer the boring explanation.** When plain volatility targeting beats
+  the regime-switching HMM — which it often does — that is the finding.
 
 ---
 
@@ -324,10 +383,11 @@ condition on.
 
 **Training layer** (new):
 
-- `quant_notes.py` — every tooltip, quant note, pitfall and learning-path stage, as plain data
+- `quant_notes.py` — all 35 quant notes, every metric tooltip, the three pitfalls and the eight learning-path stages, as plain data with no Streamlit dependency (so it's usable from a notebook or the CLI)
 - `exercises.py` — ten exercises with automated checks; also runnable headless via `run_all(df)`
-- `regime_dashboard.py` — Altair chart builders, table configs, teaching widgets, cached loaders
-- `app.py` + `app_pages/` — the seven-page dashboard
+- `regime_dashboard.py` — Altair chart builders, the validated colour palette, table configs, teaching widgets (`quant_note`, `explainer`, `how_to_read`, `caveat`), and cached loaders
+- `app.py` — entry point: shared sidebar state and `st.navigation`
+- `app_pages/` — the eight page scripts: `start_here`, `backtest_lab`, `regimes`, `adaptive_lab`, `ml_lab`, `validation`, `exercises_lab`, `learn`
 
 **Tests:**
 
