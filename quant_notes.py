@@ -1395,6 +1395,62 @@ still be an artifact of having chosen a survivor to test it on.
   result. Making the choice explicit is most of the remedy.
 """,
     },
+    "bias_variance": {
+        "title": "Bias and variance: why the worse model wins here",
+        "body": """
+The random forest's failure on this data has a precise name, and knowing
+the name turns "the model overfit" into something you can reason about in
+advance rather than discover afterwards.
+
+**Prediction error decomposes into three parts.**
+
+- **Bias** — error from the model being too rigid to represent the true
+  relationship. A straight line fitting a curve has high bias.
+- **Variance** — error from the model being so flexible that it changes a
+  lot when the training data changes. Refit it on a different sample and
+  you get a substantially different model.
+- **Irreducible noise** — the part nobody can predict. On daily equity
+  direction, this term is enormous.
+
+You cannot minimize bias and variance at once. Reducing one raises the
+other; the goal is the sum, not either part.
+
+**Why the usual intuition inverts here.** Most ML advice is written for
+problems where the signal is strong and the binding constraint is bias —
+image classification, say, where a linear model genuinely cannot represent
+the answer. There, adding capacity helps.
+
+Daily direction is the opposite problem. The signal is nearly zero and the
+noise dominates. So:
+
+| Model | Bias | Variance | Total error |
+|---|---|---|---|
+| Logistic regression | High — can only fit a linear boundary | **Low** | Lower |
+| Random forest | Low — can fit almost anything | **Very high** | Higher |
+
+The forest's flexibility buys it nothing, because there is no complex true
+relationship to capture. All it does is fit the noise, which is variance
+by definition — and that variance is what you see as an 86% train accuracy
+collapsing to 45% on test data.
+
+**The rule to take away:** *the less signal there is relative to noise, the
+more you should constrain your model.* Reaching for more capacity when
+results disappoint is the correct instinct on high-signal problems and
+precisely backwards here.
+
+**How to spot which regime you're in.** Refit the model on a different
+train fraction, or a different slice of history. If the fitted model
+changes a lot — different feature importances, different predictions —
+that is variance, and you need *less* capacity, not more. If it stays
+stable and stays wrong, that is bias, and more capacity might genuinely
+help. See [[ml_feature_importance]] for the stability check.
+
+**Regularization is the dial between them.** Shallower trees, fewer
+features, stronger L2 penalties, more training data — all trade a little
+bias for a large reduction in variance. On this problem that trade is
+almost always worth making.
+""",
+    },
 }
 
 # --------------------------------------------------------------------------
