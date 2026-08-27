@@ -981,6 +981,184 @@ object that will not survive contact with a broker. If it survives 20bps,
 it deserves more of your time. See [[costs]] for the broader argument.
 """,
     },
+    "ml_base_rate": {
+        "title": "The base rate: the bar every model has to clear",
+        "body": """
+Before you can say a classifier is any good, you need to know what "no
+skill" scores. That number is the **base rate**: the accuracy you'd get by
+always predicting the majority class, with no model at all.
+
+**On daily equity data it is about 53%.** Roughly 53% of days are up,
+because equity indices drift upward over time. So a model that predicts
+"up" every single day — a constant, a single line of code, no features,
+no training — scores about 53%.
+
+**Which reframes almost every accuracy number you'll see.**
+
+| Test accuracy | What it actually means |
+|---|---|
+| 48% | Worse than a coin flip. The model learned anti-signal. |
+| 51% | Below the base rate. Worse than a constant. |
+| 53% | Exactly the base rate. The model added **nothing**. |
+| 55% | +2 points of real edge. Genuinely notable on daily data. |
+| 60% | Extraordinary. Go looking for the lookahead bug first. |
+
+"My model is 54% accurate!" sounds like a result and is, at best, one
+percentage point of edge. Reported without the base rate beside it, it is
+not a claim you can evaluate at all — which is exactly why this dashboard
+shows them side by side and computes the difference for you.
+
+**Why the base rate isn't a fixed 53%.** It depends on the window. A test
+period that happened to contain a bull run has a higher base rate; one
+containing a crash has a lower one, and may even flip so the majority class
+is "down". Always compute it on the *same* period you're evaluating, never
+from memory.
+
+**The trap this creates.** A model can maximize accuracy by simply
+learning to predict the majority class always. It will look mediocre-but-
+respectable on the accuracy metric and be completely useless — see the
+confusion matrix, where it shows up as an entire column of zeros. That
+failure is common enough that this page checks for it explicitly.
+
+**And the deeper point.** Even genuine edge over the base rate does not
+mean profit. See [[ml_accuracy_vs_pnl]]: which days you get right matters
+far more than how many.
+""",
+    },
+    "ml_accuracy_vs_pnl": {
+        "title": "Why accuracy is not profit",
+        "body": """
+Accuracy counts predictions. Markets pay in magnitude. Those are different
+things, and conflating them is one of the most common errors in applied ML
+for trading.
+
+**The core asymmetry.** A model that is right on 60 small days and wrong
+on 40 large ones has 60% accuracy and loses money. Accuracy weights every
+day equally; your P&L weights each day by how far the market moved. Since
+daily returns are fat-tailed — a handful of days carry most of the year's
+move — being right on the *typical* day is close to irrelevant.
+
+**A worked example.** 100 test days:
+
+- 60 days right, average move +0.3% → **+18%**
+- 40 days wrong, average move −0.7% → **−28%**
+- Accuracy: **60%**. Return: **−10%**.
+
+Nothing is wrong with the model's classification. It simply got the days
+that mattered wrong, and no accuracy figure can reveal that.
+
+**It runs the other way too.** A 48% accurate model can be profitable if
+its wins are systematically larger than its losses. Trend-following lives
+here: it is wrong most of the time and makes its money on a few large
+moves. Judged on accuracy it looks broken; judged on P&L it works.
+
+**Then costs finish the job.** A daily direction model trades constantly —
+turnover of 30-80x a year is normal. At 5bps that is 1.5-4% of annual
+drag. A model with one point of genuine edge over the base rate does not
+generate enough to pay for its own trading.
+
+**So what should you read?** Out-of-sample **Sharpe**, and turnover beside
+it. Accuracy is a diagnostic for whether the model learned anything at
+all; it is not a measure of whether the strategy makes money. This page
+deliberately shows both, in that order, so the gap between them is visible.
+
+**The habit.** When someone quotes a model's accuracy, ask two questions:
+*what was the base rate* (see [[ml_base_rate]]) and *what was the Sharpe
+after costs*. The second question ends most conversations.
+""",
+    },
+    "ml_regime_conditional": {
+        "title": "Conditioning a model on regime: two ways, both with a catch",
+        "body": """
+If the relationship between today's features and tomorrow's return genuinely
+differs across market environments, a model that knows which environment it
+is in should do better. That is a reasonable hypothesis. This page lets you
+test it two ways.
+
+**Mode "feature" — one model, regime as an input.** The regime label is
+one-hot encoded into the feature matrix. The model *can* learn "in a crisis,
+ignore momentum" if the data supports it. It costs a handful of extra
+parameters and keeps every training row. This is the conservative option and
+usually the right first try.
+
+**Mode "conditional" — a separate model per regime.** Each model is fitted
+only on days in its own regime. Maximum flexibility, and a direct route to
+overfitting:
+
+> With 2,500 rows, a 70% train split and three regimes, each per-regime model
+> sees roughly **580 rows** to fit a dozen features on — while the parameter
+> count per model stays exactly the same.
+
+You have not made the model smarter. You have made three copies of it and
+fed each a third of the data. This is why the regime-conditional variant
+typically shows the worst in-sample-to-out-of-sample decay of anything in
+this project — see [[adaptive_overfitting]].
+
+**The guard rail, and what it tells you.** Regimes with fewer than 150
+training rows fall back to a model fitted on everything. The `Own model?`
+column says which regimes got their own. If most fell back, conditional
+mode is barely doing anything — and that is worth knowing before you
+attribute any difference to it.
+
+**How to read the per-regime accuracy table.** The only column that matters
+is **edge over base rate**, because each regime has its own base rate. A
+crisis regime might be 45% up-days, so 48% accuracy there is *positive*
+edge, while 52% in a calm regime with a 56% base rate is negative. Raw
+accuracy across regimes is not comparable.
+
+**What a real finding looks like.** Consistent positive edge in one regime
+across enough test days to matter, ideally with a mechanism you can state.
+What you usually get instead is a scatter of small positive and negative
+edges with no pattern — which is the honest answer that there was nothing
+to condition on, and more useful than a marginal improvement you couldn't
+trust.
+""",
+    },
+    "ml_feature_importance": {
+        "title": "Feature importance tells you what, never whether",
+        "body": """
+Feature importance answers one question: **what did the model lean on?** It
+does not answer whether leaning on it was correct, and reading it as
+evidence of a real relationship is a standard mistake.
+
+**An overfit model produces confident importances for pure noise.** If a
+random forest memorized the training rows, it memorized them *using* some
+features, and those features get high importance scores. The scores are an
+accurate description of the model's internals and tell you nothing about the
+market. Always read importance next to the train/test gap — high importances
+from a model with a 20-point gap describe a fantasy.
+
+**The two charts here mean different things.**
+
+- *Logistic regression* shows **coefficients**: signed, so direction is
+  meaningful. A positive coefficient on `rsi_14` means higher RSI pushed the
+  prediction toward "up". Because the features are standardized first, the
+  magnitudes are comparable to each other.
+- *Random forest* shows **impurity-based importance**: unsigned, so you get
+  "this feature mattered" with no direction. It is also biased toward
+  high-cardinality continuous features — which is nearly all of them here, so
+  treat small differences in rank as meaningless.
+
+**Three things worth checking.**
+
+1. **Concentration.** If one feature holds most of the importance, the model
+   is close to a single-variable rule. That is not automatically bad — simple
+   is good — but it means the other eleven features are decoration.
+2. **Which horizon dominates.** `return_1d` and `return_2d` are the noisiest
+   inputs available: single-day moves on a liquid index are close to random.
+   A model leaning hardest on those is leaning on noise, whatever the score
+   says.
+3. **Stability.** Change the train fraction from 0.7 to 0.6 and look again.
+   If the ranking reshuffles, the importances are describing sampling
+   variation, not structure. Stable rankings across splits are the minimum
+   bar before you take any of it seriously.
+
+**What importance can't do.** It is not causal, it is not a hedge ratio, and
+it does not transfer to a different model class. A feature with high
+importance in the forest may have a near-zero coefficient in the logistic
+model on identical data. Both are correct descriptions of different models.
+""",
+    },
 }
 
 # --------------------------------------------------------------------------
