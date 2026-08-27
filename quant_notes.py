@@ -370,6 +370,136 @@ This project models cost as a constant, which understates the real thing
 for anything but small trades in liquid names.
 """,
     },
+    "trend_in_chop": {
+        "title": "Why trend-following bleeds in sideways markets",
+        "body": """
+This is the most important structural failure in the whole project, and it
+is not a bug or a tuning problem. It is what the rule does by construction.
+
+**The mechanism.** An SMA crossover has no concept of "range". It only
+knows whether the fast average sits above the slow one. In a sideways
+market price oscillates across both averages, and each oscillation fires
+the same sequence:
+
+1. Price rises enough to pull the fast average above the slow one — but
+   by the time a *lagging average* has crossed, price is already near the
+   local top. You buy high.
+2. Price falls back through the middle of the range. The averages cross
+   back down, again late. You sell low.
+3. Repeat.
+
+The strategy systematically buys near local highs and sells near local
+lows, and it does so *every time the market goes nowhere*. The lag that
+makes moving averages useful in a trend is exactly what makes them
+poisonous in a range.
+
+**What the equity curve looks like.** A staircase: long flat-to-declining
+stretches punctuated by a few large gains. Trend-following is often
+described as paying an insurance premium in quiet markets to collect a
+large payout in trending ones. The premium is those flat stretches.
+
+**Why win rate is useless here.** The strategy loses on most trades and
+makes its money on a handful of large ones. A 35% win rate is normal and
+says nothing about whether it works. Read the payoff profile instead.
+
+**Why this is hard to hold.** The flat stretches can run for a year or
+more. Most people abandon the strategy during one, which means the
+full-period return in the backtest was never actually available to them.
+
+**The practical response.** Don't trade the strategy in the regime where
+it structurally loses — that's `regime_filtered` on the Adaptive page.
+Whether you can identify that regime *in real time*, rather than in
+hindsight, is a separate and much harder question, and it's the one the
+Regimes page exists to make you confront.
+""",
+    },
+    "drawdown_vs_return": {
+        "title": "Why drawdown matters more than return",
+        "body": """
+Return is what a strategy earned. Drawdown is what you had to survive to
+collect it. Only one of those decides whether you were still holding at
+the end.
+
+**The arithmetic is asymmetric, and brutally so.**
+
+| Drawdown | Gain needed to recover |
+|---|---|
+| -10% | +11% |
+| -25% | +33% |
+| -50% | +100% |
+| -75% | +300% |
+
+A 50% loss does not need a 50% gain to undo. It needs a double. This is
+why capital preservation is not timidity — it's arithmetic.
+
+**Three reasons the drawdown number binds harder than the return number:**
+
+1. **You get stopped out.** At a fund, a drawdown limit is a hard rule; a
+   -20% drawdown often means your book is cut regardless of what the
+   backtest says happens next. The backtest keeps holding. You don't.
+2. **You stop yourself.** The psychological version of the same thing,
+   and more common. A backtest never panics in month nine of an 18-month
+   underwater stretch.
+3. **It bounds your leverage.** How large you can run a strategy is set
+   by its worst case, not its average. Halving drawdown at constant
+   return means you can run twice the size.
+
+**How to read the drawdown chart.** Depth is only half of it. Also read
+**duration** — how long the curve stayed underwater. A -15% drawdown that
+recovers in a month is an inconvenience; a -15% drawdown that takes two
+years to recover is a strategy you would have abandoned.
+
+**The corollary for this dashboard.** When a change (volatility targeting,
+regime filtering) leaves return roughly flat and cuts max drawdown
+materially, that is a *large* improvement even though the headline return
+barely moved. Most of the value in position sizing shows up here and
+nowhere else.
+""",
+    },
+    "sharpe_can_mislead": {
+        "title": "Why the Sharpe ratio can mislead you",
+        "body": """
+Sharpe is the default risk-adjusted metric because it is simple and
+comparable. It is also wrong in specific, knowable ways, and quoting it
+without the caveats is how people get caught out.
+
+**1. It assumes returns are roughly normal. They are not.** Market
+returns have fat tails and negative skew — crashes are far larger and
+more frequent than a normal distribution predicts. Sharpe uses standard
+deviation, which treats a -8% day as merely unusual rather than as the
+thing that ends your fund. It systematically understates tail risk.
+
+**2. It punishes upside volatility.** A strategy that jumps +10% is
+penalized exactly as hard as one that drops -10%. That's why Sortino
+exists — same formula, downside deviation only. When Sortino is much
+higher than Sharpe, your volatility was mostly the good kind.
+
+**3. It says nothing about path.** Two strategies with identical Sharpe
+can have completely different drawdown profiles. Sharpe is computed from
+the distribution of daily returns and is blind to their *ordering* — and
+ordering is exactly what a drawdown is.
+
+**4. It has a large error bar that nobody quotes.** The standard error of
+an annualized Sharpe is roughly `sqrt(252/N)` for N days. Over one year
+that's about ±1.0. Two strategies at 0.8 and 1.2 over a single year are
+statistically indistinguishable. Most published Sharpe comparisons are
+noise.
+
+**5. It can be gamed by construction.** Strategies that sell options, or
+that hold through small losses and rarely realize them, post excellent
+Sharpe ratios right up until the one event that defines them. High Sharpe
+with rare enormous losses is a recognizable and dangerous profile.
+
+**6. Exposure hides inside it.** A Sharpe of 1.0 earned at 15% average
+exposure and one earned at 100% exposure are very different results — the
+first is computed on far fewer invested days, so its error bar is wider.
+
+**How to use it anyway.** Read Sharpe *with* max drawdown, exposure, and
+trade count. Above ~2 on a daily equity strategy, don't celebrate — go
+looking for the lookahead bug, because that is much more often the
+explanation than genuine edge.
+""",
+    },
 }
 
 # --------------------------------------------------------------------------

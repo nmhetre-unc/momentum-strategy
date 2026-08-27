@@ -37,6 +37,19 @@ st.session_state.setdefault("regime_settings", {
     "min_duration": 5, "decode": "filter", "walk_forward": False,
 })
 
+# Each regime control gets a stable widget key and seeds its default through
+# session_state rather than through the widget's own value argument. Passing
+# settings["fit_frac"] as the default of the slider that also WRITES
+# settings["fit_frac"] makes the widget's identity change every time it moves,
+# so Streamlit re-registers it and the new value can silently fail to stick.
+REGIME_DEFAULTS = {
+    "rg_method": "hmm", "rg_n_regimes": 3, "rg_fit_frac": 0.6,
+    "rg_smooth": "min_duration", "rg_min_duration": 5, "rg_decode": "filter",
+    "rg_walk_forward": False,
+}
+for _key, _default in REGIME_DEFAULTS.items():
+    st.session_state.setdefault(_key, _default)
+
 
 def _load(ticker: str, start, end):
     """Fetches prices into session state, keeping any error for display."""
@@ -83,54 +96,58 @@ with st.sidebar:
 
     st.subheader("Regime model", divider="gray")
     st.caption("Shared by every page that shows regimes.")
-    settings = st.session_state["regime_settings"]
 
-    settings["method"] = st.selectbox(
-        "Detection method", REGIME_METHODS, index=list(REGIME_METHODS).index(settings["method"]),
+    st.selectbox(
+        "Detection method", REGIME_METHODS, key="rg_method",
         help="Explained in full on the Regimes page. Start with 'rules' — it fits nothing, so nothing can leak.",
     )
-    settings["n_regimes"] = st.slider(
-        "Number of regimes", 2, MAX_REGIMES, settings["n_regimes"],
+    st.slider(
+        "Number of regimes", 2, MAX_REGIMES, key="rg_n_regimes",
         help=(
             "Ignored by 'rules' and 'supervised', which define four by construction. Capped at "
             f"{MAX_REGIMES}: more than that over-segments a decade of daily data, and the ordinal "
             "color ramp stops being distinguishable."
         ),
     )
-    settings["walk_forward"] = st.toggle(
-        "Walk-forward detection", value=settings["walk_forward"],
+    st.toggle(
+        "Walk-forward detection", key="rg_walk_forward",
         help=(
             "Refit the regime model on an expanding window and label only forward. Slower, and it "
             "produces no labels for the first two years — because you genuinely had no model then. "
             "This is the honest setting."
         ),
     )
-    if not settings["walk_forward"]:
-        settings["fit_frac"] = st.slider(
-            "Fit fraction", 0.4, 1.0, settings["fit_frac"], step=0.05,
+    if not st.session_state["rg_walk_forward"]:
+        st.slider(
+            "Fit fraction", 0.4, 1.0, step=0.05, key="rg_fit_frac",
             help=(
                 "Share of history the model is fitted on. At 1.0 the labels embed knowledge of the "
                 "future — useful for describing history, invalid for backtesting."
             ),
         )
-    settings["smooth"] = st.selectbox(
-        "Label smoothing", ["min_duration", "ema_prob", "median", "none"],
-        index=["min_duration", "ema_prob", "median", "none"].index(settings["smooth"]),
+    st.selectbox(
+        "Label smoothing", ["min_duration", "ema_prob", "median", "none"], key="rg_smooth",
         help="All options are backward-looking only. A centered filter would look tidier and be lookahead bias.",
     )
-    settings["min_duration"] = st.slider(
-        "Confirmation days", 1, 21, settings["min_duration"],
+    st.slider(
+        "Confirmation days", 1, 21, key="rg_min_duration",
         help="How long a new regime must persist before it's accepted. Higher means fewer head-fakes and more lag.",
     )
-    if settings["method"] == "hmm" and not settings["walk_forward"]:
-        settings["decode"] = st.selectbox(
-            "HMM decoding", ["filter", "smooth", "viterbi"],
-            index=["filter", "smooth", "viterbi"].index(settings["decode"]),
+    if st.session_state["rg_method"] == "hmm" and not st.session_state["rg_walk_forward"]:
+        st.selectbox(
+            "HMM decoding", ["filter", "smooth", "viterbi"], key="rg_decode",
             help=(
                 "'filter' uses data up to today only — the one you could have traded. 'smooth' and "
                 "'viterbi' condition on the whole sequence: cleaner labels, not available in real time."
             ),
         )
+
+    # Conditionally-rendered widgets can have their session_state entry dropped
+    # on a run where they aren't drawn, so read every value with a fallback.
+    st.session_state["regime_settings"] = {
+        key[len("rg_"):]: st.session_state.get(key, default)
+        for key, default in REGIME_DEFAULTS.items()
+    }
 
 # --------------------------------------------------------------------------
 # Navigation
