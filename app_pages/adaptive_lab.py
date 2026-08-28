@@ -149,6 +149,8 @@ with st.container(border=True):
     if adaptive_name == "ml_regime_conditional":
         params["regime_mode"] = st.segmented_control(
             "Regime mode", ["feature", "conditional"], default="feature", key="ad_mode",
+            help="'feature' gives one model the regime as an extra input. 'conditional' fits a "
+                 "separate model per regime — more flexible, and it splits your training data.",
         ) or "feature"
 
 doc = ADAPTIVE_DOCS[adaptive_name]
@@ -290,16 +292,14 @@ chart_caption(
 )
 how_to_read(
     """
-**Growth of $1** — compare the *shape* against the unadapted version, not just the endpoint.
-Adaptation usually flattens the curve in the regimes it filters out, which looks like
-underperformance in good times and pays for itself in bad ones.
-
-**Drawdown** — this is where most of what adaptation buys you actually shows up. A
-mechanism that leaves return roughly flat and cuts max drawdown materially is a large
-improvement, even though the headline return barely moved. Read depth *and* duration.
-
-**A shallower drawdown alone proves nothing.** Check exposure first — if the strategy was
-only invested 35% of the time, a smaller drawdown is arithmetic, not skill.
+- **Compare the shape against the unadapted version, not the endpoint.** Adaptation flattens
+  the curve in the regimes it sits out — that looks like underperformance in good times and
+  pays for itself in bad ones.
+- **Most of what adaptation buys shows up in drawdown, not return.** A mechanism that leaves
+  return roughly flat and cuts the drawdown materially is a large improvement, even though the
+  headline barely moved.
+- **A shallower drawdown alone proves nothing.** Check exposure first: if the strategy was
+  invested 35% of the time, the smaller hole is arithmetic rather than skill.
 """
 )
 

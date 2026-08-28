@@ -100,7 +100,7 @@ before is in-sample, everything after is out-of-sample.
 - **Trade count** — the caveat people skip. Two trades out-of-sample is two coin flips, and
   no Sharpe computed on it means anything in either direction.
 
-**Rolling walk-forward** (first tab) — many consecutive out-of-sample blocks instead of one.
+**Rolling walk-forward** (first tab) — many consecutive out-of-sample folds instead of one.
 
 - **Folds** — how many test windows fitted in your history. `Train days` sets the lookback,
   `Test days` the size of each holdout block.
@@ -170,7 +170,7 @@ if tab_rolling.open:
     with tab_rolling:
         st.markdown(
             "One split gives you one out-of-sample number, and one number cannot tell "
-            "*this works* from *this got lucky once*. Consecutive out-of-sample blocks give "
+            "*this works* from *this got lucky once*. Consecutive out-of-sample folds give "
             "you a distribution."
         )
         with st.container(border=True):
@@ -324,7 +324,11 @@ if tab_decay.open:
             "When performance decays out-of-sample there are two very different stories, and "
             "the regime mix usually settles which one you're in."
         )
-        decay_strategy = st.selectbox("Strategy", list(ALL_STRATEGIES), key="v_decay_strategy")
+        decay_strategy = st.selectbox(
+            "Strategy", list(ALL_STRATEGIES), key="v_decay_strategy",
+            help="Splits this strategy's in-sample and out-of-sample results by regime, so you "
+                 "can see whether it broke or simply met a different mix of conditions.",
+        )
         decay_params = {"regimes": regimes} if decay_strategy in ADAPTIVE_STRATEGIES else {}
 
         evaluation = evaluate_with_regimes(
@@ -526,9 +530,6 @@ if tab_compare.open:
   in-sample figure was fitted. Bottom-left means it never worked at all.
 - **Compare the `Decay` column across strategies, not just the OOS level.** A strategy at
   0.5 with no decay is a better process than one at 0.7 that fell from 1.9.
-- **Drag the cost slider from 0 to 15.** Watch which strategies collapse. High-turnover
-  signals look best at zero cost and degrade fastest — the post-cost ranking is the only
-  real one.
 - **Check exposure before crediting anything.** A strategy invested 30% of the time isn't
   comparable to a fully invested one on raw return.
 """

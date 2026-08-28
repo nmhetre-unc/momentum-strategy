@@ -229,7 +229,7 @@ with st.container(border=True):
         "the same text as the tooltips elsewhere."
     )
 
-with st.expander("How to use this page", icon=":material/map:"):
+with st.expander("How to read this page", icon=":material/map:"):
     st.markdown(
         """
 **Progressing through the learning path.** Work the stages in order — each assumes the
@@ -482,6 +482,7 @@ and the simplest, slowing down, is usually the one that works.
     themes = st.pills(
         "Theme", list(NOTE_THEMES), selection_mode="multi",
         default=list(NOTE_THEMES), key="learn_note_themes",
+        help="Narrow the list to the area you are working in. Deselecting everything shows all notes.",
     )
     active_themes = themes or list(NOTE_THEMES)
     available = [k for theme in active_themes for k in NOTE_THEMES[theme] if k in QUANT_NOTES]
@@ -492,6 +493,8 @@ and the simplest, slowing down, is usually the one that works.
         topic = st.selectbox(
             "Topic", available, key="learn_topic",
             format_func=lambda key: QUANT_NOTES[key]["title"],
+            help="Each note is written to be read against a number you are currently looking at, "
+                 "not front to back.",
         )
         theme = THEME_OF_NOTE.get(topic, "Other")
         page = NOTE_PAGES.get(theme)

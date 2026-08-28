@@ -237,8 +237,6 @@ how_to_read(
   better-tuned one — which is the opposite of most people's instinct.
 - **A gap near zero with accuracy at the base rate** is the other common outcome: the model
   didn't overfit, it just found nothing. That is an honest, reportable result.
-- **Move the train fraction and watch both numbers.** If they swing around, you're reading
-  sampling variation rather than a property of the model.
 """
 )
 

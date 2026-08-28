@@ -95,7 +95,7 @@ flowchart TD
 # --------------------------------------------------------------------------
 # How to use the platform
 # --------------------------------------------------------------------------
-with st.expander("How to use this platform", icon=":material/map:"):
+with st.expander("How to read this page", icon=":material/map:"):
     st.markdown(
         """
 **Move through the pages in order.** Each one assumes the habits from the last. Regimes only
@@ -435,7 +435,11 @@ for key, task, path, label, hint in CHECKLIST:
             # discards widget state for widgets that weren't rendered, so
             # ticking an item and then visiting the page it links to would
             # silently reset the whole checklist.
-            st.checkbox(task, key=key, persist_state="session")
+            st.checkbox(
+                task, key=key, persist_state="session",
+                help="Ticks are remembered for this session, including after you visit the "
+                     "linked page and come back.",
+            )
             st.caption(hint)
         with row[1]:
             st.page_link(path, label=label, icon=":material/arrow_forward:")

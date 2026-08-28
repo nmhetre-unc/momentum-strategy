@@ -16,7 +16,7 @@ import streamlit as st
 from exercises import EXERCISES, LEVELS
 from regime import regime_stability
 from regime_dashboard import (cached_regimes, caveat, chart_caption, common_mistakes,
-    explainer, next_steps, page_intro, quant_note, require_data, table_caption
+    explainer, how_to_read, next_steps, page_intro, quant_note, require_data, table_caption
 )
 from strategies import STRATEGIES
 
@@ -409,7 +409,7 @@ with st.container(border=True):
         icon=":material/refresh:",
     )
 
-with st.expander("How to use this page", icon=":material/map:"):
+with st.expander("How to read this page", icon=":material/map:"):
     st.markdown(
         """
 **1 · Pick an exercise.** Use the level filter below. If you're starting out, do the two
@@ -460,6 +460,7 @@ st.info(
 
 chosen_levels = st.pills(
     "Filter by level", LEVELS, selection_mode="multi", default=LEVELS, key="ex_levels",
+    help="Levels build on each other. Start with Foundations if the later ones assume too much.",
 )
 visible = [e for e in EXERCISES if e.level in (chosen_levels or LEVELS)]
 
@@ -497,6 +498,8 @@ for exercise in visible:
                 answer = st.radio(
                     exercise.answer_prompt, exercise.answer_options,
                     index=None, key=f"ex_answer_{exercise.key}",
+                    help="Commit to an answer before running the check — that is what turns it "
+                         "into a test of how you think, rather than a demonstration.",
                 )
             elif exercise.key == "best_regime":
                 # Options depend on the regimes actually detected, so they're
@@ -514,12 +517,16 @@ for exercise in visible:
                 if options:
                     answer = st.radio(
                         exercise.answer_prompt, options, index=None, key=f"ex_answer_{exercise.key}",
+                        help="These are the regimes your current sidebar settings detected. "
+                             "Predict first, then check.",
                     )
 
         strategy_choice = None
         if exercise.key in ("best_regime", "walk_forward", "benchmark"):
             strategy_choice = st.selectbox(
                 "Strategy to check", list(STRATEGIES), key=f"ex_strategy_{exercise.key}",
+                help="The check runs against this strategy on your loaded data. Trying a second "
+                     "one afterwards is often more informative than the first.",
             )
 
         actions = st.columns([1, 1, 4])
@@ -561,9 +568,8 @@ for exercise in visible:
                 )
 
             if exercise.key in INTERPRETATIONS:
-                with st.container(border=True):
-                    st.markdown("**How to interpret this result**")
-                    st.markdown(INTERPRETATIONS[exercise.key])
+                how_to_read(INTERPRETATIONS[exercise.key],
+                            title="How to interpret this result")
 
             result_caveats(exercise.key, outcome, df)
 

@@ -364,27 +364,28 @@ with transition_right:
 
 how_to_read(
     """
-**Transition matrix** — each row is "given today is this regime", each cell is the
-probability of tomorrow. Rows sum to 1.
-
-- **The diagonal is the whole story.** 0.98 means the regime survives 98% of days. Under
+- **The diagonal is the whole story.** Each row reads "given today is this regime"; the
+  diagonal cell is the chance tomorrow is the same. 0.98 means it survives 98% of days. Under
   0.95, tomorrow's label is nearly independent of today's and the model has found noise.
 - **Off-diagonal cells show the escalation path.** Markets usually move calm → middle →
   crisis rather than jumping. A large direct calm→crisis probability means either
-  mislabelling, or an asset that genuinely gaps — both worth knowing before sizing it.
-- **Expected duration** converts persistence into days: `1 / (1 − p_stay)`. 0.95 → 20 days,
-  0.98 → 50 days, 0.99 → 100 days.
-
-**Episode histogram** — how long actual visits lasted, as opposed to how long the model
-*expects* them to.
-
-- **Mass on the right is what you want** — episodes measured in weeks and months.
-- **Mass piled at the left edge means flickering.** Several 1-5 day episodes are the model
-  changing its mind, not the market changing state.
-- **Compare the histogram against expected duration.** If expected duration says 40 days but
-  most episodes ran 5, the transition matrix is being dominated by a few long visits and the
-  typical experience is much choppier than the average suggests.
-"""
+  mislabelling or an asset that genuinely gaps — both worth knowing before sizing it.
+- **Expected duration is the same number in days:** `1 / (1 − p_stay)`. 0.95 gives 20 days,
+  0.98 gives 50, 0.99 gives 100.
+""",
+    title="How to interpret the transition matrix",
+)
+how_to_read(
+    """
+- **Mass on the right is what you want** — episodes measured in weeks and months, which is
+  what a market environment actually looks like.
+- **Mass piled at the left edge means flickering.** Several one- to five-day episodes are the
+  model changing its mind, not the market changing state.
+- **Read this against expected duration.** If the matrix predicts 40 days but most episodes
+  ran 5, a few long visits are dominating the average and your typical experience is far
+  choppier than the headline suggests.
+""",
+    title="How to interpret the episode histogram",
 )
 quant_note("regime_transition_persistence")
 explainer(
@@ -442,6 +443,8 @@ else:
     metric_choice = st.segmented_control(
         "Metric", ["sharpe_ratio", "total_return", "max_drawdown", "win_rate"],
         default="sharpe_ratio", key="regime_metric",
+        help="Sharpe is the risk-adjusted comparison and the one exposure does not confound. "
+             "The others are useful context, not verdicts.",
     ) or "sharpe_ratio"
     st.altair_chart(performance_by_regime_chart(table, metric_choice, regimes.names))
     chart_caption(
@@ -521,8 +524,6 @@ else:
 - **Check the benchmark table before crediting the strategy.** A long-only strategy looks
   good in every regime the asset rose in. The question is whether it beat *holding* in that
   regime.
-- **Watch `Exposure` per regime.** A strategy that is barely invested in the crisis regime
-  isn't skilfully avoiding it — it may just be flat for unrelated reasons.
 - **A large, sample-backed gap is the setup for the Adaptive page.** That's the whole case
   for regime filtering, and it's the one mechanism that reliably survives out-of-sample.
 """
@@ -534,7 +535,11 @@ quant_note("trend_vs_chop")
 # ---------- Features ----------
 st.subheader("What the model is looking at", divider="gray")
 available = [c for c in regimes.features.columns if c in FEATURE_DOCS]
-feature = st.selectbox("Regime feature", available, key="regime_feature")
+feature = st.selectbox(
+    "Regime feature", available, key="regime_feature",
+    help="Try a volatility feature first — the colours should separate cleanly by height. "
+         "Trend features overlap far more, which is the point.",
+)
 st.caption(FEATURE_DOCS[feature])
 feature_chart = regime_feature_chart(regimes, feature)
 if feature_chart is not None:
@@ -579,8 +584,6 @@ coloured by the regime it ended up in.
 - **Then try `efficiency_ratio`.** Low values mean the market travelled a long way and got
   nowhere. This is the chop axis, and it explains trend-following's performance better than
   volatility does.
-- **Use the separation score above** to compare features quickly. A feature scoring near
-  zero contributed nothing to these labels, however sensible it sounds.
 - **Look at the transitions.** Watch how a feature moves in the days *before* the colour
   changes. That's what the model reacted to — and how much of the move it missed while
   waiting for confirmation.

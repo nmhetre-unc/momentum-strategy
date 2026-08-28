@@ -61,6 +61,14 @@ SERIES = {
 
 STATUS = {"good": "#0ca30c", "warning": "#fab219", "serious": "#ec835a", "critical": "#d03b3b"}
 
+# Four chart heights, used everywhere. A drawdown strip should not be as
+# tall as the equity curve it sits under, but it should be exactly as tall
+# as every other drawdown strip in the app.
+CHART_TALL = 320      # primary time series: equity, regime ribbon
+CHART_MEDIUM = 240    # secondary analysis: heatmaps, fold bars, scatters
+CHART_SHORT = 180     # supporting strips: drawdown, probabilities, histograms
+CHART_MINI = 120      # inline detail: position over time
+
 MAX_REGIMES = 4
 UNKNOWN_COLOR = {"light": "#c3c2b7", "dark": "#383835"}
 
@@ -284,7 +292,7 @@ def caveat(message: str, level: str = "warning"):
 # --------------------------------------------------------------------------
 # Core charts
 # --------------------------------------------------------------------------
-def equity_chart(result: pd.DataFrame, log_scale: bool = False, height: int = 320) -> alt.Chart:
+def equity_chart(result: pd.DataFrame, log_scale: bool = False, height: int = CHART_TALL) -> alt.Chart:
     """Strategy equity against buy-and-hold, both normalized to $1."""
     ink = _ink()
     data = pd.DataFrame({
@@ -319,7 +327,7 @@ def equity_chart(result: pd.DataFrame, log_scale: bool = False, height: int = 32
     )
 
 
-def drawdown_chart(result: pd.DataFrame, height: int = 170) -> alt.Chart:
+def drawdown_chart(result: pd.DataFrame, height: int = CHART_SHORT) -> alt.Chart:
     """Depth below the running peak — read this with every equity curve."""
     ink = _ink()
     data = pd.DataFrame({
@@ -339,7 +347,7 @@ def drawdown_chart(result: pd.DataFrame, height: int = 170) -> alt.Chart:
     )
 
 
-def position_chart(result: pd.DataFrame, height: int = 120) -> alt.Chart:
+def position_chart(result: pd.DataFrame, height: int = CHART_MINI) -> alt.Chart:
     """
     Position size over time. Worth showing for any adaptive strategy: a
     binary strategy is a square wave, a volatility-targeted one breathes,
@@ -381,7 +389,7 @@ def _episode_frame(regime_result, index: pd.DatetimeIndex) -> pd.DataFrame:
     return episodes
 
 
-def regime_ribbon_chart(df: pd.DataFrame, regime_result, height: int = 340,
+def regime_ribbon_chart(df: pd.DataFrame, regime_result, height: int = CHART_TALL,
                         log_scale: bool = True) -> alt.LayerChart:
     """
     Price with the detected regimes shaded behind it.
@@ -422,7 +430,7 @@ def regime_ribbon_chart(df: pd.DataFrame, regime_result, height: int = 340,
     return alt.layer(bands, line).resolve_scale(color="independent").properties(height=height)
 
 
-def regime_probability_chart(regime_result, height: int = 180) -> alt.Chart:
+def regime_probability_chart(regime_result, height: int = CHART_SHORT) -> alt.Chart:
     """
     Model confidence over time, as a stacked area of P(regime).
 
@@ -455,7 +463,7 @@ def regime_probability_chart(regime_result, height: int = 180) -> alt.Chart:
     )
 
 
-def regime_feature_chart(regime_result, feature: str, height: int = 180) -> alt.Chart:
+def regime_feature_chart(regime_result, feature: str, height: int = CHART_SHORT) -> alt.Chart:
     """One regime feature over time, colored by the regime it helped produce."""
     if feature not in regime_result.features.columns:
         return None
@@ -479,7 +487,7 @@ def regime_feature_chart(regime_result, feature: str, height: int = 180) -> alt.
     )
 
 
-def transition_heatmap(matrix: pd.DataFrame, height: int = 260) -> alt.LayerChart:
+def transition_heatmap(matrix: pd.DataFrame, height: int = CHART_MEDIUM) -> alt.LayerChart:
     """
     P(tomorrow's regime | today's regime), as a heatmap with the numbers
     written on the cells.
@@ -513,7 +521,7 @@ def transition_heatmap(matrix: pd.DataFrame, height: int = 260) -> alt.LayerChar
 
 
 def performance_by_regime_chart(table: pd.DataFrame, metric: str = "sharpe_ratio",
-                                names: dict = None, height: int = 240) -> alt.Chart:
+                                names: dict = None, height: int = CHART_MEDIUM) -> alt.Chart:
     """Bar chart of one metric per regime, with the day count in the tooltip."""
     if table.empty:
         return None
@@ -533,7 +541,7 @@ def performance_by_regime_chart(table: pd.DataFrame, metric: str = "sharpe_ratio
     )
 
 
-def duration_histogram(episodes: pd.DataFrame, names: dict = None, height: int = 200) -> alt.Chart:
+def duration_histogram(episodes: pd.DataFrame, names: dict = None, height: int = CHART_SHORT) -> alt.Chart:
     """
     How long regimes last. If the mass is at the left edge — episodes of a
     handful of days — the labels are noise, not regimes.
@@ -554,7 +562,7 @@ def duration_histogram(episodes: pd.DataFrame, names: dict = None, height: int =
     )
 
 
-def fold_chart(folds: pd.DataFrame, height: int = 220) -> alt.Chart:
+def fold_chart(folds: pd.DataFrame, height: int = CHART_MEDIUM) -> alt.Chart:
     """
     Out-of-sample Sharpe per walk-forward fold.
 
@@ -585,7 +593,7 @@ def fold_chart(folds: pd.DataFrame, height: int = 220) -> alt.Chart:
     )
 
 
-def comparison_chart(table: pd.DataFrame, height: int = 300) -> alt.Chart:
+def comparison_chart(table: pd.DataFrame, height: int = CHART_TALL) -> alt.Chart:
     """
     In-sample against out-of-sample Sharpe for every strategy. Points below
     the diagonal decayed; points far below it were fitted.

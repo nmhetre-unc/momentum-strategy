@@ -17,7 +17,7 @@ from analytics import full_report, performance_by_regime, sharpe_ratio
 from backtest import run_backtest
 from quant_notes import METRIC_DOCS
 from regime_dashboard import (cached_regimes, caveat, chart_caption, common_mistakes,
-    drawdown_chart, equity_chart, explainer, metric_row, next_steps, page_intro,
+    drawdown_chart, equity_chart, explainer, how_to_read, metric_row, next_steps, page_intro,
     PERFORMANCE_CONFIG, position_chart, quant_note, require_data, show_metric_table,
     table_caption
 )
@@ -30,6 +30,35 @@ ticker = st.session_state["ticker"]
 
 page_intro("backtest")
 common_mistakes("backtest")
+
+with st.expander("How to read this page", icon=":material/map:"):
+    st.markdown(
+        """
+**The controls.** Pick a strategy, set its parameters, and set a transaction cost. The cost
+box is not decoration: a strategy that trades daily and one that trades twice a decade are
+affected very differently by it, so a comparison at 0bps is not a fair one.
+
+**The metrics.** Four headline tiles, then a row covering the rest. Hover any label for what
+the number means *and what it conceals* — no metric on this page stands alone, and the
+tooltips say what each one needs to be read alongside.
+
+**The charts, in the order they appear:**
+
+- **Growth of $1** — the strategy against buy-and-hold. Read the shape and the flat
+  stretches before the endpoint.
+- **Drawdown** — how far below its running peak the strategy sat. Read this with the equity
+  curve, never instead of it: one shows what you earned, the other what you endured.
+- **Position over time** — how much was invested each day. A square wave means a binary
+  rule; a breathing line means something is resizing.
+
+**What this backtest tells you.** Five questions answered from the numbers above rather than
+from the strategy's description — including whether it behaves like a trend follower and
+whether transaction costs bit.
+
+**Walk-forward validation.** Always shown, never behind a toggle. The numbers above cover
+the whole period; these hold out the last 30% and report it separately. Read the *gap*.
+"""
+    )
 
 
 # ---------- Controls ----------
@@ -63,6 +92,8 @@ with st.container(border=True):
     if strategy_name == "ml_direction":
         params["model_type"] = st.segmented_control(
             "Model type", ["logistic", "random_forest"], default="logistic", key="bt_model_type",
+            help="Logistic fits one linear boundary; the random forest can fit almost anything. "
+                 "On this little signal, the more flexible model usually does worse.",
         ) or "logistic"
 
     # Off by default: regime detection is the most expensive thing in the
@@ -308,6 +339,18 @@ chart_caption(
     "How far below its running peak the strategy sat, day by day.",
     "Always zero or negative; the trough is the max drawdown.",
     "both depth and duration — a shallow hole you sit in for two years is still a strategy you would have quit.",
+)
+how_to_read(
+    """
+- **Read the shape before the endpoint.** Two curves ending in the same place can have
+  completely different characters, and the character is the part that repeats.
+- **Read the two charts together.** The equity curve shows what you earned; the drawdown
+  shows what you sat through to earn it. Neither means much alone.
+- **Find the longest flat stretch and ask whether you would have held.** If not, the
+  full-period return was never actually available to you.
+- **Check the dashed benchmark line last.** If it sits above you, the strategy has to justify
+  itself on drawdown or exposure instead — and that argument has to be made explicitly.
+"""
 )
 
 quant_note("equity_curve")

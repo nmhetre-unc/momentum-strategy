@@ -7,7 +7,7 @@ Three levels of rigour live here, in increasing order:
 
     evaluate_out_of_sample()  one split. Cheap, and enough to catch
                               blatant overfitting.
-    rolling_walk_forward()    many consecutive out-of-sample windows.
+    rolling_walk_forward()    many consecutive out-of-sample folds.
                               Catches the subtler failure a single split
                               misses -- a strategy that works until 2018
                               and never again, whose one 30% holdout
@@ -61,7 +61,7 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
     Why bother when evaluate_out_of_sample() already exists: one split
     gives you ONE out-of-sample number, and one number cannot distinguish
     "this works" from "this got lucky in one three-year window." Ten
-    consecutive out-of-sample blocks give you a distribution. What you
+    consecutive out-of-sample folds give you a distribution. What you
     want to see is most blocks positive and the bad ones survivable. What
     you usually see, on a strategy that looked great on a single split,
     is two spectacular blocks and eight mediocre ones -- meaning the
@@ -129,7 +129,7 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
         "worst_fold_sharpe": float(sharpes.min()),
         "fitted_note": (
             "Signal generated once on the full series, then evaluated in rolling "
-            "out-of-sample blocks. Fitted strategies are not refit per fold."
+            "out-of-sample folds. Fitted strategies are not refit per fold."
         ),
     }
 
