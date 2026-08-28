@@ -319,7 +319,10 @@ if doc["family"] == "Trend-following":
 detail_left, detail_right = st.columns([1, 1])
 with detail_left:
     st.markdown("**Full metrics**")
-    show_metric_table(stats, key="bt_metrics")
+    show_metric_table(stats, key="bt_metrics", caption=(
+        "Every risk and return metric for the full period.",
+        "Read Sharpe next to exposure, and max drawdown next to trade count — no number stands alone.",
+    ))
     st.caption(
         f"Buy-and-hold over the same window for reference: "
         f"{benchmark_stats['total_return']:.1%} return, "
@@ -561,10 +564,16 @@ instead, and the share of positive folds is more informative than any single num
 wf_left, wf_right = st.columns(2)
 with wf_left:
     st.markdown(f"**In-Sample** (to {wf['split_date']})")
-    show_metric_table(wf["in_sample"], key="bt_is")
+    show_metric_table(wf["in_sample"], key="bt_is", caption=(
+        "Metrics over the period the strategy could have been influenced by.",
+        "Optimistic by construction; useful only as the other half of the comparison.",
+    ))
 with wf_right:
     st.markdown(f"**Out-of-Sample** (from {wf['split_date']})")
-    show_metric_table(wf["out_sample"], key="bt_oos")
+    show_metric_table(wf["out_sample"], key="bt_oos", caption=(
+        "Metrics over data that played no part in building the strategy.",
+        "The honest half. Check the trade count before quoting anything from it.",
+    ))
 
 if decay > 0.5:
     caveat(
@@ -596,6 +605,10 @@ if show_regimes and regimes is not None:
     if table.empty:
         st.info("No labelled days to attribute performance to yet.", icon=":material/info:")
     else:
+        table_caption(
+            "This strategy's profit and loss split by the regime in force each day.",
+            "Knowing the worst regime is more actionable than the best — it is the one you can choose not to trade.",
+        )
         st.dataframe(
             table.drop(columns=["regime"]), hide_index=True,
             column_config=PERFORMANCE_CONFIG, key="bt_by_regime",

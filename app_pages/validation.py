@@ -288,6 +288,10 @@ if tab_rolling.open:
         )
 
         with st.expander("Fold-by-fold detail", icon=":material/table_rows:"):
+            table_caption(
+                "Every walk-forward fold in time order.",
+                "Scan the trades column first, then check whether negative folds cluster in one period.",
+            )
             st.dataframe(
                 rolling["folds"], hide_index=True, key="v_folds",
                 column_config={
@@ -386,6 +390,10 @@ if tab_decay.open:
         mix = evaluation["regime_mix"].copy()
         mix.index = [evaluation["names"].get(i, str(i)) for i in mix.index]
         mix["change"] = mix["out_sample"] - mix["in_sample"]
+        table_caption(
+            "How the regime mix shifted between the in-sample and out-of-sample periods.",
+            "A large shift means the market changed — check the per-regime numbers before blaming the strategy.",
+        )
         st.dataframe(
             mix, key="v_mix",
             column_config={
@@ -406,10 +414,18 @@ if tab_decay.open:
         mix_left, mix_right = st.columns(2)
         with mix_left:
             st.markdown("**In-sample, by regime**")
+            table_caption(
+                "In-sample performance, split by regime.",
+                "Compare each row against its twin in the out-of-sample table beside it.",
+            )
             st.dataframe(evaluation["in_sample_by_regime"].drop(columns=["regime"]), hide_index=True,
                          column_config=PERFORMANCE_CONFIG, key="v_is_regime")
         with mix_right:
             st.markdown("**Out-of-sample, by regime**")
+            table_caption(
+                "Out-of-sample performance, split by regime.",
+                "If these numbers held and only the shares moved, the strategy is intact and the market changed.",
+            )
             st.dataframe(evaluation["out_sample_by_regime"].drop(columns=["regime"]), hide_index=True,
                          column_config=PERFORMANCE_CONFIG, key="v_oos_regime")
 
@@ -457,6 +473,10 @@ if tab_compare.open:
                 "Points in the bottom-left quadrant never worked in the first place."
             )
 
+        table_caption(
+            "Every strategy on identical data, dates, costs and split.",
+            "Read the whole table — picking the best out-of-sample row makes that number in-sample.",
+        )
         st.dataframe(
             table.drop(columns=["error"]), hide_index=True,
             column_config=COMPARISON_CONFIG, key="v_comparison",
@@ -465,6 +485,10 @@ if tab_compare.open:
         failed = table[table["error"].notna()]
         if not failed.empty:
             with st.expander("Strategies that errored", icon=":material/error:"):
+                table_caption(
+                    "Strategies that raised an error rather than producing a result.",
+                    "Usually a date range too short for that strategy's warm-up period.",
+                )
                 st.dataframe(failed[["strategy", "error"]], hide_index=True, key="v_errors")
 
         scored = table.dropna(subset=["is_sharpe", "oos_sharpe"])

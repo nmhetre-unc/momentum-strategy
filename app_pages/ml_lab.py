@@ -321,6 +321,10 @@ with importance_right:
         report["test_confusion_matrix"],
         index=["Actual down", "Actual up"], columns=["Predicted down", "Predicted up"],
     )
+    table_caption(
+        "What actually happened (rows) against what the model predicted (columns).",
+        "The diagonal is correct calls; an entire column of zeros means the model collapsed to a constant.",
+    )
     st.dataframe(matrix, key="ml_confusion")
     predicted_up = matrix["Predicted up"].sum()
     total = matrix.to_numpy().sum()
@@ -420,6 +424,10 @@ if "by_regime" in report and report["by_regime"]:
     by_regime = pd.DataFrame(report["by_regime"])
     by_regime["name"] = by_regime["regime"].map(lambda r: regimes.names.get(r, str(r)))
     by_regime["edge"] = by_regime["test_accuracy"] - by_regime["base_rate"]
+    table_caption(
+        "Test accuracy by regime, each measured against its own base rate.",
+        "Only the edge column is comparable across regimes, since every regime has a different base rate.",
+    )
     st.dataframe(
         by_regime[["name", "test_days", "test_accuracy", "base_rate", "edge", "train_rows", "own_model"]],
         hide_index=True, key="ml_by_regime",

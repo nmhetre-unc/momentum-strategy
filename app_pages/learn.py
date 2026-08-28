@@ -503,6 +503,10 @@ and the simplest, slowing down, is usually the one that works.
         st.markdown(QUANT_NOTES[topic]["body"])
 
     with st.expander(f"All {len(QUANT_NOTES)} notes, by theme", icon=":material/list:"):
+        table_caption(
+            "Every quant note, grouped by theme.",
+            "The 'applies to' column names the page each note supports, for the round trip back.",
+        )
         st.dataframe(
             pd.DataFrame([
                 {"Theme": theme, "Note": QUANT_NOTES[key]["title"],
@@ -530,6 +534,10 @@ and the simplest, slowing down, is usually the one that works.
 # --------------------------------------------------------------------------
 with tab_glossary:
     st.markdown("**Metrics** — the same tooltips attached to every number in the dashboard.")
+    table_caption(
+        "Every metric in the dashboard, with what it measures and what it conceals.",
+        "Read the second column before quoting the first.",
+    )
     st.dataframe(
         pd.DataFrame(METRIC_DOCS.items(), columns=["Metric", "What it means and what it hides"]),
         hide_index=True, key="learn_metrics",
@@ -541,6 +549,10 @@ with tab_glossary:
     quant_note("equity_curve")
 
     st.markdown("**Strategies**")
+    table_caption(
+        "The four base strategies and the market behaviour each one bets on.",
+        "Read 'fails when' before running one — it names the evidence that would falsify it.",
+    )
     st.dataframe(
         pd.DataFrame([
             {"Strategy": name, "Family": doc["family"], "Bets on": doc["what"],
@@ -553,6 +565,10 @@ with tab_glossary:
     )
 
     st.markdown("**Adaptive mechanisms**")
+    table_caption(
+        "The seven adaptive wrappers and the mechanism each implements.",
+        "'Watch for' names the way each one typically fails.",
+    )
     st.dataframe(
         pd.DataFrame([
             {"Wrapper": name, "Mechanism": doc["mechanism"], "What it does": doc["what"],
@@ -566,6 +582,10 @@ with tab_glossary:
     diagnostic_caveat(diagnostics, "adaptive_exposure")
 
     st.markdown("**Regime detection methods**")
+    table_caption(
+        "The five regime detection methods.",
+        "'rules' fits nothing and so cannot leak; the others trade transparency for flexibility.",
+    )
     st.dataframe(
         pd.DataFrame(REGIME_METHOD_DOCS.items(), columns=["Method", "What it is and what it costs"]),
         hide_index=True, key="learn_methods",
@@ -573,6 +593,10 @@ with tab_glossary:
     )
 
     st.markdown("**Label smoothing**")
+    table_caption(
+        "The four label smoothers.",
+        "All are backward-looking only; each trades responsiveness for stability.",
+    )
     st.dataframe(
         pd.DataFrame(SMOOTHING_DOCS.items(), columns=["Smoother", "Behaviour"]),
         hide_index=True, key="learn_smoothing",
@@ -581,6 +605,10 @@ with tab_glossary:
     diagnostic_caveat(diagnostics, "regime_duration")
 
     st.markdown("**Regime features**")
+    table_caption(
+        "Every input the regime models cluster on.",
+        "Volatility features do most of the separating; trend features far less.",
+    )
     st.dataframe(
         pd.DataFrame(FEATURE_DOCS.items(), columns=["Feature", "What it measures"]),
         hide_index=True, key="learn_features",

@@ -545,8 +545,16 @@ for exercise in visible:
                 st.info(outcome.message, icon=":material/info:")
 
             if isinstance(outcome.evidence, pd.DataFrame) and not outcome.evidence.empty:
+                table_caption(
+                    "The numbers behind this check, computed on your currently loaded data.",
+                    "Find the sample-size column first — it decides how much of the rest to believe.",
+                )
                 st.dataframe(outcome.evidence, hide_index=True, key=f"ex_evidence_{exercise.key}")
             elif isinstance(outcome.evidence, dict):
+                table_caption(
+                    "The numbers behind this check, computed on your currently loaded data.",
+                    "Each row is one measure the check compared; the message above states the verdict.",
+                )
                 st.dataframe(
                     pd.DataFrame(outcome.evidence.items(), columns=["Measure", "Value"]),
                     hide_index=True, key=f"ex_evidence_{exercise.key}",

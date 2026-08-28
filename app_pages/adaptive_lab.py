@@ -330,6 +330,10 @@ comparison = pd.DataFrame({
     f"{adaptive_name}": stats,
 }).loc[["total_return", "cagr", "annualized_volatility", "sharpe_ratio",
         "sortino_ratio", "max_drawdown", "exposure", "turnover", "num_trades"]]
+table_caption(
+    "The adapted strategy against the rule it wraps, on identical data, dates and costs.",
+    "Read the sharpe_ratio row first — it is the only comparison exposure does not confound.",
+)
 st.dataframe(comparison, key="ad_compare")
 
 sharpe_gain = stats["sharpe_ratio"] - base_stats["sharpe_ratio"]
@@ -405,11 +409,19 @@ if adaptive_name in ("regime_switch", "adaptive_ensemble", "regime_filtered"):
              "Strategy chosen": name or "(insufficient evidence — traded normally)"}
             for regime_id, name in sorted(described["choices"].items())
         ])
+        table_caption(
+            "Which strategy the automatic rule selected for each regime.",
+            "The choice is just the argmax of the evidence table below; read that before trusting it.",
+        )
         st.dataframe(choices, hide_index=True, key="ad_choices")
         evidence = described["table"]
 
     evidence = evidence.copy()
     evidence["regime"] = evidence["regime"].map(lambda r: regimes.names.get(r, str(r)))
+    table_caption(
+        "Each candidate strategy's Sharpe inside each regime, measured only on the learning window.",
+        "This is the reasoning behind the choice — compare the winner's margin against the day count.",
+    )
     st.dataframe(
         evidence, hide_index=True, key="ad_evidence",
         column_config={
@@ -469,6 +481,10 @@ table = performance_by_regime(result, regimes.labels, regimes.names)
 if table.empty:
     st.info("No labelled days to attribute yet.", icon=":material/info:")
 else:
+    table_caption(
+        "The adapted strategy's profit and loss split by the regime in force each day.",
+        "Read the days column before believing any row's Sharpe ratio.",
+    )
     st.dataframe(table.drop(columns=["regime"]), hide_index=True,
                  column_config=PERFORMANCE_CONFIG, key="ad_by_regime")
 
@@ -485,6 +501,10 @@ else:
         merged["exposure_delta"] = merged["exposure"] - merged["exposure_base"]
 
         st.markdown("**What adaptation changed, regime by regime**")
+        table_caption(
+            "Adapted against unadapted, regime by regime.",
+            "The exposure-change column shows where the mechanism actually acted; zero means it was inactive there.",
+        )
         st.dataframe(
             merged[["name", "days", "sharpe_ratio_base", "sharpe_ratio",
                     "sharpe_delta", "exposure_delta"]],
@@ -540,10 +560,16 @@ wf = evaluate_out_of_sample(df, ADAPTIVE_STRATEGIES[adaptive_name], **params)
 wf_left, wf_right = st.columns(2)
 with wf_left:
     st.markdown(f"**In-sample** (to {wf['split_date']})")
-    show_metric_table(wf["in_sample"], key="ad_is")
+    show_metric_table(wf["in_sample"], key="ad_is", caption=(
+        "Metrics over the period the adaptive rule learned from.",
+        "The automatic choices were made here, so these numbers already know the answers.",
+    ))
 with wf_right:
     st.markdown(f"**Out-of-sample** (from {wf['split_date']})")
-    show_metric_table(wf["out_sample"], key="ad_oos")
+    show_metric_table(wf["out_sample"], key="ad_oos", caption=(
+        "Metrics over data unseen by both the strategy and the rule that adapts it.",
+        "The only section whose numbers are honest for a fitted wrapper.",
+    ))
 
 decay = wf["in_sample"]["sharpe_ratio"] - wf["out_sample"]["sharpe_ratio"]
 if decay > 0.5:

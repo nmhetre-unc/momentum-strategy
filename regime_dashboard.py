@@ -259,7 +259,14 @@ def metric_table(stats: dict) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["Metric", "Value"])
 
 
-def show_metric_table(stats: dict, key: str = None):
+def show_metric_table(stats: dict, key: str = None, caption: tuple = None):
+    """
+    The full metric set as a table. `caption` is an optional
+    (summarises, interpret) pair rendered above it, so these tables carry
+    the same captions as every other table in the app.
+    """
+    if caption:
+        table_caption(*caption)
     st.dataframe(
         metric_table(stats), hide_index=True, key=key,
         column_config={

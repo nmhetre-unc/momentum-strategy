@@ -99,6 +99,10 @@ with st.container(border=True):
             "Severity": [f"{i} — {'calmest' if i == 0 else 'most violent' if i == max(regimes.names) else 'middle'}"
                          for i in sorted(regimes.names)],
         })
+        table_caption(
+            "The detected regimes in severity order, calmest first.",
+            "Colour intensity tracks severity; grey always means warm-up.",
+        )
         st.dataframe(legend, hide_index=True, key="regime_legend")
         st.caption(
             "Grey always means Warm-up. Colour never carries meaning alone here — every "
@@ -273,6 +277,10 @@ if probability_chart is not None:
 # ---------- Is there anything to condition on? ----------
 st.subheader("What the asset did in each regime", divider="gray")
 summary = regime_summary(regimes, df)
+table_caption(
+    "What the asset itself did inside each regime.",
+    "If the volatility column barely differs across rows, there is nothing here to condition on.",
+)
 st.dataframe(
     summary.drop(columns=["regime"]), hide_index=True,
     column_config=REGIME_SUMMARY_CONFIG, key="regime_summary",
@@ -344,6 +352,10 @@ with transition_right:
                 for i in range(len(matrix))
             ],
         })
+        table_caption(
+            "How long each regime is expected to last, from the transition matrix diagonal.",
+            "Computed as 1/(1 − p_stay). Weeks to months is healthy; days means the labels are flickering.",
+        )
         st.dataframe(
             expected, hide_index=True, key="expected_duration",
             column_config={"Expected duration (days)": st.column_config.NumberColumn(format="%.0f")},
@@ -438,6 +450,10 @@ else:
     "a large gap between bars — and check the day count in the table below before believing it.",
     )
 
+    table_caption(
+        "The selected strategy's profit and loss split by regime.",
+        "Read the days column first — a short regime gives a Sharpe ratio with a very wide error bar.",
+    )
     st.dataframe(
         table.drop(columns=["regime"]), hide_index=True,
         column_config=PERFORMANCE_CONFIG, key="regime_perf",
@@ -447,6 +463,10 @@ else:
         st.markdown(
             "A long-only strategy looks good in any regime where the asset rose. This table "
             "separates *the strategy worked* from *the market went up*."
+        )
+        table_caption(
+            "Buy-and-hold over the same regimes.",
+            "This separates 'the strategy worked' from 'the market went up'.",
         )
         st.dataframe(
             benchmark_by_regime(result, regimes.labels, regimes.names).drop(columns=["regime"]),
