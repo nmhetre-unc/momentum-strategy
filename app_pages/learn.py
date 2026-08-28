@@ -20,7 +20,9 @@ import streamlit as st
 from adaptive import ADAPTIVE_DOCS
 from quant_notes import LEARNING_PATH, METRIC_DOCS, PITFALLS, QUANT_NOTES
 from regime import REGIME_METHOD_DOCS, SMOOTHING_DOCS, regime_stability
-from regime_dashboard import cached_regimes, caveat, explainer, how_to_read, quant_note
+from regime_dashboard import (cached_regimes, caveat, chart_caption, common_mistakes,
+    explainer, how_to_read, next_steps, page_intro, quant_note, table_caption
+)
 from regime_features import FEATURE_DOCS
 from strategies import STRATEGY_DOCS
 
@@ -183,6 +185,9 @@ st.markdown(
     "This platform is built to teach one habit above all the others: **assume your result is "
     "wrong until you have tried to break it.** Everything below is in service of that."
 )
+
+page_intro("learn")
+common_mistakes("learn")
 
 with st.container(border=True):
     st.markdown(
@@ -599,46 +604,8 @@ with tab_glossary:
 
 # --------------------------------------------------------------------------
 # Where to go next
-# --------------------------------------------------------------------------
-st.subheader("What to do next", divider="gray")
-st.caption("Reading is the slow way to learn this. Go apply one thing.")
 
-next_left, next_right = st.columns(2)
-with next_left:
-    with st.container(border=True):
-        st.page_link("app_pages/backtest_lab.py", label="**Backtest**", icon=":material/query_stats:")
-        st.markdown(
-            "Apply what you read about equity curves, drawdown and exposure — on a real strategy, "
-            "with every caveat firing on your own numbers."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/regimes.py", label="**Regimes**", icon=":material/layers:")
-        st.markdown(
-            "Explore volatility clustering directly: see it separate the regimes in the feature "
-            "explorer, and check the persistence diagonal that makes regimes tradeable at all."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/adaptive_lab.py", label="**Adaptive**", icon=":material/tune:")
-        st.markdown(
-            "Test the four mechanisms against each other — and find out whether the simplest one "
-            "captured most of the benefit, which is the usual answer."
-        )
-with next_right:
-    with st.container(border=True):
-        st.page_link("app_pages/ml_lab.py", label="**ML lab**", icon=":material/network_intelligence:")
-        st.markdown(
-            "See overfitting happen rather than read about it: toggle between the two models and "
-            "watch the train/test gap open up."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/validation.py", label="**Validation**", icon=":material/fact_check:")
-        st.markdown(
-            "Measure robustness properly — rolling folds, the regime-mix decay story, and a fair "
-            "comparison of all eleven strategies with costs on."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/exercises_lab.py", label="**Exercises**", icon=":material/assignment:")
-        st.markdown(
-            "Practise everything hands-on: ten exercises with automated checks against your own "
-            "loaded data, each installing one specific habit."
-        )
+# --------------------------------------------------------------------------
+# Where to go next
+# --------------------------------------------------------------------------
+next_steps("learn")

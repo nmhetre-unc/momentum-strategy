@@ -108,6 +108,90 @@ def quant_note(key: str, expanded: bool = False):
         st.markdown(note["body"])
 
 
+def page_intro(page_key: str):
+    """
+    The standard opening every page shares: a breadcrumb, a three-sentence
+    "why this matters", and a pointer for anyone already lost.
+
+    Rendered from page_guide.PAGE_GUIDE rather than written per page, so
+    the eight pages cannot drift into different structures or voices.
+    """
+    from page_guide import PAGE_GUIDE, breadcrumb
+
+    guide = PAGE_GUIDE[page_key]
+    st.caption(f":material/my_location: You are here → {breadcrumb(page_key)}")
+
+    with st.container(border=True):
+        st.markdown(
+            f"**Why this matters**  \n"
+            f"{guide['teaches']} {guide['why']}"
+        )
+        st.caption(f"**The habit it builds:** {guide['habit']}")
+
+    confused = guide["confused"]
+    pointers = [f"read the quant note *{QUANT_NOTES[confused['note']]['title']}*"]
+    if confused.get("glossary"):
+        pointers.append(confused["glossary"].rstrip("."))
+    if confused.get("exercise"):
+        pointers.append(f"try the exercise *{confused['exercise']}*")
+
+    with st.expander("If you're confused, start here", icon=":material/help:"):
+        st.markdown(
+            "Three places to look, in order:\n\n"
+            + "\n".join(f"{i}. {p.capitalize() if p[0].islower() else p}."
+                        for i, p in enumerate(pointers, start=1))
+        )
+        quant_note(confused["note"])
+
+
+def common_mistakes(page_key: str):
+    """The two or three mistakes beginners make on this specific page."""
+    from page_guide import PAGE_GUIDE
+
+    mistakes = PAGE_GUIDE[page_key].get("mistakes", [])
+    if not mistakes:
+        return
+    with st.expander("Common mistakes on this page", icon=":material/error_outline:"):
+        for title, body in mistakes:
+            st.markdown(f"**{title}.** {body}")
+
+
+def next_steps(page_key: str):
+    """
+    The closing "What to do next" grid. Destinations and copy come from the
+    registry, so every page ends the same way and no link goes stale.
+    """
+    from page_guide import PAGE_GUIDE
+
+    guide = PAGE_GUIDE[page_key]
+    st.subheader("What to do next", divider="gray")
+    st.caption("Each page answers a question this one raised but cannot settle on its own.")
+
+    destinations = guide["next"]
+    halfway = (len(destinations) + 1) // 2
+    for column, keys in zip(st.columns(2), (destinations[:halfway], destinations[halfway:])):
+        with column:
+            for key in keys:
+                target = PAGE_GUIDE[key]
+                with st.container(border=True):
+                    st.page_link(target["path"], label=f"**{target['title']}**", icon=target["icon"])
+                    st.markdown(guide["next_blurbs"][key])
+
+
+def chart_caption(shows: str, read: str, look_for: str):
+    """
+    One-line caption under every chart: what it shows, how to read it, what
+    to look for. Same three-part shape everywhere, so the eye learns where
+    to find each part.
+    """
+    st.caption(f":material/insights: **{shows}** {read} *Look for:* {look_for}")
+
+
+def table_caption(summarises: str, interpret: str):
+    """One-line caption above every table: what it summarises, how to read it."""
+    st.caption(f":material/table_rows: **{summarises}** {interpret}")
+
+
 def explainer(title: str, metaphor: str, body: str, icon: str = ":material/menu_book:"):
     """
     One collapsible teaching section, opening with a visual metaphor.

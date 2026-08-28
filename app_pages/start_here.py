@@ -14,14 +14,18 @@ The checklist state is the only thing it writes.
 import streamlit as st
 
 from quant_notes import LEARNING_PATH, QUANT_NOTES
-from regime_dashboard import caveat, explainer, how_to_read, quant_note
-
+from regime_dashboard import (caveat, chart_caption, common_mistakes, explainer,
+    how_to_read, next_steps, page_intro, quant_note, table_caption
+)
 st.markdown(
     "### Welcome — this is a flight simulator for quant research.\n"
     "You will build trading strategies, discover that most of them don't work, and learn to "
     "tell the difference *before* anyone else has to point it out. That last skill is the "
     "entire point."
 )
+
+page_intro("start_here")
+common_mistakes("start_here")
 
 # --------------------------------------------------------------------------
 # What this is
@@ -64,7 +68,7 @@ flowchart TD
     S([Start here]) --> B["1 · Backtest<br/>equity curves, drawdown, benchmark"]
     B --> R["2 · Regimes<br/>volatility clustering, market structure"]
     R --> A["3 · Adaptive<br/>filtering, switching, sizing"]
-    A --> M["4 · ML Lab<br/>overfitting, base rates"]
+    A --> M["4 · ML lab<br/>overfitting, base rates"]
     M --> V["5 · Validation<br/>in-sample to out-of-sample decay"]
     V --> X["6 · Exercises<br/>practice with automated checks"]
     L["Learn<br/>notes · pitfalls · glossary"]
@@ -114,7 +118,7 @@ fluency.
   strategy's return actually came from.
 - **Adaptive** — where you try to *act* on regimes: filter out bad ones, switch strategies,
   resize positions. Also where you learn that the simplest mechanism usually wins.
-- **ML Lab** — where you watch overfitting happen instead of reading about it. Toggle between
+- **ML lab** — where you watch overfitting happen instead of reading about it. Toggle between
   the two models and watch the train/test gap open.
 - **Validation** — where you find out whether any of it was real. Run this before trusting
   *any* result, including your favourites. Especially your favourites.
@@ -149,7 +153,7 @@ ROADMAP = [
      "Because knowing a strategy fails in one regime raises an obvious question: can you just "
      "not trade it there? Sometimes. This page teaches you to check whether the improvement "
      "paid for the turnover it added — and it usually hasn't."),
-    ("app_pages/ml_lab.py", "ML Lab", ":material/network_intelligence:",
+    ("app_pages/ml_lab.py", "ML lab", ":material/network_intelligence:",
      "Base rates, the train/test gap, and why accuracy is not profit.",
      "Because ML is where overfitting is most visible and most instructive. Watching a model "
      "hit 86% on training data and 45% on real data teaches more about model capacity than "
@@ -354,7 +358,7 @@ caveat(
     "**ML accuracy below the base rate.** About 53% of days are up, so predicting 'up' every "
     "day scores 53% with no model at all. A model at 51% has been beaten by a one-line "
     "constant. Always read accuracy next to its base rate — alone it means nothing. "
-    "*Checked on: ML Lab, Exercises.*",
+    "*Checked on: ML lab, Exercises.*",
     level="info",
 )
 caveat(
@@ -407,7 +411,7 @@ CHECKLIST = [
      "app_pages/adaptive_lab.py", "Adaptive",
      "Ask whether the improvement paid for the turnover it added."),
     ("chk_ml", "Train your first ML model — both types, back to back",
-     "app_pages/ml_lab.py", "ML Lab",
+     "app_pages/ml_lab.py", "ML lab",
      "Watch the train/test gap. The more accurate model is usually the worse one."),
     ("chk_walkforward", "Run your first walk-forward validation and read the gap",
      "app_pages/validation.py", "Validation",
@@ -455,42 +459,8 @@ with st.expander("After the checklist: the full learning path", icon=":material/
 
 # --------------------------------------------------------------------------
 # What to do next
+
 # --------------------------------------------------------------------------
-st.subheader("What to do next", divider="gray")
-
-next_left, next_right = st.columns(2)
-with next_left:
-    with st.container(border=True):
-        st.page_link("app_pages/backtest_lab.py", label="**Go to Backtest to begin**",
-                     icon=":material/query_stats:")
-        st.markdown(
-            "Start with `sma_crossover` on SPY. Read the equity curve, then the drawdown chart "
-            "under it, then the buy-and-hold comparison. That's your first session."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/learn.py", label="**Learn → Common pitfalls**",
-                     icon=":material/warning:")
-        st.markdown(
-            "Ten minutes now saves you from the three mistakes that produce confidently wrong "
-            "results. Re-read it after your first result that looks good."
-        )
-with next_right:
-    with st.container(border=True):
-        st.page_link("app_pages/exercises_lab.py", label="**Use Exercises to reinforce**",
-                     icon=":material/assignment:")
-        st.markdown(
-            "After each simulator page, do the matching exercise while the concept is still "
-            "uncomfortable. That's when practice sticks."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/validation.py", label="**Use Validation before trusting anything**",
-                     icon=":material/fact_check:")
-        st.markdown(
-            "Run this on any result you like the look of — especially the ones you like the "
-            "look of. It is the page that tells you whether you found something or fitted it."
-        )
-
-st.caption(
-    f"Configure your ticker and date range in the sidebar; every page shares that selection. "
-    f"The platform ships {len(QUANT_NOTES)} quant notes, 10 exercises and 11 strategies."
-)
+# Where to go next
+# --------------------------------------------------------------------------
+next_steps("start_here")

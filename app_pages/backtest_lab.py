@@ -16,9 +16,10 @@ import streamlit as st
 from analytics import full_report, performance_by_regime, sharpe_ratio
 from backtest import run_backtest
 from quant_notes import METRIC_DOCS
-from regime_dashboard import (
-    PERFORMANCE_CONFIG, cached_regimes, caveat, drawdown_chart, equity_chart,
-    explainer, metric_row, position_chart, quant_note, require_data, show_metric_table,
+from regime_dashboard import (cached_regimes, caveat, chart_caption, common_mistakes,
+    drawdown_chart, equity_chart, explainer, metric_row, next_steps, page_intro,
+    PERFORMANCE_CONFIG, position_chart, quant_note, require_data, show_metric_table,
+    table_caption
 )
 from regime_features import efficiency_ratio
 from strategies import PARAM_SPECS, STRATEGIES, STRATEGY_DOCS, default_params
@@ -26,6 +27,9 @@ from walk_forward import evaluate_out_of_sample
 
 df = require_data()
 ticker = st.session_state["ticker"]
+
+page_intro("backtest")
+common_mistakes("backtest")
 
 
 # ---------- Controls ----------
@@ -294,7 +298,17 @@ if caveats_fired == 0:
 
 # ---------- Charts ----------
 st.altair_chart(equity_chart(result, log_scale=log_scale))
+chart_caption(
+    "Growth of $1 in the strategy against buy-and-hold.",
+    "Both start at 1.0, so the vertical gap is the strategy's contribution.",
+    "the shape and the flat stretches, not the endpoint — and whether the dashed benchmark line is above you.",
+)
 st.altair_chart(drawdown_chart(result))
+chart_caption(
+    "How far below its running peak the strategy sat, day by day.",
+    "Always zero or negative; the trough is the max drawdown.",
+    "both depth and duration — a shallow hole you sit in for two years is still a strategy you would have quit.",
+)
 
 quant_note("equity_curve")
 quant_note("drawdown_vs_return")
@@ -606,46 +620,7 @@ if show_regimes and regimes is not None:
             )
     quant_note("risk_by_regime")
 
-# ---------- Where to go next ----------
-st.subheader("What to do next", divider="gray")
-st.caption("Each page answers a question this one raised but cannot settle on its own.")
-
-next_left, next_right = st.columns(2)
-with next_left:
-    with st.container(border=True):
-        st.page_link("app_pages/regimes.py", label="**Regimes**", icon=":material/layers:")
-        st.markdown(
-            "See which market environments helped or hurt this strategy, and whether the regimes "
-            "are real (persistent, distinct) or just noise you'd be conditioning on by mistake."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/adaptive_lab.py", label="**Adaptive**", icon=":material/tune:")
-        st.markdown(
-            "Test whether filtering out the bad regime, or scaling position size by volatility, "
-            "improves this strategy — and whether the improvement survives its extra turnover."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/ml_lab.py", label="**ML lab**", icon=":material/network_intelligence:")
-        st.markdown(
-            "Compare the ML direction models against these rule-based results, and watch the "
-            "random forest's training accuracy collapse out-of-sample."
-        )
-with next_right:
-    with st.container(border=True):
-        st.page_link("app_pages/validation.py", label="**Validation**", icon=":material/fact_check:")
-        st.markdown(
-            "Go beyond this single split: rolling walk-forward gives ten-plus consecutive "
-            "holdouts, plus a fair like-for-like comparison of all eleven strategies at once."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/exercises_lab.py", label="**Exercises**", icon=":material/assignment:")
-        st.markdown(
-            "Ten guided exercises with automated checks, run against exactly the data you have "
-            "loaded — including two that use this page directly."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/learn.py", label="**Learn**", icon=":material/menu_book:")
-        st.markdown(
-            "The full learning path, the three pitfalls, every quant note in one place, and a "
-            "glossary of every metric on this page."
-        )
+# --------------------------------------------------------------------------
+# Where to go next
+# --------------------------------------------------------------------------
+next_steps("backtest")

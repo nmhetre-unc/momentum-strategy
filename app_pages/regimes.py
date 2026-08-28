@@ -19,17 +19,20 @@ from regime import (
     REGIME_METHOD_DOCS, SMOOTHING_DOCS, detect_regimes, regime_episodes,
     regime_stability, regime_summary,
 )
-from regime_dashboard import (
-    PERFORMANCE_CONFIG, REGIME_SUMMARY_CONFIG, caveat, duration_histogram, explainer,
-    how_to_read, performance_by_regime_chart, quant_note, regime_feature_chart,
-    regime_palette, regime_probability_chart, regime_ribbon_chart, require_regimes,
-    show_regime_health, transition_heatmap,
+from regime_dashboard import (caveat, chart_caption, common_mistakes, duration_histogram,
+    explainer, how_to_read, next_steps, page_intro, performance_by_regime_chart,
+    PERFORMANCE_CONFIG, quant_note, regime_feature_chart, regime_palette,
+    regime_probability_chart, regime_ribbon_chart, REGIME_SUMMARY_CONFIG, require_regimes,
+    show_regime_health, table_caption, transition_heatmap
 )
 from regime_features import FEATURE_DOCS
 from strategies import STRATEGIES, STRATEGY_DOCS
 
 df, regimes = require_regimes()
 settings = st.session_state["regime_settings"]
+
+page_intro("regimes")
+common_mistakes("regimes")
 
 # --------------------------------------------------------------------------
 # Onboarding: what a regime is, before any model output appears
@@ -249,6 +252,11 @@ probability_chart = regime_probability_chart(regimes)
 if probability_chart is not None:
     with st.expander("Model confidence over time", icon=":material/percent:"):
         st.altair_chart(probability_chart)
+        chart_caption(
+            "The model's confidence in each regime, day by day, stacked to 100%.",
+    "A dominant band means the model is sure; interleaved bands mean it is guessing.",
+    "stretches where no band clears about 60% — those are transitions, and they are when a switching strategy acts.",
+        )
         st.markdown(
             "Where the bands are cleanly separated the model is confident. Where they interleave "
             "it is guessing — and those days are transitions, which is exactly when a "
@@ -323,6 +331,11 @@ with transition_right:
     histogram = duration_histogram(episodes, regimes.names)
     if histogram is not None:
         st.altair_chart(histogram)
+        chart_caption(
+            "How long each actual visit to a regime lasted.",
+    "Each bar counts episodes of that length.",
+    "mass on the right, in weeks and months. Mass piled at the left edge means the labels are flickering.",
+        )
     if not matrix.empty:
         expected = pd.DataFrame({
             "Regime": matrix.index,
@@ -419,6 +432,11 @@ else:
         default="sharpe_ratio", key="regime_metric",
     ) or "sharpe_ratio"
     st.altair_chart(performance_by_regime_chart(table, metric_choice, regimes.names))
+    chart_caption(
+        "The selected metric for this strategy, split by regime.",
+    "Bars are ordered calmest to most violent, matching the colour ramp.",
+    "a large gap between bars — and check the day count in the table below before believing it.",
+    )
 
     st.dataframe(
         table.drop(columns=["regime"]), hide_index=True,
@@ -501,6 +519,11 @@ st.caption(FEATURE_DOCS[feature])
 feature_chart = regime_feature_chart(regimes, feature)
 if feature_chart is not None:
     st.altair_chart(feature_chart)
+    chart_caption(
+        "One regime feature over time, each day coloured by the regime it produced.",
+    "This is why a day was labelled the way it was.",
+    "clean colour separation by height on volatility features, and far more overlap on trend features.",
+    )
 
 # How strongly does this feature actually separate the regimes? Between-group
 # spread over within-group spread -- a plain one-way F-statistic in spirit.
@@ -601,10 +624,20 @@ if st.button("Compare honest and leaky labels", icon=":material/compare_arrows:"
     with leaky_column:
         st.markdown("**Full-sample fit** — not tradeable")
         st.altair_chart(regime_ribbon_chart(df, leaky, height=240))
+        chart_caption(
+            "Regimes from a model fitted on the entire history.",
+            "Boundaries look crisp because the model already knew what came next.",
+            "how closely the bands align with the turning points — that precision was never available.",
+        )
     if honest is not None:
         with honest_column:
             st.markdown("**Expanding-window refit** — tradeable")
             st.altair_chart(regime_ribbon_chart(df, honest, height=240))
+            chart_caption(
+                "The same method, refitted on an expanding window and labelling only forward.",
+                "Noisier, later to turn, and blank for the first two years.",
+                "the missing start — you genuinely had no model then, and this is what honest looks like.",
+            )
 
         agreement = (leaky.labels == honest.labels)[honest.valid()].mean()
         st.metric(
@@ -632,46 +665,7 @@ if st.button("Compare honest and leaky labels", icon=":material/compare_arrows:"
 
 quant_note("regime_drift")
 
-# ---------- Where to go next ----------
-st.subheader("What to do next", divider="gray")
-st.caption("Each page answers a question this one raised but cannot settle on its own.")
-
-next_left, next_right = st.columns(2)
-with next_left:
-    with st.container(border=True):
-        st.page_link("app_pages/adaptive_lab.py", label="**Adaptive**", icon=":material/tune:")
-        st.markdown(
-            "See how strategies behave differently across these regimes — and whether filtering "
-            "out the worst one, or sizing by volatility, actually survives its own turnover."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/ml_lab.py", label="**ML lab**", icon=":material/network_intelligence:")
-        st.markdown(
-            "See how regime structure affects ML accuracy: whether the classifier has a real "
-            "edge in one regime and none in another, or the same 51% everywhere."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/validation.py", label="**Validation**", icon=":material/fact_check:")
-        st.markdown(
-            "Watch the regime mix shift between in-sample and out-of-sample periods — usually "
-            "the fastest way to tell a broken strategy from a changed market."
-        )
-with next_right:
-    with st.container(border=True):
-        st.page_link("app_pages/backtest_lab.py", label="**Backtest**", icon=":material/query_stats:")
-        st.markdown(
-            "Return with a hypothesis and test it. The regime attribution toggle there splits any "
-            "strategy's P&L using exactly the model configured in this sidebar."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/exercises_lab.py", label="**Exercises**", icon=":material/assignment:")
-        st.markdown(
-            "Practise regime interpretation: identify which regime a strategy prefers, and "
-            "measure the lookahead gap on your own data as a number you can quote."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/learn.py", label="**Learn**", icon=":material/menu_book:")
-        st.markdown(
-            "Every quant note in one browser, the three pitfalls in detail, and a glossary of "
-            "all fifteen regime features."
-        )
+# --------------------------------------------------------------------------
+# Where to go next
+# --------------------------------------------------------------------------
+next_steps("regimes")

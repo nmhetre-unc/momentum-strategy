@@ -18,13 +18,16 @@ import pandas as pd
 import streamlit as st
 
 from adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES
-from regime_dashboard import (
-    COMPARISON_CONFIG, PERFORMANCE_CONFIG, caveat, comparison_chart, explainer,
-    fold_chart, how_to_read, quant_note, require_regimes,
+from regime_dashboard import (caveat, chart_caption, common_mistakes, comparison_chart,
+    COMPARISON_CONFIG, explainer, fold_chart, how_to_read, next_steps, page_intro,
+    PERFORMANCE_CONFIG, quant_note, require_regimes, table_caption
 )
 from walk_forward import compare_strategies, evaluate_with_regimes, rolling_walk_forward
 
 df, regimes = require_regimes()
+
+page_intro("validation")
+common_mistakes("validation")
 
 # --------------------------------------------------------------------------
 # Onboarding: what validation is and why one number isn't enough
@@ -201,6 +204,11 @@ if tab_rolling.open:
         chart = fold_chart(rolling["folds"])
         if chart is not None:
             st.altair_chart(chart)
+            chart_caption(
+                "Out-of-sample Sharpe for each consecutive walk-forward fold.",
+    "Each bar is one test window the strategy had never seen.",
+    "most bars above zero, and no downward trend from left to right — the sequence matters as much as the spread.",
+            )
 
         if rolling["pct_folds_positive"] < 0.5:
             caveat(
@@ -513,46 +521,8 @@ if tab_compare.open:
 
 # --------------------------------------------------------------------------
 # Where to go next
-# --------------------------------------------------------------------------
-st.subheader("What to do next", divider="gray")
-st.caption("Each page answers a question this one raised but cannot settle on its own.")
 
-next_left, next_right = st.columns(2)
-with next_left:
-    with st.container(border=True):
-        st.page_link("app_pages/regimes.py", label="**Regimes**", icon=":material/layers:")
-        st.markdown(
-            "See which environments caused the out-of-sample decay — and whether the strategy "
-            "broke or simply met more of the regime it dislikes."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/adaptive_lab.py", label="**Adaptive**", icon=":material/tune:")
-        st.markdown(
-            "Test whether filtering or position sizing improves robustness — and whether the "
-            "adapted version's decay is smaller than the plain one's, which is the real question."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/ml_lab.py", label="**ML lab**", icon=":material/network_intelligence:")
-        st.markdown(
-            "See how the ML signal behaves out-of-sample, where the train/test accuracy gap "
-            "turns into a Sharpe gap that costs money."
-        )
-with next_right:
-    with st.container(border=True):
-        st.page_link("app_pages/backtest_lab.py", label="**Backtest**", icon=":material/query_stats:")
-        st.markdown(
-            "Try different parameters — but decide your acceptance criterion *before* you look "
-            "at the result, or you are silently fitting to the holdout."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/exercises_lab.py", label="**Exercises**", icon=":material/assignment:")
-        st.markdown(
-            "Practise validation interpretation: run walk-forward and commit to a reading, then "
-            "check it against what the numbers actually support."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/learn.py", label="**Learn**", icon=":material/menu_book:")
-        st.markdown(
-            "Every quant note in one browser, including the five on this page, plus the three "
-            "pitfalls and the eight-stage learning path."
-        )
+# --------------------------------------------------------------------------
+# Where to go next
+# --------------------------------------------------------------------------
+next_steps("validation")

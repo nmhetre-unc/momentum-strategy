@@ -14,13 +14,16 @@ import pandas as pd
 import streamlit as st
 
 from ml_strategy import MIN_REGIME_TRAIN_ROWS, model_report
-from regime_dashboard import (
-    _ink, caveat, explainer, how_to_read, quant_note, require_regimes,
+from regime_dashboard import (caveat, chart_caption, common_mistakes, explainer,
+    how_to_read, next_steps, page_intro, quant_note, require_regimes, table_caption, _ink
 )
 from strategies import STRATEGIES
 from walk_forward import evaluate_out_of_sample
 
 df, regimes = require_regimes()
+
+page_intro("ml_lab")
+common_mistakes("ml_lab")
 
 # The shortest-horizon inputs. On a liquid index a one- or two-day move is
 # close to pure noise, so a model leaning hardest on these is leaning on
@@ -32,7 +35,7 @@ NOISE_PRONE_FEATURES = {"return_1d", "return_2d", "return_3d", "volume_change_5d
 # --------------------------------------------------------------------------
 with st.container(border=True):
     st.markdown(
-        "#### New here? The ML Lab in ninety seconds\n"
+        "#### New here? The ML lab in ninety seconds\n"
         "This page trains a classifier to predict whether **tomorrow closes higher than "
         "today**, then converts that prediction into the same long/flat signal every other "
         "strategy here uses. The lab exists less to build a working model than to let you "
@@ -306,9 +309,11 @@ with importance_left:
         )
         .properties(height=28 * len(importance))
     )
-    st.caption(
-        "Importance tells you what the model leaned on, not whether leaning on it was correct. "
-        "An overfit model reports confident importances for features that carry no signal."
+    chart_caption(
+        "What the model leaned on when making its predictions.",
+        "Logistic shows signed coefficients; random forest shows unsigned importance.",
+        "whether the top features are the shortest-horizon ones — and remember this describes "
+        "the model, not the market. An overfit model reports confident importances for noise.",
     )
 with importance_right:
     st.markdown("**Confusion matrix (test)**")
@@ -493,46 +498,7 @@ with st.expander("Try this: run both models back to back", icon=":material/scien
         "for more capacity."
     )
 
-# ---------- Where to go next ----------
-st.subheader("What to do next", divider="gray")
-st.caption("Each page answers a question this one raised but cannot settle on its own.")
-
-next_left, next_right = st.columns(2)
-with next_left:
-    with st.container(border=True):
-        st.page_link("app_pages/regimes.py", label="**Regimes**", icon=":material/layers:")
-        st.markdown(
-            "See how ML accuracy varies by environment — and check the regimes are real before "
-            "reading anything into a per-regime accuracy difference."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/adaptive_lab.py", label="**Adaptive**", icon=":material/tune:")
-        st.markdown(
-            "See how the ML signal behaves when sized or filtered rather than traded raw — "
-            "`ml_regime_conditional` is the wrapper, and volatility targeting is the control group."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/validation.py", label="**Validation**", icon=":material/fact_check:")
-        st.markdown(
-            "Check whether the model survives in-sample to out-of-sample across many rolling "
-            "windows, and where it sits against all ten other strategies once costs are on."
-        )
-with next_right:
-    with st.container(border=True):
-        st.page_link("app_pages/backtest_lab.py", label="**Backtest**", icon=":material/query_stats:")
-        st.markdown(
-            "Compare the ML signal against the simple rule-based strategies on identical data. "
-            "The comparison is usually humbling for the model."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/exercises_lab.py", label="**Exercises**", icon=":material/assignment:")
-        st.markdown(
-            "Practise ML interpretation: compare in-sample against out-of-sample accuracy, and "
-            "explain the mechanism behind the random forest's overfitting in your own words."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/learn.py", label="**Learn**", icon=":material/menu_book:")
-        st.markdown(
-            "Every quant note in one browser, including the five on this page, plus the three "
-            "pitfalls and the full feature glossary."
-        )
+# --------------------------------------------------------------------------
+# Where to go next
+# --------------------------------------------------------------------------
+next_steps("ml_lab")

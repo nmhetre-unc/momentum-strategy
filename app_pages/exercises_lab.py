@@ -15,13 +15,18 @@ import streamlit as st
 
 from exercises import EXERCISES, LEVELS
 from regime import regime_stability
-from regime_dashboard import cached_regimes, caveat, explainer, quant_note, require_data
+from regime_dashboard import (cached_regimes, caveat, chart_caption, common_mistakes,
+    explainer, next_steps, page_intro, quant_note, require_data, table_caption
+)
 from strategies import STRATEGIES
 
 df = require_data()
 ticker = st.session_state["ticker"]
 
 st.session_state.setdefault("exercise_results", {})
+
+page_intro("exercises")
+common_mistakes("exercises")
 
 # --------------------------------------------------------------------------
 # Teaching content, keyed by exercise
@@ -571,46 +576,8 @@ st.caption(
 
 # --------------------------------------------------------------------------
 # Where to go next
-# --------------------------------------------------------------------------
-st.subheader("What to do next", divider="gray")
-st.caption("Each page lets you dig into something an exercise only pointed at.")
 
-next_left, next_right = st.columns(2)
-with next_left:
-    with st.container(border=True):
-        st.page_link("app_pages/regimes.py", label="**Regimes**", icon=":material/layers:")
-        st.markdown(
-            "See the environment behind your results — and check the regimes are real before "
-            "reading anything into a per-regime number an exercise reported."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/adaptive_lab.py", label="**Adaptive**", icon=":material/tune:")
-        st.markdown(
-            "Improve a strategy with filtering or sizing, and find out whether the improvement "
-            "paid for the turnover it added."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/ml_lab.py", label="**ML lab**", icon=":material/network_intelligence:")
-        st.markdown(
-            "Compare the two ML direction models directly, with the train/test gap, the base "
-            "rate and the per-regime accuracy breakdown side by side."
-        )
-with next_right:
-    with st.container(border=True):
-        st.page_link("app_pages/validation.py", label="**Validation**", icon=":material/fact_check:")
-        st.markdown(
-            "Go past the single split: rolling walk-forward gives ten-plus consecutive holdouts, "
-            "which is what the walk-forward exercise can only hint at."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/backtest_lab.py", label="**Backtest**", icon=":material/query_stats:")
-        st.markdown(
-            "Try new parameters — deciding your acceptance criterion before you look, which the "
-            "parameter-sensitivity exercise is designed to make you care about."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/learn.py", label="**Learn**", icon=":material/menu_book:")
-        st.markdown(
-            "The eight-stage learning path, the three pitfalls, and every quant note referenced "
-            "by these exercises in one browser."
-        )
+# --------------------------------------------------------------------------
+# Where to go next
+# --------------------------------------------------------------------------
+next_steps("exercises")

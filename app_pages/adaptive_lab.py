@@ -15,15 +15,19 @@ import streamlit as st
 from adaptive import ADAPTIVE_DOCS, ADAPTIVE_STRATEGIES, describe_choices, describe_filter
 from analytics import full_report, performance_by_regime
 from backtest import run_backtest
-from regime_dashboard import (
-    PERFORMANCE_CONFIG, caveat, drawdown_chart, equity_chart, explainer, how_to_read,
-    metric_row, position_chart, quant_note, require_regimes, show_metric_table,
+from regime_dashboard import (caveat, chart_caption, common_mistakes, drawdown_chart,
+    equity_chart, explainer, how_to_read, metric_row, next_steps, page_intro,
+    PERFORMANCE_CONFIG, position_chart, quant_note, require_regimes, show_metric_table,
+    table_caption
 )
 from strategies import STRATEGIES
 from walk_forward import evaluate_out_of_sample
 
 df, regimes = require_regimes()
 ticker = st.session_state["ticker"]
+
+page_intro("adaptive")
+common_mistakes("adaptive")
 
 # --------------------------------------------------------------------------
 # Onboarding: what adaptation is, before any of it runs
@@ -273,7 +277,17 @@ if stats["turnover"] > 3.0:
 quant_note("exposure_caveat")
 
 st.altair_chart(equity_chart(result))
+chart_caption(
+    "Growth of $1 in the adapted strategy against buy-and-hold.",
+    "Adaptation usually flattens the curve in the environments it sits out.",
+    "whether the flatter stretches line up with the environments the mechanism was meant to avoid.",
+)
 st.altair_chart(drawdown_chart(result))
+chart_caption(
+    "Depth below the running peak for the adapted strategy.",
+    "This is where most of what adaptation buys you actually shows up.",
+    "a shallower trough than the unadapted version — then check exposure before crediting it to skill.",
+)
 how_to_read(
     """
 **Growth of $1** — compare the *shape* against the unadapted version, not just the endpoint.
@@ -553,46 +567,7 @@ how_to_read(
 )
 quant_note("position_sizing")
 
-# ---------- Where to go next ----------
-st.subheader("What to do next", divider="gray")
-st.caption("Each page answers a question this one raised but cannot settle on its own.")
-
-next_left, next_right = st.columns(2)
-with next_left:
-    with st.container(border=True):
-        st.page_link("app_pages/regimes.py", label="**Regimes**", icon=":material/layers:")
-        st.markdown(
-            "Understand the environments behind the adaptation — and check they're real "
-            "regimes before trusting any rule conditioned on them."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/ml_lab.py", label="**ML lab**", icon=":material/network_intelligence:")
-        st.markdown(
-            "See how ML signals behave when conditioned on regime, and why splitting training "
-            "data by regime usually costs more than it buys."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/validation.py", label="**Validation**", icon=":material/fact_check:")
-        st.markdown(
-            "Check whether adaptation survives in-sample to out-of-sample across many rolling "
-            "windows, and compare all eleven strategies at once with costs on."
-        )
-with next_right:
-    with st.container(border=True):
-        st.page_link("app_pages/backtest_lab.py", label="**Backtest**", icon=":material/query_stats:")
-        st.markdown(
-            "Compare the adapted result against the plain rule on its own terms, with the full "
-            "caveat set and the guided interpretation."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/exercises_lab.py", label="**Exercises**", icon=":material/assignment:")
-        st.markdown(
-            "Practise adaptive interpretation — including whether position sizing beats signal "
-            "engineering, and what happens to the ranking when costs go on."
-        )
-    with st.container(border=True):
-        st.page_link("app_pages/learn.py", label="**Learn**", icon=":material/menu_book:")
-        st.markdown(
-            "Every quant note in one browser, including the six on this page, plus the three "
-            "pitfalls and the full metric glossary."
-        )
+# --------------------------------------------------------------------------
+# Where to go next
+# --------------------------------------------------------------------------
+next_steps("adaptive")
