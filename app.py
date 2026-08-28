@@ -171,6 +171,11 @@ page = st.navigation(
             st.Page("app_pages/exercises_lab.py", title="Exercises", icon=":material/assignment:"),
             st.Page("app_pages/learn.py", title="Learn", icon=":material/menu_book:"),
         ],
+        "Graduation": [
+            st.Page("app_pages/graduation.py", title="Graduation checklist",
+                    icon=":material/checklist:"),
+            st.Page("app_pages/next_steps.py", title="Next steps", icon=":material/rocket:"),
+        ],
     },
     position="sidebar",
 )

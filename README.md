@@ -162,7 +162,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Eight pages, sharing one data selection and one regime model configured
+Ten pages, sharing one data selection and one regime model configured
 in the sidebar:
 
 - **Start here** — the front door: what the platform teaches, a roadmap
@@ -190,6 +190,12 @@ in the sidebar:
 - **Learn** — the learning path, the pitfalls, all 35 quant notes grouped
   by theme, and a glossary. Includes an opt-in health check that measures
   the six warning thresholds against your own loaded data.
+- **Graduation checklist** — 29 specific abilities the curriculum is meant
+  to install, as self-assessed checkboxes grouped by page, plus the five
+  warning signs a graduate should catch unprompted.
+- **Next steps** — a recipe for a first research project, seven ways to
+  extend the simulator, six directions beyond it, and five specialisation
+  pathways.
 
 ### The CLI
 
@@ -387,7 +393,8 @@ condition on.
 - `exercises.py` — ten exercises with automated checks; also runnable headless via `run_all(df)`
 - `regime_dashboard.py` — Altair chart builders, the validated colour palette, table configs, teaching widgets (`quant_note`, `explainer`, `how_to_read`, `caveat`), and cached loaders
 - `app.py` — entry point: shared sidebar state and `st.navigation`
-- `app_pages/` — the eight page scripts: `start_here`, `backtest_lab`, `regimes`, `adaptive_lab`, `ml_lab`, `validation`, `exercises_lab`, `learn`
+- `page_guide.py` — per-page orientation content (breadcrumb, why-this-matters, common mistakes, next-step links) as plain data, so the pages are consistent by construction
+- `app_pages/` — the ten page scripts: `start_here`, `backtest_lab`, `regimes`, `adaptive_lab`, `ml_lab`, `validation`, `exercises_lab`, `learn`, `graduation`, `next_steps`
 
 **Tests:**
 

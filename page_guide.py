@@ -507,6 +507,108 @@ PAGE_GUIDE = {
 }
 
 
+PAGE_GUIDE.update({
+    # ----------------------------------------------------------------------
+    "graduation": {
+        "title": "Graduation checklist",
+        "icon": ":material/checklist:",
+        "path": "app_pages/graduation.py",
+        "section": "Graduation",
+        "step": None,
+        "teaches": (
+            "What you should be able to do after working through the six-step path, as thirty "
+            "specific, checkable abilities rather than a list of topics covered."
+        ),
+        "why": (
+            "Finishing the pages is not the same as acquiring the habits. This is where you "
+            "find out honestly which ones actually stuck."
+        ),
+        "habit": "Assessing your own competence against evidence rather than against effort spent.",
+        "confused": {
+            "note": "equity_curve",
+            "glossary": "Learn → Glossary defines every term used in the checklist.",
+            "exercise": None,
+        },
+        "mistakes": [
+            ("Ticking items you have read about but not done",
+             "The test for every item is whether you could do it right now, on an unfamiliar "
+             "ticker, without looking anything up. Reading about drawdown duration is not the "
+             "same as having checked it on your own result."),
+            ("Treating the checklist as a score",
+             "Twenty-two of thirty is not a grade. The unticked items are a reading list — they "
+             "tell you which page to go back to and what to do differently there."),
+            ("Graduating on Sharpe rather than on judgement",
+             "None of these items asks you to produce a profitable strategy. Every one asks "
+             "whether you can tell a real result from a fitted one."),
+        ],
+        "next": ["next_steps", "validation", "exercises", "learn"],
+        "next_blurbs": {
+            "next_steps": (
+                "Where to go once the checklist is mostly ticked: a first research project, "
+                "ways to extend the simulator, and five deeper pathways."
+            ),
+            "validation": (
+                "The page most graduation items depend on. If several validation boxes are "
+                "unticked, start here."
+            ),
+            "exercises": (
+                "Ten checks that map almost one-to-one onto the abilities in this list. Use "
+                "them to test an item rather than guess at it."
+            ),
+            "learn": (
+                "The eight-stage learning path, the pitfalls, and the notes behind every item "
+                "on this checklist."
+            ),
+        },
+    },
+    # ----------------------------------------------------------------------
+    "next_steps": {
+        "title": "Next steps",
+        "icon": ":material/rocket:",
+        "path": "app_pages/next_steps.py",
+        "section": "Graduation",
+        "step": None,
+        "teaches": (
+            "How to keep going once the curriculum ends: running your own research project, "
+            "extending the simulator, and five pathways for deeper specialisation."
+        ),
+        "why": (
+            "The platform can teach you to evaluate someone else's strategy. Becoming a "
+            "researcher means running the loop yourself, on a question nobody handed you."
+        ),
+        "habit": "Working from a stated hypothesis rather than from whatever the data suggests.",
+        "confused": {
+            "note": "walkforward_reason",
+            "glossary": "Learn → Glossary is the reference for every term used here.",
+            "exercise": None,
+        },
+        "mistakes": [
+            ("Starting with a complex strategy",
+             "A first project should use a strategy you already understand completely, so that "
+             "anything surprising is a fact about the market rather than about your code."),
+            ("Writing the hypothesis after seeing the result",
+             "State what you expect and what would falsify it *before* running anything. "
+             "Otherwise every result confirms something, which means none of them do."),
+            ("Extending the simulator before finishing a project with it",
+             "Adding a sixth regime model is more fun than validating the three that exist. It "
+             "is also how you end up with more tools and no findings."),
+        ],
+        "next": ["backtest", "regimes", "adaptive", "ml_lab", "validation", "graduation"],
+        "next_blurbs": {
+            "backtest": "Where a research project starts: a baseline you understand completely.",
+            "regimes": "Where you check whether your result depends on one market environment.",
+            "adaptive": "Where you test whether conditioning on that environment actually helps.",
+            "ml_lab": "Where you find out whether a learned signal beats the rule you already had.",
+            "validation": "Where you find out whether any of it survives data you did not use.",
+            "graduation": (
+                "The thirty abilities the curriculum is meant to install. Re-check it after a "
+                "project — several items only make sense once you have run one."
+            ),
+        },
+    },
+})
+
+
 def breadcrumb(page_key: str) -> str:
     """'You are here' trail, e.g. 'Research › Backtest · step 1 of 6'."""
     guide = PAGE_GUIDE[page_key]
