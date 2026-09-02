@@ -1,84 +1,60 @@
 # Quant Training Terminal
 
-A multi-strategy backtesting engine — rule-based, ML-driven, and
-regime-adaptive — wrapped in a training platform for incoming quant
-traders and interns. Risk-adjusted metrics, walk-forward validation,
-market regime detection, adaptive strategies, guided exercises, and a
-dashboard that explains itself.
+A multi-strategy backtesting engine — rule-based, ML-driven, and regime-adaptive — wrapped
+inside a training platform for incoming quant traders and interns. It includes risk-adjusted
+metrics, walk-forward validation, market regime detection, adaptive strategies, guided
+exercises, and a dashboard that explains itself as you use it.
 
 **Live demo:** https://momentum-strategy-zpgmmb89pfwjghigjk8soc.streamlit.app/
 
-The goal here is **exposure to the work, not production trading**. Every
-number in this repo is computed on free daily data with a simple cost
-model. What transfers is the reasoning: how to build a hypothesis, how to
-test it honestly, and how to recognize when you have fooled yourself.
+The goal is **exposure to the work, not production trading**. All results use free daily data
+and a simple cost model. What transfers is the reasoning: how to form a hypothesis, how to
+test it honestly, and how to recognize when you've fooled yourself.
 
-The dashboard explains itself as you use it: every metric carries a
-tooltip saying what it means *and what it hides*, every chart has a
-plain-language reading guide, and ~56 contextual warnings fire on your own
-numbers when they cross a threshold worth knowing about — too few trades,
-non-causal regime labels, an accuracy below its base rate, a Sharpe high
-enough to suspect a leak.
+Every metric has a tooltip explaining what it means *and what it hides*. Every chart has a
+plain-language reading guide. Around ninety contextual warnings fire automatically when your
+own numbers cross a threshold worth knowing about — too few trades, non-causal regime labels,
+accuracy below the base rate, a Sharpe ratio high enough to suspect a leak.
 
 ---
 
 ## Quant training overview
 
-Most people learn backtesting by building something that makes money on
-historical data and then wondering why it doesn't work. This platform is
-built around the opposite habit — **assume your result is wrong until you
-have tried to break it** — and gives you the tools to try.
+Most people learn backtesting by building something that makes money on historical data and
+then wondering why it doesn't work. This platform teaches the opposite habit:
 
-It teaches eight things, each with a place in the dashboard where you can
-see it happen rather than read about it:
+> **Assume your result is wrong until you've tried to break it.**
 
-| What | Where |
+The dashboard teaches eight core skills, each demonstrated directly on your own data:
+
+| Concept | Where to learn it |
 |---|---|
-| Strategy design — what each rule bets on | Backtest page |
-| ML modeling, and why it overfits here | ML lab |
-| Walk-forward validation, single and rolling | Validation page |
-| Market regime detection | Regimes page |
-| Adaptive strategies and their four mechanisms | Adaptive page |
-| Risk analysis, and how it changes by regime | Regimes → performance by regime |
-| Interpreting equity curves and drawdowns | Backtest page, quant notes |
-| Comparing strategies fairly | Validation → compare |
+| Strategy design — what each rule bets on | Backtest |
+| ML modeling — and why it overfits | ML lab |
+| Walk-forward validation — single and rolling | Validation |
+| Market regime detection | Regimes |
+| Adaptive strategies — four mechanisms | Adaptive |
+| Risk analysis by regime | Regimes → performance by regime |
+| Reading equity curves and drawdowns | Backtest + quant notes |
+| Fair strategy comparison | Validation → compare |
 
 ---
 
 ## How to think like a quant
 
-Six habits, in rough order of how much trouble each one saves you.
+Six habits that prevent most mistakes:
 
-**1. Always name the bet.** Every strategy is a claim about market
-behaviour. SMA crossover claims trends persist. RSI mean-reversion claims
-short moves overshoot. If you can't say the claim in one sentence, you
-are not researching, you are searching — and search finds noise.
-
-**2. Ask what date each input was knowable.** This single question
-catches almost every lookahead bug. Feature computed at today's close?
-Fine. Ranked against the full sample's distribution? Not fine — that
-distribution didn't exist yet.
-
-**3. Separate the process from the result.** A good process can produce
-a bad result and a bad process a good one. Walk-forward evaluates the
-process. The gap between in-sample and out-of-sample tells you more than
-either number.
-
-**4. Count your degrees of freedom.** Every parameter you tuned, every
-strategy you tried and discarded, every regime you conditioned on —
-they all spend statistical power, whether or not you report them. A
-strategy chosen from twenty candidates needs to clear a much higher bar
-than one you specified in advance.
-
-**5. Prefer the boring explanation.** If volatility targeting explains
-your improvement, say so, even though the regime-switching HMM is more
-interesting to talk about. Simpler explanations of the same result are
-worth more, and they survive longer.
-
-**6. Report the limitation first.** "I built an ML layer and my own
-walk-forward caught it overfitting" is a stronger claim than any good
-backtest, because a good backtest invites the question of what you did
-wrong to get it.
+1. **Always name the bet.** If you can't summarize the strategy's claim in one sentence,
+   you're searching, not researching — and search finds noise.
+2. **Ask what date each input was knowable.** This single question catches almost every
+   lookahead bug.
+3. **Separate process from result.** Walk-forward evaluates the process; the in-sample to
+   out-of-sample gap tells the truth.
+4. **Count your degrees of freedom.** Every parameter, every discarded idea, every regime
+   split spends statistical power — whether or not you report it.
+5. **Prefer the boring explanation.** If volatility targeting explains the improvement,
+   say so, even when the regime-switching model is more interesting to talk about.
+6. **Report the limitation first.** Honest limitations make your work stronger, not weaker.
 
 ---
 
@@ -86,37 +62,26 @@ wrong to get it.
 
 ### Lookahead bias
 
-Using information in a decision that wasn't available when the decision
-was made. Where it hides in a project like this:
+Using information that wasn't available at the time. Examples:
 
-- Acting on a signal on the same close it was computed from — the reason
-  `backtest.py` shifts every signal forward one day.
-- Standardizing or ranking features against full-sample statistics
-  instead of expanding ones.
-- **Fitting a regime model on all of history and then backtesting on it.**
-  The cluster centers encode the future; your 2015 "low volatility"
-  label was computed partly from 2020.
-- Centered smoothing filters on labels or signals.
+- Acting on a signal on the same close it was computed from
+- Ranking features against full-sample statistics instead of expanding ones
+- Fitting a regime model on all history and then backtesting on it
+- Centered smoothing filters on labels or signals
 
-**The tell:** implausibly high Sharpe. Above 2 on a daily equity
-strategy, assume a leak until you've found otherwise.
+**Tell:** Sharpe above 2 on daily data — assume a leak until you've found otherwise.
 
-`regime.py` defends against this two ways — `fit_frac < 1.0` and
-`detect_regimes_walk_forward()` — and the Regimes page will run both side
-by side so you can measure the gap on your own data.
+The Regimes page shows full-sample and walk-forward labels side by side, so you can measure
+the gap on your own data.
 
 ### Overfitting
 
-Fitting the noise in your sample and calling it signal. It arrives
-through parameter search, strategy search, model capacity, and
-regime-conditional models that split your data while keeping the
-parameter count.
+Fitting noise and calling it signal.
 
-**The tell:** a large in-sample/out-of-sample gap, and results that
-change character under small parameter changes.
+**Tell:** a large in-sample to out-of-sample gap, and results that change character under
+small parameter changes.
 
-The random forest in this repo exists to demonstrate this. On synthetic
-random-walk data:
+On synthetic random-walk data:
 
 ```
                 train_acc   test_acc   base rate
@@ -124,22 +89,16 @@ logistic          57.7%       48.0%      54.9%
 random_forest     86.2%       45.1%      54.9%
 ```
 
-86% collapsing to 45% — worse than a coin flip, and ten points below
-the base rate — is a textbook memorization signature. **With this little signal, the less flexible
-model is the better one.** That runs against most people's instinct,
-which is to reach for a bigger model when results disappoint.
+The random forest memorizes noise. The simpler model generalizes better — which runs against
+most people's instinct to reach for more capacity when results disappoint.
 
 ### Regime drift
 
-The market changes and a real relationship stops being real. A strategy
-fit on 2010–2019 was fit on one long low-volatility bull market.
+Markets change; relationships stop being real.
 
-**The tell:** rolling walk-forward folds that are consistently positive
-early and consistently negative later — which a single 70/30 split cannot
-show you.
+**Tell:** early walk-forward folds positive, later folds negative.
 
-**The fix:** `rolling_walk_forward()`, and reading the fold *sequence*
-rather than its average.
+**Fix:** read the fold *sequence*, not just the average.
 
 ---
 
@@ -147,8 +106,8 @@ rather than its average.
 
 ### Setup
 
-**Python 3.12 or newer is required** — numpy 2.5 needs ≥3.12, pandas 3 and
-scikit-learn 1.9 need ≥3.11. Developed and tested on 3.14.
+Requires **Python 3.12+** (numpy 2.5 needs ≥3.12; pandas 3 and scikit-learn 1.9 need ≥3.11).
+Developed and tested on 3.14.
 
 ```bash
 python -m venv venv
@@ -156,298 +115,200 @@ source venv/bin/activate        # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
-### The dashboard
+### Run the dashboard
 
 ```bash
 streamlit run app.py
 ```
 
-Ten pages, sharing one data selection and one regime model configured
-in the sidebar:
+Ten pages share one data selection and one regime model:
 
-- **Start here** — the front door: what the platform teaches, a roadmap
-  through the other pages with a "why this matters" on each, the common
-  beginner traps, and an eight-item first-session checklist that tracks
-  your progress.
-- **Backtest** — one strategy, its equity curve, drawdown, position, and
-  an unavoidable comparison against buy-and-hold. Walk-forward is always
-  shown, not hidden behind a toggle. Ends with "What this backtest tells
-  you" — five questions answered from the computed numbers, including
-  whether the strategy bleeds in chop and whether costs bit.
-- **Regimes** — detect regimes five ways, check whether they're actually
-  regimes (persistence, duration, distinctness), see what the asset and
-  your strategy did in each, and run the lookahead demonstration side by
-  side.
-- **Adaptive** — the four adaptation mechanisms, each with its learned
-  rule and the evidence behind it exposed, plus adapted-vs-unadapted
-  performance broken down by regime.
-- **ML lab** — train the classifier, watch the train/test gap, compare
-  against the base rate, and break accuracy down by regime.
-- **Validation** — rolling walk-forward, regime-attributed decay, and a
-  fair side-by-side comparison of all eleven strategies.
-- **Exercises** — ten guided exercises with automated checks against
-  whatever data you have loaded.
-- **Learn** — the learning path, the pitfalls, all 35 quant notes grouped
-  by theme, and a glossary. Includes an opt-in health check that measures
-  the six warning thresholds against your own loaded data.
-- **Graduation checklist** — 29 specific abilities the curriculum is meant
-  to install, as self-assessed checkboxes grouped by page, plus the five
-  warning signs a graduate should catch unprompted.
-- **Next steps** — a recipe for a first research project, seven ways to
-  extend the simulator, six directions beyond it, and five specialisation
-  pathways.
+- **Start here** — roadmap, beginner traps, first-session checklist
+- **Backtest** — equity curve, drawdown, walk-forward, reading guide
+- **Regimes** — five detection methods, persistence checks, lookahead demo
+- **Adaptive** — four mechanisms, learned rules, per-regime attribution
+- **ML lab** — train/test gap, base rate, regime breakdown
+- **Validation** — rolling walk-forward, regime-attributed decay, fair comparison
+- **Exercises** — ten guided exercises with automated checks
+- **Learn** — learning path, pitfalls, 35 quant notes, glossary
+- **Graduation checklist** — 29 abilities, grouped by page
+- **Next steps** — first research project, extensions, specialization paths
 
-### The CLI
+### Deploy it (Streamlit Community Cloud)
+
+1. Push to GitHub
+2. [share.streamlit.io](https://share.streamlit.io) → **Create app** → deploy from GitHub,
+   main file path `app.py`
+3. **Open "Advanced settings" and set the Python version to 3.12 or newer.** The default is
+   3.9, which cannot install `streamlit>=1.62` at all — pip errors out and the build dies
+   before your code runs. The version can only be set at creation, so an existing app must be
+   deleted and recreated to change it.
+
+If the build succeeds but the app shows a data error, that is Yahoo Finance blocking cloud IP
+ranges rather than a bug. The repo ships cached CSVs for SPY and AAPL.
+
+---
+
+## CLI
 
 ```bash
-# the original commands all still work
 python main.py --ticker SPY --strategy sma_crossover
 python main.py --ticker AAPL --strategy momentum --walk-forward
 python main.py --ticker SPY --strategy ml_direction --walk-forward --model-report
-
-# regimes and adaptive strategies
-python main.py --ticker SPY --start 2008-01-01 --strategy sma_crossover --regimes
 python main.py --ticker SPY --strategy adaptive_ensemble --regimes --cost-bps 5
 python main.py --ticker SPY --strategy regime_filtered --regimes --regime-walk-forward
-
-# rolling validation and the exercise checks
 python main.py --ticker SPY --strategy sma_crossover --rolling
 python main.py --ticker SPY --exercises
 ```
 
-### Tests
+## Tests
 
 ```bash
-python test_logic.py     # base engine, synthetic data
+python test_logic.py     # base engine
 python test_regime.py    # regimes, adaptive strategies, validation layer
 ```
 
-Both run offline on synthetic data. `test_regime.py` builds a series with
-*known* regime structure, which is the only place the detection machinery
-can be checked against ground truth — on real data you never have it.
-
-### Deploying it (Streamlit Community Cloud)
-
-1. Push to GitHub
-2. [share.streamlit.io](https://share.streamlit.io) → **Create app** →
-   deploy from GitHub, main file path `app.py`
-3. **Open "Advanced settings" and set the Python version to 3.12 or
-   newer.** The default is 3.9, which cannot install `streamlit>=1.62` at
-   all — pip errors out and the build dies before your code runs. The
-   version can only be set at creation, so an existing app must be deleted
-   and recreated to change it.
-
-If the build succeeds but the app shows a data error, that is Yahoo
-Finance blocking cloud IP ranges rather than a bug. The repo ships cached
-CSVs for SPY and AAPL; pick a matching range or commit the cache file for
-the range you want.
+Both run offline on synthetic data. `test_regime.py` builds a series with *known* regime
+structure — the only place the detection machinery can be checked against ground truth, since
+on real data you never have it.
 
 ---
 
 ## The teaching layer
 
-Every page carries the same four devices, so the platform explains itself
-rather than assuming a reader who already knows what to look for.
+Four devices make the platform self-explanatory:
 
-| Device | What it does |
+| Device | Purpose |
 |---|---|
-| **Tooltips** | Every metric, everywhere, from one shared `METRIC_DOCS` dict — what the number means *and what it conceals*. |
-| **Contextual caveats** | ~56 warnings that compute a number rather than restate a rule: "only 6 trades out-of-sample", "persistence is 0.91 for Turbulent", "regime filtering leaves you 22% invested". |
-| **Reading guides** | A short, actionable "how to interpret this" beside each chart and table — including what it means when the expected effect is *absent*. |
-| **Quant notes** | 35 collapsible explanations in `quant_notes.py`, surfaced in context on each page and browsable by theme on the Learn page. |
+| **Tooltips** | Explain every metric and what it conceals |
+| **Contextual caveats** | ~90 warnings computed from your own numbers |
+| **Reading guides** | "How to interpret this" beside every chart and table |
+| **Quant notes** | 35 collapsible explanations, surfaced in context |
 
-Three principles the content follows:
+Consistency is structural rather than a matter of discipline: every page draws its
+breadcrumb, "why this matters", common mistakes and closing links from one registry
+(`page_guide.py`) through one set of helpers (`regime_dashboard.py`), so no page can drift
+into a different voice or shape.
 
-- **A negative result is a result.** The honest outcome of most work here
-  is "this doesn't beat buy-and-hold" or "this model learned nothing", and
-  the platform says so plainly instead of hiding it.
-- **Sample size before conclusions.** Almost every caveat is some version
-  of *you have fewer independent observations than you think*.
-- **Prefer the boring explanation.** When plain volatility targeting beats
-  the regime-switching HMM — which it often does — that is the finding.
+**Principles:**
+
+- Negative results are results
+- Sample size before conclusions
+- Prefer the boring explanation
 
 ---
 
 ## Suggested learning path
 
-Each stage's "done when" is a habit, not a completed task. The habit is
-the part that transfers.
+Each stage's "done when" is a habit, not a completed task:
 
-**1. Baselines.** Run buy-and-hold on SPY, 2010–2025. Memorize its CAGR,
-Sharpe and max drawdown. *Done when* you compare against them without
-being reminded.
-
-**2. Rule-based strategies.** Run all three on the same data. Write one
-sentence per strategy on what behaviour it needs. *Done when* you can
-predict which will win on a given chart before running it.
-
-**3. Validation.** Walk-forward everything, then run
-`rolling_walk_forward()`. *Done when* you instinctively ask "in-sample or
-out-of-sample?" about any number, including your own.
-
-**4. The ML layer.** Train both models. Compare train, test, and base
-rate. *Done when* you can explain why the more accurate model is the
-worse one.
-
-**5. Regimes.** Detect with `rules`, then `kmeans`, then `hmm`. Compare
-transition matrices and durations. *Done when* you can point at a
-per-regime table and say where a strategy's return came from.
-
-**6. The lookahead demonstration.** Run the same adaptive strategy on
-full-sample and walk-forward regime labels. *Done when* you can quote the
-size of the gap you measured, on your data.
-
-**7. Adaptive strategies.** Run each mechanism separately with costs on.
-*Done when* you reach for the simplest mechanism that explains the
-improvement — and notice when the simple one wins.
-
-**8. Write it up.** One page on one strategy: hypothesis, method,
-out-of-sample result, per-regime breakdown, what would falsify it, what
-you'd do next. *Done when* the write-up leads with a limitation and is
-more convincing for it.
+1. **Baselines** — memorize SPY's long-term stats
+2. **Rule-based strategies** — predict the winner before running it
+3. **Validation** — instinctively ask "in-sample or out-of-sample?"
+4. **The ML layer** — explain why the simpler model wins
+5. **Regimes** — attribute returns by environment
+6. **Lookahead demo** — measure the gap yourself
+7. **Adaptive strategies** — prefer the simplest mechanism that explains the result
+8. **Write-up** — lead with the limitation
 
 ---
 
 ## Strategies
 
-**Base strategies** — binary long/flat, `strategies.STRATEGIES`:
+### Base strategies
 
-- **`sma_crossover`** — long when the short MA is above the long MA (trend-following)
-- **`momentum`** — long when the trailing N-day return clears a threshold (trend-following)
-- **`mean_reversion`** — RSI-based; long when oversold, flat when overbought (mean-reversion)
-- **`ml_direction`** — logistic regression or random forest predicting next-day direction
+Binary long/flat, in `strategies.STRATEGIES`:
 
-**Adaptive strategies** — fractional positions in [0, 1],
-`adaptive.ADAPTIVE_STRATEGIES`. Four distinct mechanisms, which fail
-differently:
+- **`sma_crossover`** — trend-following
+- **`momentum`** — trend-following
+- **`mean_reversion`** — RSI-based
+- **`ml_direction`** — logistic regression or random forest
+
+### Adaptive strategies
+
+Fractional positions in [0, 1], in `adaptive.ADAPTIVE_STRATEGIES`:
 
 | Strategy | Mechanism | The catch |
 |---|---|---|
-| `regime_filtered` | Filtering — sit out bad regimes | Cuts your exposure; check the day count |
-| `regime_switch` | Switching — different strategy per regime | Label lag plus full position flips; needs costs on |
-| `regime_parameters` | Re-parameterizing — faster settings in high vol | Every regime is a fresh set of parameters to overfit |
-| `volatility_targeted` | Position sizing — scale to a volatility target | Uses **no regime model at all**, and often wins anyway |
-| `regime_sized` | Position sizing — size per regime | Compare against the continuous version |
-| `adaptive_ensemble` | All of the above | Attribution: run the pieces separately first |
-| `ml_regime_conditional` | Regime-conditioned ML | Conditional mode splits your training data by regime |
+| `regime_filtered` | Filtering | Cuts exposure |
+| `regime_switch` | Switching | Label lag plus costs |
+| `regime_parameters` | Re-parameterizing | Overfits per regime |
+| `volatility_targeted` | Sizing | Often wins without regimes at all |
+| `regime_sized` | Sizing per regime | Compare against the continuous version |
+| `adaptive_ensemble` | Ensemble | Attribute the components first |
+| `ml_regime_conditional` | Conditional ML | Splits your training data |
 
-Every `auto` choice — which regimes to allow, which strategy to run
-where — is learned **only** from the first 60% of history, and
-`describe_choices()` / `describe_filter()` expose both the decision and
-the evidence behind it.
+Every automatic choice — which regimes to allow, which strategy to run where — is learned
+**only** from the first 60% of history, and `describe_choices()` / `describe_filter()` expose
+both the decision and the evidence behind it.
 
 ---
 
 ## Regime detection
 
-`regime.py` labels each day with a market regime using one of five methods:
+Five methods:
 
-| Method | What it is |
+| Method | Description |
 |---|---|
-| `rules` | Explicit volatility/trend thresholds. Fits nothing, so nothing can leak. The baseline every fitted method must beat. |
-| `kmeans` | Hard clustering. Fast, but assumes round equal clusters and has no notion of persistence. |
-| `gmm` | Soft clustering with per-day probabilities. Handles elongated clusters; still no persistence. |
-| `hmm` | Gaussian HMM (implemented in-repo, no extra dependency). Models persistence via a transition matrix — the standard tool. |
-| `supervised` | Regimes defined from *forward* 21-day return and vol on the training window, then learned as a classifier. |
+| `rules` | Baseline. No fitting, so nothing can leak. |
+| `kmeans` | Hard clustering. No notion of persistence. |
+| `gmm` | Soft clustering with per-day probabilities. |
+| `hmm` | Gaussian HMM with persistence, implemented in-repo — no extra dependency. |
+| `supervised` | Forward-defined regimes learned as a classifier. |
 
-Regime IDs are always renumbered so **0 is the calmest**, ordered by
-realized volatility, which keeps the IDs comparable across refits,
-methods and tickers. Names come from the cluster centroid ("Calm
-Uptrend", "Turbulent", "Crisis / Selloff").
+Regimes are always renumbered so **0 = calmest**, ordered by realized volatility, which keeps
+the IDs comparable across refits, methods and tickers. Smoothing is **causal only** — a
+centered filter would look tidier and be lookahead bias.
 
-Smoothing is **causal only** — `min_duration` (confirmation filter),
-`ema_prob`, and a trailing `median`. A centered filter would look tidier
-on the chart and would be lookahead bias.
+**Three questions to ask of any labelling:**
 
-**Three questions to ask of any regime labelling**, all answered at the
-top of the Regimes page: do episodes last weeks (not days)? Is the
-transition matrix diagonal above 0.95? Do the regimes actually differ in
-return or volatility? A no to any of them means there is nothing there to
-condition on.
+1. Do episodes last weeks, not days?
+2. Is the transition matrix diagonal above 0.95?
+3. Do the regimes actually differ in return or volatility?
+
+A no to any of them means there is nothing there to condition on.
 
 ---
 
 ## Structure
 
-**Core engine** (unchanged interfaces):
+**Core engine:**
 
 - `data_loader.py` — fetches and locally caches OHLCV data via yfinance
-- `strategies.py` — the four base strategies, plus `STRATEGY_DOCS` and `PARAM_SPECS` metadata for the dashboard
-- `backtest.py` — signal → equity curve; forward-shifts signals; optional `cost_bps` and regime passthrough
-- `analytics.py` — CAGR, volatility, Sharpe, Sortino, max drawdown, win rate, exposure, turnover, and `performance_by_regime`
-- `walk_forward.py` — single split, `rolling_walk_forward`, `evaluate_with_regimes`, `compare_strategies`
-- `features.py` — ML features (lagged returns, MA ratios, RSI, volatility, volume)
-- `ml_strategy.py` — the classifier, now with regime-as-feature and regime-conditional modes
+- `strategies.py` — the four base strategies, plus docs and parameter specs
+- `backtest.py` — signal → equity curve; forward-shifts signals; optional `cost_bps`
+- `analytics.py` — CAGR, volatility, Sharpe, Sortino, drawdown, exposure, turnover, per-regime
+- `walk_forward.py` — single split, rolling folds, regime-attributed decay, fair comparison
+- `features.py` / `ml_strategy.py` — ML features and the classifier
 - `visualize.py` — static PNG charts for the CLI's `--plot`
 - `main.py` — CLI
 
-**Regime layer** (new):
+**Regime layer:**
 
-- `regime_features.py` — point-in-time environment features: volatility level/expansion/percentile, trend, efficiency ratio, autocorrelation, drawdown, downside share, Parkinson vol, liquidity
-- `regime.py` — the five detection methods, a self-contained Gaussian HMM, causal smoothing, transition/episode analysis
-- `adaptive.py` — the regime-aware strategy wrappers and `ALL_STRATEGIES`
+- `regime_features.py` — point-in-time environment features
+- `regime.py` — five detection methods, a self-contained Gaussian HMM, causal smoothing
+- `adaptive.py` — the regime-aware wrappers and `ALL_STRATEGIES`
 
-**Training layer** (new):
+**Training layer:**
 
-- `quant_notes.py` — all 35 quant notes, every metric tooltip, the three pitfalls and the eight learning-path stages, as plain data with no Streamlit dependency (so it's usable from a notebook or the CLI)
-- `exercises.py` — ten exercises with automated checks; also runnable headless via `run_all(df)`
-- `regime_dashboard.py` — Altair chart builders, the validated colour palette, table configs, teaching widgets (`quant_note`, `explainer`, `how_to_read`, `caveat`), and cached loaders
-- `app.py` — entry point: shared sidebar state and `st.navigation`
-- `page_guide.py` — per-page orientation content (breadcrumb, why-this-matters, common mistakes, next-step links) as plain data, so the pages are consistent by construction
-- `app_pages/` — the ten page scripts: `start_here`, `backtest_lab`, `regimes`, `adaptive_lab`, `ml_lab`, `validation`, `exercises_lab`, `learn`, `graduation`, `next_steps`
+- `quant_notes.py` — 35 quant notes, metric tooltips, pitfalls, learning path (plain data)
+- `page_guide.py` — per-page orientation content, so pages are consistent by construction
+- `exercises.py` — ten exercises with automated checks; runnable headless via `run_all(df)`
+- `regime_dashboard.py` — Altair charts, the validated palette, and the teaching widgets
+- `app.py` + `app_pages/` — the ten-page dashboard
 
-**Tests:**
-
-- `test_logic.py` — the base engine on synthetic data
-- `test_regime.py` — regimes, adaptive strategies and validation, including explicit point-in-time and causality checks
-
----
-
-## On the ML strategy specifically — read this before trusting its numbers
-
-Adding a trained model introduces a sharper version of the overfitting
-risk the walk-forward split already exists to catch. On synthetic
-random-walk data (no real signal to find):
-
-```
-                train_acc   test_acc   base rate
-logistic          57.7%       48.0%      54.9%
-random_forest     86.2%       45.1%      54.9%
-```
-
-The random forest's 86% train accuracy collapsing to 45% out-of-sample is
-a textbook overfitting signature — it memorized noise in the training
-period rather than learning anything that generalizes. This is genuinely
-useful, not an embarrassing result: **it's exactly the kind of honest
-finding worth describing directly in an interview**.
-
-Two things the dashboard now adds to that story:
-
-- **The base rate.** On daily equity data roughly 53% of days are up, so
-  "always predict up" scores 53%. A model at 53% test accuracy has added
-  nothing. Test accuracy is always shown against this bar.
-- **Accuracy is not P&L.** A 55%-accurate model loses money if the 45% it
-  misses land on the big-move days. Read the out-of-sample Sharpe.
-
-Only the out-of-sample numbers should ever be quoted as this strategy's
-performance — the full-period and in-sample numbers are optimistic by
-construction.
+**Tests:** `test_logic.py`, `test_regime.py`
 
 ---
 
 ## Notes and limitations
 
-- `test_logic.py` and `test_regime.py` use synthetic data so the logic can
-  be verified without network access. Run `main.py` or `app.py` for real data.
-- The ML strategy trains once on the first `train_frac` of history — it does
-  not retrain incrementally.
-- `rolling_walk_forward()` evaluates in rolling out-of-sample blocks but does
-  **not** refit fitted strategies per fold. Its returned `fitted_note` says so.
-  A production framework would refit every fold.
-- Transaction costs are modeled as a constant basis-point charge on position
-  change. Real costs grow with size and vary with liquidity.
-- Regime labels are estimates, and their uncertainty is largest exactly at
-  transitions — which is when acting on them matters most. No smoothing
-  parameter makes that go away.
-- The dashboard caps regimes at 4. More over-segments a decade of daily data,
-  and the ordinal color ramp stops being distinguishable past four steps.
+- The ML strategy trains once on the first `train_frac` — it does not retrain incrementally
+- `rolling_walk_forward()` evaluates in rolling folds but does **not** refit fitted strategies
+  per fold; the returned `fitted_note` says so
+- Transaction costs are modeled as a constant basis-point charge on position change; real
+  costs grow with size and vary with liquidity
+- Regime labels are estimates, and their uncertainty is largest exactly at transitions — which
+  is when acting on them matters most
+- The dashboard caps regimes at 4: more over-segments a decade of daily data, and the ordinal
+  color ramp stops being distinguishable past four steps
