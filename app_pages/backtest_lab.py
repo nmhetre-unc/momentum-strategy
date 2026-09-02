@@ -120,7 +120,7 @@ with st.expander(f"What {strategy_name} does — and when it fails", icon=":mate
 
 # ---------- Orientation for beginners ----------
 with st.container(border=True):
-    st.markdown("**New to reading backtests? Open these first.**")
+    st.markdown("#### New to reading backtests? Open these first")
     explainer(
         "How to read an equity curve",
         "the health chart of your strategy — a patient's temperature over time, not a final grade.",
@@ -254,7 +254,8 @@ if stats["num_trades"] < 20:
         f"**Only {stats['num_trades']} trades.** Every metric above is describing that many "
         f"independent bets, no matter how many days the backtest covers. A Sharpe ratio built on "
         f"a handful of trades is a statement about luck, not process. Widen the date range or use "
-        f"a faster parameter set before drawing conclusions."
+        f"a faster parameter set before drawing conclusions.",
+        level="info",
     )
 
 if stats["exposure"] < 0.25:

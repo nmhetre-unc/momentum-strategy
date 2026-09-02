@@ -18,7 +18,7 @@ from regime_dashboard import (caveat, chart_caption, common_mistakes, explainer,
     how_to_read, next_steps, page_intro, quant_note, table_caption
 )
 st.markdown(
-    "### Welcome — this is a flight simulator for quant research.\n"
+    "#### Welcome — this is a flight simulator for quant research.\n"
     "You will build trading strategies, discover that most of them don't work, and learn to "
     "tell the difference *before* anyone else has to point it out. That last skill is the "
     "entire point."
