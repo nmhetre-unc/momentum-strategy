@@ -51,12 +51,10 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_labels(df: pd.DataFrame) -> pd.Series:
     """
-    1 if TOMORROW's close is higher than today's, else 0. This uses
-    shift(-1) -- looking one row into the future -- which is correct and
-    necessary here: this is the TRAINING TARGET, not the trading signal.
-    A model is trained to map "features known as of day t" -> "was day
-    t+1 up", exactly mirroring what backtest.py's forward-shift already
-    assumes every strategy's signal represents.
+    1 if tomorrow's close is higher than today's, else 0. Uses shift(-1)
+    -- looking one row into the future -- which is correct here because
+    this is the training target, not the trading signal: the model maps
+    "features known as of day t" to "was day t+1 up".
     """
     future_return = df["Close"].shift(-1) / df["Close"] - 1
     return (future_return > 0).astype(int)

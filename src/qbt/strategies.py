@@ -38,11 +38,8 @@ def mean_reversion_rsi(
     avg_gain = gain.rolling(period).mean()
     avg_loss = loss.rolling(period).mean()
 
-    # NOTE (fixed after code review): avg_loss == 0 means every day in the
-    # window was a gain -- that's a legitimate, maximally overbought case
-    # and RSI should resolve to 100, not NaN. We handle it explicitly
-    # instead of blanket-replacing 0 with NaN, which silently discarded
-    # a mathematically valid answer.
+    # avg_loss == 0 means every day in the window gained, which is a
+    # legitimate maximally-overbought case: RSI should be 100, not NaN.
     rsi = pd.Series(index=df.index, dtype=float)
     valid = avg_loss > 0
     rsi[valid] = 100 - (100 / (1 + avg_gain[valid] / avg_loss[valid]))
@@ -64,12 +61,10 @@ STRATEGIES = {
 
 
 # --------------------------------------------------------------------------
-# Teaching metadata
+# Dashboard copy
 # --------------------------------------------------------------------------
-# The dashboard reads these instead of hard-coding copy, so a strategy
-# and its explanation can never drift apart. `regime_hint` is the
-# hypothesis an intern should be testing on the Regimes tab -- it is a
-# claim to CHECK against the per-regime table, not a fact to accept.
+# Read by the dashboard instead of hard-coded strings, so a strategy and
+# its displayed explanation can't drift apart.
 STRATEGY_DOCS = {
     "sma_crossover": {
         "family": "Trend-following",

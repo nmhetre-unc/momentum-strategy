@@ -1,41 +1,20 @@
 """
-Market regime detection.
+Market regime detection. A "regime" is a persistent market environment
+(calm uptrend, choppy range, high-volatility selloff) that changes the
+odds facing every strategy in strategies.py; a single full-period Sharpe
+ratio averages the regimes together and describes none of them.
 
-A "regime" is a persistent market environment -- calm uptrend, choppy
-range, high-volatility selloff -- that changes the odds facing every
-strategy in strategies.py. Trend-following works in trending regimes and
-donates money in choppy ones. Mean reversion is the mirror image. None
-of that shows up in a single full-period Sharpe ratio, which averages
-the good regimes and the bad ones into one number that describes
-neither.
+Five detection methods, trading off transparency against flexibility:
+rules (explicit thresholds, nothing fitted), kmeans (hard clustering),
+gmm (soft clustering, per-day probabilities), hmm (Gaussian HMM with a
+persistence model -- the standard choice), and supervised (regimes
+defined from forward returns/vol on the training window, then learned
+as a classifier).
 
-This module labels each day with a regime, using one of five methods
-that trade off transparency against flexibility:
-
-    rules      -- explicit volatility/trend thresholds. No fitting, no
-                  leakage, no mystery. Start here.
-    kmeans     -- clusters days in regime-feature space.
-    gmm        -- soft clustering; gives you P(regime) per day.
-    hmm        -- Gaussian hidden Markov model. The standard choice,
-                  because it's the only one that models PERSISTENCE:
-                  regimes are sticky, and a model that knows that
-                  produces far fewer one-day head-fakes.
-    supervised -- defines regimes from FORWARD returns/vol on the
-                  training window, then trains a classifier to recognize
-                  them from today's features. Read the warning below it.
-
-THE LOOKAHEAD TRAP, which is the whole reason this module is written the
-way it is: fitting a clustering model on the full history and then
-backtesting on that history is lookahead bias, full stop. The cluster
-centers encode the future. Your 2015 "low volatility regime" label was
-computed partly from 2020. The backtest will look wonderful and the
-strategy will not work. Two defenses are built in:
-
-    fit_frac < 1.0             fit on the first slice only
-    detect_regimes_walk_forward()  refit on an expanding window
-
-Both are demonstrated side by side in the dashboard, because the size of
-the gap between the honest and dishonest versions is the lesson.
+Fitting a clustering model on the full history and then backtesting on
+that history is lookahead bias: the cluster centers encode the future.
+Two defenses: `fit_frac < 1.0` (fit on a leading slice only) and
+`detect_regimes_walk_forward()` (refit on an expanding window).
 """
 
 from dataclasses import dataclass, field
@@ -98,15 +77,11 @@ SMOOTHING_DOCS = {
 # --------------------------------------------------------------------------
 class GaussianHMM:
     """
-    Diagonal-covariance Gaussian HMM fitted with Baum-Welch (EM).
-
-    Written out longhand rather than pulled from hmmlearn for two
-    reasons: it keeps the dependency list to what's already in
-    requirements.txt, and the forward pass is the part interns most need
-    to actually see. `filter()` uses information up to time t only --
-    that is what you could have known live. `smooth()` and `viterbi()`
-    condition on the whole sequence and are therefore historical
-    reconstructions, not tradeable signals.
+    Diagonal-covariance Gaussian HMM fitted with Baum-Welch (EM), written
+    out directly rather than pulled from hmmlearn to avoid an extra
+    dependency. `filter()` uses only information up to time t (tradeable
+    live); `smooth()` and `viterbi()` condition on the whole sequence and
+    are historical reconstructions only.
     """
 
     def __init__(self, n_states: int = 3, n_iter: int = 100, tol: float = 1e-6,
@@ -168,8 +143,7 @@ class GaussianHMM:
         X = np.asarray(X, dtype=float)
         n_obs, n_features = X.shape
 
-        # Initialize from a GMM: EM is only as good as where it starts,
-        # and random starts on financial data routinely land in a local
+        # Initialize from a GMM; random starts routinely land in a local
         # optimum where every state looks the same.
         init = GaussianMixture(
             n_components=self.n_states, covariance_type="diag",
@@ -180,9 +154,9 @@ class GaussianHMM:
         self.variances_ = np.maximum(init.covariances_.copy(), self.var_floor)
         self.startprob_ = np.full(self.n_states, 1.0 / self.n_states)
 
-        # Start strongly diagonal: assume regimes persist, then let the
-        # data argue otherwise. Starting uniform tends to converge to a
-        # memoryless model that's just a slower GMM.
+        # Start strongly diagonal, assuming regimes persist; a uniform
+        # start tends to converge to a memoryless model that's just a
+        # slower GMM.
         stay = 0.95
         self.transmat_ = np.full((self.n_states, self.n_states),
                                  (1 - stay) / max(self.n_states - 1, 1))
@@ -213,9 +187,8 @@ class GaussianHMM:
             )
             xi_sum = xi_num.sum(axis=0)
 
-            # M-step, with guards: a state that has collapsed to zero
-            # responsibility keeps its old parameters rather than
-            # producing NaNs that silently propagate.
+            # M-step, with guards: a state with zero responsibility keeps
+            # its old parameters rather than producing silent NaNs.
             self.startprob_ = gamma[0] / gamma[0].sum()
 
             row_sums = xi_sum.sum(axis=1, keepdims=True)
@@ -319,7 +292,7 @@ class RegimeResult:
 # Labelling helpers
 # --------------------------------------------------------------------------
 def _quadrant_name(trend: float, vol_pct: float) -> str:
-    """Turns a cluster centroid into something a human can argue with."""
+    """Converts a cluster centroid into a human-readable regime name."""
     if vol_pct >= 0.66:
         vol_band = "high"
     elif vol_pct >= 0.33:
@@ -349,27 +322,21 @@ def _quadrant_name(trend: float, vol_pct: float) -> str:
 
 def _order_and_name(labels: pd.Series, features: pd.DataFrame) -> tuple:
     """
-    Cluster IDs come out of every fitting algorithm in arbitrary order,
-    and they change between refits. That would make "regime 2" mean
-    something different in 2018 than in 2022, which quietly destroys any
-    regime-conditioned strategy.
-
-    Fix: always renumber so regime 0 is the calmest and the highest ID is
-    the most violent, then name each one from its centroid. Now IDs are
-    stable and comparable across methods, refits, and tickers.
-
-    Returns (renumbered_labels, names, remap) -- the remap is needed to
-    reorder any probability columns to match.
+    Cluster IDs come out of every fitting algorithm in arbitrary order
+    and change between refits, which would make "regime 2" mean something
+    different across refits. Renumbers so regime 0 is calmest and the
+    highest ID is most violent, then names each from its centroid.
+    Returns (renumbered_labels, names, remap); remap is needed to reorder
+    any probability columns to match.
     """
     valid = labels != UNKNOWN
     if not valid.any():
         return labels, {}, {}
 
     present = sorted(labels[valid].unique())
-    # Ordered on absolute realized volatility rather than its expanding
-    # percentile: the percentile is a rank against history, so an early
-    # moderately-choppy stretch can out-rank a later genuinely violent one
-    # and "regime 0 is the calmest" would stop being true in level terms.
+    # Ordered on absolute volatility rather than its expanding percentile,
+    # since percentile rank could let an early moderately-choppy stretch
+    # outrank a later violent one.
     vol_by_label = {
         k: features.loc[valid & (labels == k), "vol_20d"].mean()
         for k in present
@@ -391,9 +358,8 @@ def _order_and_name(labels: pd.Series, features: pd.DataFrame) -> tuple:
         )
         vols[new_id] = features.loc[rows, "vol_20d"].mean()
 
-    # Two clusters can land in the same quadrant -- typically two flavours
-    # of selloff that differ mainly in severity. Disambiguating with their
-    # actual volatility is more useful than tacking on "(2)".
+    # Two clusters can land in the same quadrant; disambiguate with actual
+    # volatility rather than an arbitrary suffix.
     counts = pd.Series(list(bases.values())).value_counts()
     names = {}
     for new_id, base in bases.items():
@@ -409,13 +375,9 @@ def smooth_labels(labels: pd.Series, method: str = "min_duration", min_duration:
                   probabilities: pd.DataFrame = None, ema_span: int = 5,
                   window: int = 5) -> pd.Series:
     """
-    Raw model labels flicker. A regime that lasts one day is not a regime,
-    it's noise, and trading every flicker converts a decent signal into a
-    transaction-cost machine.
-
-    Every method here is CAUSAL -- it uses past labels only. A centered
-    rolling filter would look far tidier on the chart and would be
-    lookahead bias.
+    Smooths raw model labels, which flicker day to day. Every method here
+    is causal -- it uses past labels only; a centered rolling filter
+    would look tidier but would be lookahead bias.
     """
     if method == "none":
         return labels
@@ -472,11 +434,7 @@ def smooth_labels(labels: pd.Series, method: str = "min_duration", min_duration:
 # The individual detection methods
 # --------------------------------------------------------------------------
 def _rules_labels(features: pd.DataFrame, valid_index: pd.Index) -> tuple:
-    """
-    Fully transparent baseline: two thresholds, four quadrants, zero
-    fitted parameters. Anything a fitted model does has to beat this, and
-    interns are often surprised by how rarely it does.
-    """
+    """Fully transparent baseline: two thresholds, four quadrants, zero fitted parameters."""
     sub = features.loc[valid_index]
     high_vol = sub["vol_percentile"] >= 0.70
     uptrend = sub["trend_60d"] > 0
@@ -494,14 +452,11 @@ def _rules_labels(features: pd.DataFrame, valid_index: pd.Index) -> tuple:
 def _supervised_labels(df: pd.DataFrame, X: pd.DataFrame, fit_index: pd.Index,
                        horizon: int, random_state: int) -> tuple:
     """
-    Regimes defined by what actually happened over the NEXT `horizon`
-    days, then learned as a mapping from today's features.
-
-    The forward look is confined to constructing training targets inside
-    the training window -- the same arrangement features.build_labels()
-    uses for the direction model, and legitimate for the same reason. It
-    stops being legitimate the moment fit_frac=1.0, which is why the
-    dashboard defaults this method to 0.6.
+    Regimes defined by what happened over the next `horizon` days, then
+    learned as a mapping from today's features. The forward look is
+    confined to constructing training targets inside the training window,
+    the same arrangement build_labels() uses for the direction model; it
+    stops being legitimate once fit_frac=1.0.
     """
     close = df["Close"]
     returns = close.pct_change()
@@ -601,22 +556,12 @@ def detect_regimes(
     features: pd.DataFrame = None,
 ) -> RegimeResult:
     """
-    Labels every day in `df` with a market regime.
-
-    fit_frac controls the honesty of the result. At 1.0 the model is fit
-    on all the data it then labels, so the labels embed knowledge of the
-    future -- fine for describing history, NOT fine for feeding a
-    backtest. Anything below 1.0 fits on the leading slice only, and
-    `causal` on the result records which you asked for. Defaults to 0.7
-    so the non-causal full-sample fit is something you opt into, not the
-    default you get by omitting the argument.
-
-    `fit_end` fixes the fit window by date instead of by fraction, and
-    takes precedence over `fit_frac` when supplied -- the model is fit on
-    every row on or before `fit_end`. Useful when you want the split to
-    land on a specific, memorable date rather than wherever `fit_frac`
-    happens to fall for this ticker's date range.
-
+    Labels every day in `df` with a market regime. At fit_frac=1.0 the
+    model is fit on all the data it then labels, which embeds knowledge
+    of the future -- valid for describing history, not for feeding a
+    backtest; below 1.0, `causal` on the result records that the fit used
+    only a leading slice. `fit_end` fixes the fit window by date instead
+    of by fraction and takes precedence over `fit_frac` when supplied.
     `rules` is always causal because it fits nothing.
     """
     if method not in REGIME_METHODS:
@@ -714,17 +659,10 @@ def detect_regimes_walk_forward(
     features: pd.DataFrame = None,
 ) -> RegimeResult:
     """
-    The honest way to label a history you intend to trade on.
-
-    Fit on everything up to date D, label the next `refit_every` days,
-    roll forward, repeat. No label is ever produced by a model that saw
-    the day it's labelling. The first `initial_train` rows get UNKNOWN --
-    you genuinely did not have a regime model then, and pretending
-    otherwise is the whole bias we're avoiding.
-
-    Compare this against detect_regimes(fit_frac=1.0) on the same data.
-    The full-sample version will look sharper and cleaner. That
-    difference is the lookahead bias, drawn to scale.
+    Fits on everything up to date D, labels the next `refit_every` days,
+    rolls forward, and repeats -- no label is ever produced by a model
+    that saw the day it's labelling. The first `initial_train` rows are
+    UNKNOWN, since no regime model existed for them yet.
     """
     if method in ("rules", "supervised"):
         # `rules` fits nothing, so refitting is a no-op; `supervised` has
@@ -759,9 +697,8 @@ def detect_regimes_walk_forward(
             n_regimes, "filter", random_state,
         )
 
-        # Renumber against the TRAINING rows only, so regime 0 keeps
-        # meaning "calmest" across every refit without consulting the
-        # out-of-sample days we're about to label.
+        # Renumber against training rows only, so regime 0 keeps meaning
+        # "calmest" without consulting the days about to be labelled.
         vol_by_label = {
             k: raw_features.loc[train_index[(chunk_ids.loc[train_index] == k).to_numpy()], "vol_20d"].mean()
             for k in sorted(chunk_ids.loc[train_index].unique())
@@ -808,13 +745,10 @@ def detect_regimes_walk_forward(
 # --------------------------------------------------------------------------
 def transition_matrix(labels: pd.Series, names: dict = None, normalize: bool = True) -> pd.DataFrame:
     """
-    P(tomorrow's regime | today's regime).
-
-    Read the diagonal first: those are the persistence probabilities, and
-    they should be high (0.9+ on daily data). A diagonal near 1/k means
-    the model isn't finding regimes, it's finding noise, and no amount of
-    downstream cleverness will fix that. 1/(1 - p_ii) is the expected
-    duration of regime i in days.
+    P(tomorrow's regime | today's regime). The diagonal holds the
+    persistence probabilities and should be high (0.9+ on daily data); a
+    value near 1/k means the model found noise, not regimes. 1/(1 - p_ii)
+    is the expected duration of regime i, in days.
     """
     valid = labels[labels != UNKNOWN]
     pairs = pd.DataFrame({"from": valid, "to": valid.shift(-1)}).dropna()
@@ -835,9 +769,8 @@ def transition_matrix(labels: pd.Series, names: dict = None, normalize: bool = T
 def regime_episodes(labels: pd.Series, names: dict = None) -> pd.DataFrame:
     """
     Every contiguous run of a single regime, with start, end and length.
-
-    Useful sanity check: if your "regimes" average four days, you have
-    not detected regimes. Real ones last weeks to months.
+    Regimes averaging a few days indicate noise, not detected regimes;
+    real ones last weeks to months.
     """
     valid = labels[labels != UNKNOWN]
     if valid.empty:
@@ -858,7 +791,7 @@ def regime_episodes(labels: pd.Series, names: dict = None) -> pd.DataFrame:
 
 
 def regime_stability(labels: pd.Series) -> dict:
-    """Headline numbers on how twitchy the labelling is."""
+    """Summary statistics on regime label stability."""
     episodes = regime_episodes(labels)
     valid_days = int((labels != UNKNOWN).sum())
     if episodes.empty or valid_days == 0:
@@ -877,12 +810,10 @@ def regime_stability(labels: pd.Series) -> dict:
 
 def regime_summary(result: RegimeResult, df: pd.DataFrame) -> pd.DataFrame:
     """
-    What the ASSET did inside each regime (not what a strategy did --
-    that's analytics.performance_by_regime).
-
-    This is the table to read before anything else. If your detected
-    regimes don't differ in return or volatility, they aren't regimes,
-    and conditioning a strategy on them cannot help.
+    What the asset did inside each regime (not what a strategy did -- see
+    analytics.performance_by_regime for that). If the regimes don't
+    differ in return or volatility, they aren't regimes, and conditioning
+    a strategy on them cannot help.
     """
     returns = df["Close"].pct_change()
     episodes = regime_episodes(result.labels, result.names)

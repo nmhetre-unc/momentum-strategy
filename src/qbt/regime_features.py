@@ -1,18 +1,10 @@
 """
-Rolling features that describe the market ENVIRONMENT rather than the
-direction of the next move.
-
-features.py answers "is tomorrow up?". This module answers a different
-question: "what kind of market are we in right now?" -- calm and
-trending, choppy and directionless, or violent and falling. Those are
-regimes, and a strategy that prints money in one of them can bleed out
-in another.
+Rolling features describing the market environment (calm/trending,
+choppy, or violent) rather than the direction of the next move.
 
 Every column here is point-in-time: the value on row t is built only
-from information available at day t's close. That matters more here than
-almost anywhere else in the project, because a regime label that
-secretly peeked at the future makes every downstream backtest look
-brilliant and be worthless. See the note on standardize_features().
+from information available at day t's close. See the note on
+standardize_features() for why this matters for regime detection.
 """
 
 import numpy as np
@@ -53,13 +45,9 @@ def realized_volatility(close: pd.Series, window: int = 20) -> pd.Series:
 
 def efficiency_ratio(close: pd.Series, window: int = 60) -> pd.Series:
     """
-    Kaufman's efficiency ratio: |net change| / sum(|daily changes|).
-
-    1.0 means the market walked in a straight line; 0.0 means it thrashed
-    around and ended where it started. This is the cleanest single
-    distinction between "trending" and "choppy", and it's the reason a
-    trend strategy can have a great Sharpe in one year and a terrible one
-    in the next with identical average volatility.
+    Kaufman's efficiency ratio: |net change| / sum(|daily changes|). 1.0
+    means the market walked in a straight line; 0.0 means it ended where
+    it started. The primary distinction between "trending" and "choppy".
     """
     net_move = (close - close.shift(window)).abs()
     path_length = close.diff().abs().rolling(window).sum()
@@ -74,10 +62,9 @@ def rolling_autocorrelation(close: pd.Series, window: int = 60, lag: int = 1) ->
 
 def parkinson_volatility(df: pd.DataFrame, window: int = 20) -> pd.Series:
     """
-    Range-based volatility estimator. Uses the intraday high-low spread,
-    which contains information a close-to-close estimate throws away --
-    a day that crashed 5% and recovered looks quiet to close-to-close vol
-    and correctly looks violent here.
+    Range-based volatility estimator, using the intraday high-low spread.
+    A day that crashed 5% and recovered looks quiet to close-to-close
+    volatility but correctly looks violent here.
     """
     log_range = np.log(df["High"] / df["Low"])
     variance = (log_range ** 2).rolling(window).mean() / (4 * np.log(2))
@@ -109,9 +96,8 @@ def build_regime_features(
     features["vol_20d"] = vol_short
     features["vol_ratio"] = vol_short / vol_long.replace(0, np.nan)
 
-    # Expanding (not full-sample) percentile rank -- on day t this only
-    # knows about days up to t. A full-sample rank would leak the future
-    # into what is supposed to be a point-in-time description of today.
+    # Expanding (not full-sample) percentile rank, so day t only knows
+    # about days up to t -- a full-sample rank would leak the future.
     features["vol_percentile"] = vol_short.expanding(min_periods=vol_window).rank(pct=True)
 
     # --- Trend: magnitude, position, and whether it's still accelerating ---
@@ -130,10 +116,10 @@ def build_regime_features(
     features["drawdown_252d"] = close / rolling_peak - 1
 
     # --- Asymmetry of risk: is the volatility one-sided? ---
-    # Root-mean-square of the negative returns over the RMS of all of
-    # them. Computed this way rather than as std(returns[returns < 0])
-    # because that version has a NaN in most windows -- rolling() needs
-    # `window` non-missing observations, and half the days are positive.
+    # RMS of negative returns over RMS of all returns. Computed this way
+    # rather than std(returns[returns < 0]) because that version is NaN
+    # in most windows, since rolling() needs `window` non-missing
+    # observations and half the days are positive.
     negative = returns.clip(upper=0)
     downside_rms = np.sqrt((negative ** 2).rolling(vol_window).mean())
     total_rms = np.sqrt((returns ** 2).rolling(vol_window).mean())
@@ -156,9 +142,9 @@ def build_regime_features(
         dollar_volume = (volume * close).replace(0, np.nan)
         features["illiquidity"] = np.log1p(returns.abs() / dollar_volume * 1e9).rolling(vol_window).mean()
 
-    # Infinities come from divisions where the denominator was ~0 in a
-    # degenerate stretch (e.g. a perfectly flat synthetic series). Treat
-    # them as missing rather than letting them poison a fitted model.
+    # Infinities come from near-zero denominators in a degenerate stretch
+    # (e.g. a flat synthetic series); treat them as missing rather than
+    # letting them poison a fitted model.
     return features.replace([np.inf, -np.inf], np.nan)
 
 
@@ -170,15 +156,11 @@ def standardize_features(
 ) -> pd.DataFrame:
     """
     Puts every feature on a comparable scale so a clustering model isn't
-    dominated by whichever column happens to have the biggest units.
-
-    method="expanding" (default) z-scores each column against only its
-    own past -- causal, and the right choice when the labels feed a
-    backtest. method="full" z-scores against the entire sample, which is
-    what most tutorials do and which quietly leaks the future: knowing
-    the sample-wide mean volatility is knowing something you could not
-    have known in 2015. It's kept here deliberately so the dashboard can
-    show interns the size of the difference.
+    dominated by whichever column has the largest units. method="expanding"
+    (default) z-scores each column against only its own past -- causal,
+    and the right choice when the labels feed a backtest. method="full"
+    z-scores against the entire sample, which leaks the future and is
+    kept only for comparison.
     """
     if method == "full":
         centered = features - features.mean()
@@ -195,14 +177,8 @@ def standardize_features(
 
 def reduce_dimensions(features: pd.DataFrame, n_components: int = 3, fit_rows: pd.Index = None):
     """
-    Optional PCA compression of the (correlated) regime features.
-
-    Most of these columns measure two or three underlying things --
-    "how violent" and "which way" -- wearing different hats. PCA makes
-    that explicit and often makes clusters cleaner. Returns
-    (components_df, fitted_pca) so the caller can inspect the loadings,
-    which is where the actual insight is.
-
+    Optional PCA compression of the (correlated) regime features. Returns
+    (components_df, fitted_pca) so the caller can inspect the loadings.
     `fit_rows` restricts the PCA fit to a subset of the index (e.g. the
     in-sample period) while still transforming everything.
     """

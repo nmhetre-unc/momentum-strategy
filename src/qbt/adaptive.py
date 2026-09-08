@@ -1,56 +1,18 @@
 """
-Regime-aware strategy wrappers.
+Regime-aware strategy wrappers. Each fixed strategy in strategies.py
+applies one rule to every day in history; these wrappers condition on
+regime instead, via four mechanisms: filtering (sit out bad regimes),
+switching (a different strategy per regime), re-parameterizing (same
+strategy, per-regime settings), and position sizing (scale by volatility
+or regime).
 
-Everything in strategies.py applies one fixed rule to every day in
-history. That is a bet that the market is one thing. It isn't -- see
-regime.py -- and the per-regime performance table is usually blunt about
-it: a trend strategy earns its whole return in the trending regime and
-gives a chunk of it back in the choppy one.
+Every function here returns a fractional position in [0, 1], unlike the
+binary output of strategies.py; run_backtest() handles both identically.
 
-The wrappers here act on that. There are four distinct mechanisms, and
-it is worth being clear which one you are using, because they fail in
-different ways:
-
-    1. FILTERING      keep the strategy, but sit out regimes where it
-                      historically lost. Cheapest and usually the most
-                      robust: you are removing a known-bad exposure, not
-                      predicting anything new.
-
-    2. SWITCHING      run a different strategy in each regime (trend in
-                      trending markets, mean-reversion in ranges). More
-                      powerful, more fragile -- you now need the regime
-                      label to be right AND the per-regime strategy
-                      choice to be stable.
-
-    3. RE-PARAMETERIZING
-                      same strategy, different settings per regime
-                      (faster moving averages when volatility is high).
-                      Subtle, and the easiest of the four to overfit,
-                      because every regime gives you a fresh set of
-                      parameters to tune.
-
-    4. POSITION SIZING
-                      keep the signal, scale the size by volatility or by
-                      regime. Often the single highest-value change in
-                      the whole project: it barely touches returns and
-                      substantially cuts drawdown, because it takes risk
-                      off before the drawdown happens rather than after.
-
-Every function here returns a position series in [0, 1] aligned to
-df.index -- the same interface strategies.py uses, except FRACTIONAL
-rather than strictly binary. backtest.run_backtest() handles both
-identically. That fractional output is why cost_bps exists: adaptive
-strategies trade more, and a comparison that ignores costs flatters them.
-
-THE HONESTY PROBLEM, and how it's handled. "Sit out the regimes where
-the strategy lost money" is trivially profitable if you're allowed to
-look at the whole history to decide which those were. That is not a
-strategy, it's a description of the past. So every `auto` choice here --
-which regimes to allow, which strategy to run where, how big to size --
-is learned ONLY from data up to `learn_frac` of the sample (default 0.6,
-deliberately earlier than walk_forward.py's 0.7 split), and then applied
-unchanged thereafter. describe_choices() shows you exactly what was
-learned, so you can check whether it still made sense afterwards.
+Every `auto` choice (which regimes to allow, which strategy to run
+where, how big to size) is learned only from data up to `learn_frac` of
+the sample (default 0.6) and applied unchanged thereafter;
+describe_choices() exposes what was learned.
 """
 
 import numpy as np
@@ -63,15 +25,12 @@ from qbt.regime import UNKNOWN, detect_regimes, detect_regimes_walk_forward
 from qbt.regime_features import realized_volatility
 from qbt.strategies import STRATEGIES
 
-# Strategies the `auto` selectors are allowed to choose between. The ML
-# strategy is deliberately excluded: it would be refit inside every
-# candidate evaluation, and its own train split interacts confusingly
-# with the learning split. Use ml_regime_conditional for that instead.
+# Strategies the `auto` selectors choose between. ml_direction is
+# excluded since it would be refit inside every candidate evaluation;
+# use ml_regime_conditional instead.
 AUTO_CANDIDATES = ("sma_crossover", "momentum", "mean_reversion")
 
-# A regime needs at least this many days in the learning window before we
-# will draw a conclusion about it. Below this, one good month decides the
-# whole rule.
+# Minimum days in the learning window before drawing a conclusion about a regime.
 MIN_LEARN_DAYS = 60
 
 
@@ -84,11 +43,10 @@ def _resolve_regimes(df: pd.DataFrame, regimes=None, regime_method: str = "hmm",
                      regime_walk_forward: bool = False):
     """
     Accepts either a precomputed RegimeResult / label Series, or the
-    parameters needed to detect regimes from scratch.
-
-    The dashboard passes a precomputed result (it's already on screen);
-    the CLI and walk_forward.py let it be computed here, which is what
-    keeps these wrappers usable as plain strategy_fn(df, **params).
+    parameters needed to detect regimes from scratch. The dashboard
+    passes a precomputed result; the CLI and walk_forward.py let it be
+    computed here, which keeps these wrappers usable as plain
+    strategy_fn(df, **params).
     """
     if regimes is not None:
         if hasattr(regimes, "labels"):
@@ -127,11 +85,9 @@ def _regime_sharpe_table(df: pd.DataFrame, labels: pd.Series, candidates,
                          learn_end, min_days: int = MIN_LEARN_DAYS) -> pd.DataFrame:
     """
     Sharpe ratio of each candidate strategy inside each regime, measured
-    ONLY on days up to learn_end.
-
-    This table is the evidence behind every automatic choice this module
-    makes, and describe_choices() surfaces it verbatim so the reasoning
-    can be argued with rather than trusted.
+    only on days up to learn_end. This is the evidence behind every
+    automatic choice this module makes; describe_choices() surfaces it
+    verbatim.
     """
     window = df.index <= learn_end
     rows = []
@@ -159,7 +115,7 @@ def _best_per_regime(table: pd.DataFrame, allow_flat: bool = True) -> dict:
     """
     Picks the highest-Sharpe candidate per regime from the learning
     table. A regime where nothing achieved a positive Sharpe maps to
-    'flat' -- not trading is a legitimate and underused choice.
+    'flat'.
     """
     choices = {}
     for regime_id, group in table.groupby("regime"):
@@ -193,17 +149,11 @@ def regime_filtered(df: pd.DataFrame, base: str = "sma_crossover", base_params: 
                     allowed_regimes=None, learn_frac: float = 0.6, **regime_kwargs) -> pd.Series:
     """
     Runs `base` normally, but forces the position flat in regimes it
-    isn't allowed to trade.
-
-    allowed_regimes=None (the default) learns the allow-list from the
-    first `learn_frac` of history: any regime where the base strategy had
-    a positive Sharpe there stays on. Pass an explicit tuple to test your
-    own hypothesis instead, which is the better exercise.
-
-    This is the most conservative of the four mechanisms and usually the
-    one that survives out-of-sample. It never invents a new position --
-    it only removes existing ones -- so the worst it can do is remove the
-    wrong ones.
+    isn't allowed to trade. allowed_regimes=None (default) learns the
+    allow-list from the first `learn_frac` of history, keeping any regime
+    where the base strategy had a positive Sharpe there; pass an explicit
+    tuple to test your own hypothesis instead. Only removes existing
+    positions, never invents new ones.
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
@@ -230,22 +180,13 @@ def regime_filtered(df: pd.DataFrame, base: str = "sma_crossover", base_params: 
 def regime_switch(df: pd.DataFrame, strategy_map: dict = None, candidates=AUTO_CANDIDATES,
                   learn_frac: float = 0.6, allow_flat: bool = True, **regime_kwargs) -> pd.Series:
     """
-    Runs whichever strategy suits the current regime.
-
-    The motivating case is the trend/mean-reversion pair: they are
-    designed to profit from opposite market behaviours, so a rule that
-    runs trend-following in trending regimes and RSI reversion in ranges
-    should, in principle, capture both.
-
-    In practice this is where interns first meet the gap between "should
-    in principle" and "does". Two things eat the gains: regime labels
-    arrive late (smoothing costs you the first days of every new regime,
-    which is when the move is biggest), and switching strategies means
-    flipping the whole position, which costs real money. Run it with
-    cost_bps=10 before drawing conclusions.
-
-    strategy_map={0: "momentum", 1: "flat", ...} pins the mapping
-    explicitly; None learns it from the first `learn_frac` of history.
+    Runs whichever strategy suits the current regime, motivated by the
+    trend/mean-reversion pairing (trend-following in trending regimes,
+    RSI reversion in ranges). Regime labels arrive late and switching
+    flips the whole position, both of which cost real money -- run with
+    cost_bps=10 before drawing conclusions. strategy_map={0: "momentum",
+    ...} pins the mapping explicitly; None learns it from the first
+    `learn_frac` of history.
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
@@ -269,17 +210,11 @@ def regime_switch(df: pd.DataFrame, strategy_map: dict = None, candidates=AUTO_C
 def regime_parameters(df: pd.DataFrame, base: str = "sma_crossover", param_map: dict = None,
                       **regime_kwargs) -> pd.Series:
     """
-    One strategy, different parameters per regime.
-
-    The default map shortens the trend windows as volatility rises, on
-    the standard argument that high-volatility markets move faster and a
-    200-day average is hopelessly slow in one. That argument is plausible
-    and completely untested -- testing it is the point.
-
-    Be aware of what you're doing to your degrees of freedom here. Three
-    regimes times two window parameters is six numbers fitted to one
-    price history. The equity curve will improve. Whether anything real
-    improved is a separate question, and walk-forward is how you answer it.
+    One strategy, different parameters per regime. The default map
+    shortens trend windows as volatility rises. Three regimes times two
+    window parameters is six numbers fitted to one price history; the
+    equity curve will improve regardless, and walk-forward is how you
+    check whether anything real did.
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
@@ -298,9 +233,8 @@ def regime_parameters(df: pd.DataFrame, base: str = "sma_crossover", param_map: 
 def _default_param_map(base: str, regime_ids: list) -> dict:
     """
     Faster settings for higher-volatility regimes. Regime IDs are ordered
-    by volatility (regime.py guarantees this), so index 0 is the calmest
-    and the last is the most violent -- which is what makes a default
-    like this expressible at all.
+    by volatility (0 = calmest), which is what makes a default like this
+    expressible.
     """
     n = max(len(regime_ids), 1)
     presets = {
@@ -330,28 +264,15 @@ def volatility_targeted(df: pd.DataFrame, base: str = "sma_crossover", base_para
                         target_vol: float = 0.15, vol_window: int = 20,
                         max_leverage: float = 1.0, **_ignored_regime_kwargs) -> pd.Series:
     """
-    Keeps the base signal, but scales the position so that expected
-    volatility stays near `target_vol` annualized.
-
-    position = signal x clip(target_vol / trailing_realized_vol, 0, max_leverage)
-
-    No regime model is involved, which is exactly why it's here: it is
-    the cheap version of the same idea. Volatility is persistent, so
-    trailing realized vol is a decent forecast of tomorrow's, and sizing
-    inversely to it takes risk off going INTO turbulence rather than
-    after the loss has landed. On most equity data this leaves returns
-    roughly intact and visibly reduces max drawdown.
-
-    max_leverage caps the multiplier at 1.0 by default, so output stays
-    in [0, 1] and the strategy is never more exposed than the unscaled
-    version. Raising it above 1.0 means borrowing, with all that implies.
-
+    Keeps the base signal, but scales the position so expected volatility
+    stays near `target_vol` annualized:
+    position = signal x clip(target_vol / trailing_realized_vol, 0, max_leverage).
     The trailing vol window ends at day t and the whole signal is shifted
     forward a day in run_backtest(), so nothing here sees the future.
-
-    Regime keyword arguments are accepted and ignored, so this can be
-    dropped into any comparison alongside the regime-aware wrappers. That
-    it needs none of them is the point: it is the control group.
+    max_leverage caps the multiplier at 1.0 by default, keeping output in
+    [0, 1]; above 1.0 means borrowing. Regime keyword arguments are
+    accepted and ignored, so this drops into any comparison alongside the
+    regime-aware wrappers unchanged.
     """
     signal = _base_signal(df, base, base_params)
     trailing_vol = realized_volatility(df["Close"], vol_window)
@@ -366,13 +287,11 @@ def volatility_targeted(df: pd.DataFrame, base: str = "sma_crossover", base_para
 def regime_sized(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict = None,
                  size_map: dict = None, **regime_kwargs) -> pd.Series:
     """
-    Keeps the base signal, but sets position size per regime.
-
-    The default sizes inversely to each regime's own volatility,
-    normalized so the calmest regime gets a full position. It is the
-    discrete cousin of volatility_targeted(): coarser, but it changes
-    size only at regime boundaries rather than every day, which makes it
-    much cheaper to trade and much easier to explain to a human.
+    Keeps the base signal, but sets position size per regime, sized
+    inversely to each regime's own volatility and normalized so the
+    calmest regime gets a full position. The discrete cousin of
+    volatility_targeted(): coarser, but changes size only at regime
+    boundaries, which is cheaper to trade.
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
@@ -403,17 +322,10 @@ def adaptive_ensemble(df: pd.DataFrame, candidates=AUTO_CANDIDATES, learn_frac: 
                       max_leverage: float = 1.0, allow_flat: bool = True,
                       **regime_kwargs) -> pd.Series:
     """
-    Regime-based strategy switching, volatility-targeted on top.
-
-    This is the "full" adaptive system and the natural thing to compare
-    against a plain buy-and-hold and against each single mechanism on its
-    own. Compare it against all of them, because stacking mechanisms
-    stacks their assumptions too -- and the usual finding is that the
-    volatility targeting did most of the work while the switching added
-    complexity and turnover.
-
-    That finding, if it's what you get, is the correct answer to report.
-    Simpler explanations of the same result are worth more.
+    Regime-based strategy switching, with the result volatility-targeted
+    on top. Combines the switching and sizing mechanisms; compare against
+    each individually, since stacking mechanisms stacks their assumptions
+    too.
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
@@ -437,11 +349,9 @@ def ml_regime_conditional(df: pd.DataFrame, train_frac: float = 0.7, model_type:
                           regime_mode: str = "conditional", **regime_kwargs) -> pd.Series:
     """
     The ML direction model, told which regime it's in.
-
     regime_mode="feature" gives one model the regime as an input column;
-    "conditional" fits a separate model per regime. See the module
-    docstring in ml_strategy.py for why the second one is a sharper knife
-    than it looks.
+    "conditional" fits a separate model per regime -- see qbt/ml.py's
+    module docstring for the overfitting tradeoff.
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     return ml_direction_signal(
@@ -458,10 +368,8 @@ def describe_choices(df: pd.DataFrame, candidates=AUTO_CANDIDATES, learn_frac: f
     """
     Returns the learning-window evidence and the resulting per-regime
     choice, so an automatic decision can be inspected instead of trusted.
-
-    Read `table` before `choices`. If the winning strategy in a regime
-    beat the runner-up by 0.05 of Sharpe over 80 days, the "choice" is a
-    coin flip dressed as a decision, and it will not repeat.
+    Read `table` before `choices`: a winning margin of 0.05 Sharpe over
+    80 days is not statistically meaningful.
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
@@ -481,17 +389,10 @@ def describe_choices(df: pd.DataFrame, candidates=AUTO_CANDIDATES, learn_frac: f
 def describe_filter(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict = None,
                     learn_frac: float = 0.6, **regime_kwargs) -> dict:
     """
-    The allow-list regime_filtered() would learn, plus the evidence.
-
-    Worth calling explicitly, because there is one outcome that looks
-    like a bug and isn't: if the base strategy had a negative Sharpe in
-    EVERY regime during the learning window, the allow-list comes back
-    empty and the strategy stays flat forever, returning exactly 0%.
-
-    That is the correct output. It means "on this data, over this window,
-    there was no market condition in which this strategy worked." Not
-    trading is the right response to that, and a framework that quietly
-    traded anyway would be the one with the bug.
+    The allow-list regime_filtered() would learn, plus the evidence. If
+    the base strategy had a negative Sharpe in every regime during the
+    learning window, the allow-list comes back empty and the strategy
+    stays flat for the whole period -- this is correct output, not a bug.
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels

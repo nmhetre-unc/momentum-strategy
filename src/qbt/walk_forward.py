@@ -1,20 +1,9 @@
 """
 Checks whether a strategy's performance holds up on data it wasn't
-"tuned" on -- the single biggest thing separating a rigorous backtest
-from one that's secretly overfit to one lucky period.
-
-Three levels of rigour live here, in increasing order:
-
-    evaluate_out_of_sample()  one split. Cheap, and enough to catch
-                              blatant overfitting.
-    rolling_walk_forward()    many consecutive out-of-sample folds.
-                              Catches the subtler failure a single split
-                              misses -- a strategy that works until 2018
-                              and never again, whose one 30% holdout
-                              happened to land in a friendly stretch.
-    evaluate_with_regimes()   the out-of-sample result, split by market
-                              regime. Answers *where* it broke, not just
-                              *that* it broke.
+fitted on. Three entry points, in increasing rigor: evaluate_out_of_sample()
+(one split), rolling_walk_forward() (many consecutive out-of-sample
+folds), and evaluate_with_regimes() (the out-of-sample result, split by
+market regime).
 """
 
 import numpy as np
@@ -27,14 +16,10 @@ from qbt.analytics import full_report, performance_by_regime
 def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.7,
                            cost_bps: float = 5.0, **strategy_params) -> dict:
     """
-    Computes the signal and backtest ONCE on the full dataset (so rolling
-    windows have full history available from the start), then splits the
-    result chronologically: the first `split_frac` of days is "in-sample,"
-    the rest is "out-of-sample." Reports full metrics for each separately.
-
-    A strategy whose Sharpe ratio collapses (or flips negative) out-of-sample
-    is a strategy that was fit to noise in the in-sample period, not one
-    that captures something real.
+    Computes the signal and backtest once on the full dataset, then
+    splits the result chronologically at `split_frac`: everything before
+    is in-sample, everything after is out-of-sample. Reports full metrics
+    for each half separately.
     """
     signal = strategy_fn(df, **strategy_params)
     result = run_backtest(df, signal, cost_bps=cost_bps)
@@ -57,30 +42,12 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
                          **strategy_params) -> dict:
     """
     Slides a train/test window through history and evaluates each
-    out-of-sample block separately.
-
-    Why bother when evaluate_out_of_sample() already exists: one split
-    gives you ONE out-of-sample number, and one number cannot distinguish
-    "this works" from "this got lucky in one three-year window." Ten
-    consecutive out-of-sample folds give you a distribution. What you
-    want to see is most blocks positive and the bad ones survivable. What
-    you usually see, on a strategy that looked great on a single split,
-    is two spectacular blocks and eight mediocre ones -- meaning the
-    headline Sharpe belongs to a specific market episode, not to the
-    strategy.
-
-    Note on the strategies in this project: the signal is generated once
-    on the full series, then sliced. That's correct for the rule-based
-    strategies, whose parameters are fixed and whose rolling windows are
-    already backward-looking. For fitted strategies (ml_direction, and
-    the auto-selecting wrappers in adaptive.py) it is an approximation --
-    they fit once on their own internal split rather than refitting per
-    fold. A production framework would refit every fold; the honest
-    description of this one is "fixed model, rolling evaluation", and the
-    `fitted_note` in the returned dict says so.
-
-    Returns per-fold metrics plus a stitched equity curve made only of
-    out-of-sample days -- the closest thing here to a paper-trading record.
+    out-of-sample block separately. The signal is generated once on the
+    full series, then sliced: correct for the rule-based strategies, but
+    an approximation for fitted strategies (ml_direction, and the adaptive
+    wrappers), which fit once rather than refitting per fold -- the
+    returned `fitted_note` states this. Returns per-fold metrics plus a
+    stitched equity curve of only the out-of-sample days.
     """
     signal = strategy_fn(df, **strategy_params)
     result = run_backtest(df, signal, cost_bps=cost_bps)
@@ -120,9 +87,8 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
         "oos_equity": (1 + stitched).cumprod(),
         "oos_returns": stitched,
         "oos_report": full_report(result.loc[stitched.index]),
-        # Consistency matters more than the average. A strategy with mean
-        # Sharpe 0.4 across 12 folds, 10 of them positive, is a far better
-        # bet than one averaging 0.8 off two enormous folds.
+        # Median and pct-positive are reported alongside the mean since
+        # consistency across folds matters as much as the average.
         "mean_sharpe": float(sharpes.mean()),
         "median_sharpe": float(sharpes.median()),
         "sharpe_std": float(sharpes.std()),
@@ -138,29 +104,13 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
 def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: float = 0.7,
                           cost_bps: float = 5.0, strategy_params: dict = None) -> dict:
     """
-    Walk-forward validation, with the in-sample and out-of-sample results
-    each broken down by market regime.
-
-    This is the diagnostic that turns "it stopped working" into something
-    actionable. There are two very different stories behind a Sharpe that
-    halves out-of-sample:
-
-      (a) per-regime performance is unchanged, but the MIX of regimes
-          shifted -- the out-of-sample period simply contained more of
-          the regime this strategy dislikes. The strategy is intact; your
-          expectations were built on a biased sample of history.
-
-      (b) per-regime performance itself deteriorated -- it now loses
-          money in the regime it used to profit from. That is real decay,
-          and no amount of regime timing fixes it.
-
-    Compare the `regime_mix` shares between the two periods first. That
-    single comparison usually settles which story you're in.
-
-    `strategy_params` is an explicit dict rather than **kwargs on purpose:
-    the adaptive wrappers themselves take a `regimes` argument, and with
-    **kwargs that would collide with this function's own `regimes`
-    parameter the moment you evaluated one of them.
+    Walk-forward validation with the in-sample and out-of-sample results
+    each broken down by market regime, so a Sharpe drop can be attributed
+    to either a shift in regime mix or genuine per-regime decay -- compare
+    `regime_mix` between the two periods first. `strategy_params` is an
+    explicit dict rather than **kwargs because the adaptive wrappers take
+    a `regimes` argument themselves, which would collide with this
+    function's own `regimes` parameter under **kwargs.
     """
     labels = regimes.labels if hasattr(regimes, "labels") else regimes
     names = getattr(regimes, "names", None)
@@ -193,19 +143,12 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
 def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0.7,
                        cost_bps: float = 5.0) -> pd.DataFrame:
     """
-    Runs several strategies over identical data and returns one table of
-    in-sample vs out-of-sample metrics.
-
-    Comparing strategies fairly is harder than it looks, and this
-    function exists to remove the easy mistakes: same ticker, same dates,
-    same costs, same split, same metrics, all computed the same way. What
-    it cannot remove is selection bias -- if you compare twenty
-    strategies and report the best one's out-of-sample Sharpe, that
-    number is itself an in-sample result, because you used the
-    out-of-sample data to choose. The honest report is the whole table.
-
+    Runs several strategies over identical data, dates, costs and split,
+    and returns one table of in-sample vs out-of-sample metrics.
     `strategies` maps a display name to either a callable or a
-    (callable, params_dict) tuple.
+    (callable, params_dict) tuple. Selecting the best out-of-sample
+    Sharpe from this table is itself an in-sample result, since the
+    out-of-sample data was used to choose it -- report the whole table.
     """
     rows = []
     for name, entry in strategies.items():

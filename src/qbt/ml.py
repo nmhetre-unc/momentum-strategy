@@ -3,37 +3,18 @@ ML-driven direction strategy: trains a classifier on historical features
 to predict next-day direction, then converts predictions into the same
 long/flat signal interface every other strategy in this project uses.
 
-IMPORTANT (overfitting risk): predictions on the portion of data the
-model was TRAINED on are in-sample and will look better than they
-honestly should. This strategy's train_frac defaults to 0.7, matching
-walk_forward.py's default split, specifically so that running this
-strategy through evaluate_out_of_sample() gives an honest read on the
-out-of-sample 30% -- that's the only part of this strategy's performance
-that should be trusted or quoted.
+Predictions on the training portion are in-sample and will look better
+than they honestly should; train_frac defaults to 0.7 to match
+walk_forward.py's default split, so evaluate_out_of_sample() gives an
+honest read on the held-out 30%.
 
-REGIME-AWARE MODELS (added alongside regime.py). Passing a `regimes`
-label series switches on one of two ways of telling the model what kind
-of market it is in:
-
-    regime_mode="feature"      one model, with the regime one-hot encoded
-                               as extra input columns. The model can
-                               learn "in a crisis, ignore momentum" if
-                               the data supports it. Costs a few
-                               parameters; keeps all the training rows.
-
-    regime_mode="conditional"  a SEPARATE model per regime, each trained
-                               only on days in that regime. Maximum
-                               flexibility -- and a direct route to
-                               overfitting, because a 3-regime split
-                               leaves each model roughly a third of the
-                               data while the parameter count stays the
-                               same. Regimes with too little history fall
-                               back to a model fitted on everything;
-                               model_report() tells you which did.
-
-Which is better is an empirical question, and a genuinely good exercise.
-The honest answer on index data is usually "neither beats plain logistic
-regression", and finding that out yourself is worth more than being told.
+Passing a `regimes` label series switches on regime awareness:
+regime_mode="feature" one-hot encodes the regime as extra input columns
+into a single model. regime_mode="conditional" trains a separate model
+per regime, which increases flexibility but also overfitting risk since
+each model sees a fraction of the data at the same parameter count;
+regimes with too little history fall back to a model fitted on
+everything, and model_report() reports which did.
 """
 
 import numpy as np
@@ -60,9 +41,8 @@ MIN_REGIME_TRAIN_ROWS = 150
 
 def _regime_dummies(regimes: pd.Series, index: pd.Index) -> pd.DataFrame:
     """
-    One-hot encodes regime labels. Unknown (-1) rows become all-zeros,
-    which is the honest encoding of "we don't know what regime this is"
-    rather than silently lumping them in with regime 0.
+    One-hot encodes regime labels. Unknown (-1) rows become all-zeros
+    rather than being lumped in with regime 0.
     """
     aligned = regimes.reindex(index).fillna(-1).astype(int)
     present = sorted(r for r in aligned.unique() if r >= 0)
@@ -123,12 +103,9 @@ def train_regime_conditional_models(df: pd.DataFrame, train_frac: float = 0.7,
     """
     One model per regime, each fitted only on training-period days in
     that regime, plus a global fallback for regimes without enough
-    history to justify their own.
-
-    The data-splitting cost is real and worth stating plainly: with 2,500
-    rows, a 70% train split and 3 regimes, each model gets roughly 580
-    rows to fit a dozen features on. That is exactly how a "smarter"
-    model ends up generalizing worse than the dumb one it replaced.
+    history to justify their own. Splitting the data this way reduces the
+    rows available per model at the same parameter count, which increases
+    overfitting risk.
     """
     if regimes is None:
         raise ValueError("train_regime_conditional_models() needs a regime label series.")
@@ -145,9 +122,8 @@ def train_regime_conditional_models(df: pd.DataFrame, train_frac: float = 0.7,
     for regime_id in sorted(r for r in train_data["regime"].unique() if r >= 0):
         subset = train_data[train_data["regime"] == regime_id]
         train_counts[int(regime_id)] = len(subset)
-        # A model needs enough rows AND both classes present -- a regime
-        # where every training day was an up day can't teach a classifier
-        # anything except "always long".
+        # Needs enough rows AND both classes present; a regime where every
+        # training day was an up day can only teach "always long".
         if len(subset) >= min_train_rows and subset["label"].nunique() > 1:
             model = MODEL_TYPES[model_type]()
             model.fit(subset[feature_cols], subset["label"])
@@ -208,15 +184,10 @@ def _feature_importance(model, feature_cols: list, model_type: str) -> dict:
 def model_report(df: pd.DataFrame, train_frac: float = 0.7, model_type: str = "logistic",
                  regimes: pd.Series = None, regime_mode: str = "feature") -> dict:
     """
-    Diagnostics on the MODEL itself (accuracy, feature importance) --
+    Diagnostics on the model itself (accuracy, feature importance) --
     separate from the trading-strategy metrics in analytics.py, which
-    should be read from evaluate_out_of_sample(), not from here.
-
-    With regimes supplied the report gains a per-regime accuracy
-    breakdown, which is often the most informative table in the whole
-    dashboard: it shows whether an unimpressive 51% overall model is 56%
-    in one regime and 46% in another (worth conditioning on) or 51%
-    everywhere (nothing there to condition on).
+    should be read from evaluate_out_of_sample() instead. With `regimes`
+    supplied, the report also includes a per-regime accuracy breakdown.
     """
     conditional = regimes is not None and regime_mode == "conditional"
 
@@ -243,10 +214,8 @@ def model_report(df: pd.DataFrame, train_frac: float = 0.7, model_type: str = "l
         "test_accuracy": accuracy_score(test_labels, test_pred),
         "test_confusion_matrix": confusion_matrix(test_labels, test_pred).tolist(),
         "feature_importance": importance,
-        # Accuracy a model that always predicts the majority class would
-        # get. Test accuracy at or below this means the model added
-        # nothing at all -- and on daily equity data the base rate is
-        # around 53%, which is why "54% accuracy!" is not the win it looks.
+        # Accuracy a model predicting only the majority class would get;
+        # test accuracy at or below this means the model added nothing.
         "test_base_rate": float(max(test_labels.mean(), 1 - test_labels.mean())),
         "regime_mode": regime_mode if regimes is not None else None,
     }

@@ -1,6 +1,5 @@
 """
-Turns a backtest result into risk-adjusted performance metrics -- the
-layer that separates "it made money" from "here's a rigorous evaluation."
+Computes risk-adjusted performance metrics from a backtest result.
 """
 
 import numpy as np
@@ -41,11 +40,10 @@ def sortino_ratio(daily_returns: pd.Series, risk_free_rate: float = 0.0) -> floa
 
 def drawdown_series(equity_curve: pd.Series) -> pd.Series:
     """
-    The full peak-to-trough decline at every point in time, as a negative
-    fraction (e.g. -0.23 = -23% below the running peak so far). This is
-    the single source of truth for the drawdown formula -- max_drawdown()
-    below and plot_drawdown() in visualize.py both call this rather than
-    each recomputing the same formula independently.
+    Peak-to-trough decline at every point in time, as a negative fraction
+    (e.g. -0.23 = -23% below the running peak). Canonical source for the
+    drawdown formula; max_drawdown() and visualize.plot_drawdown() both
+    call this rather than recomputing it.
     """
     running_max = equity_curve.cummax()
     return (equity_curve - running_max) / running_max
@@ -58,12 +56,11 @@ def max_drawdown(equity_curve: pd.Series) -> float:
 
 def full_report(result: pd.DataFrame) -> dict:
     """
-    Recomputes a normalized equity curve (always starting at 1.0) from
-    `strategy_return`, rather than trusting result['equity_curve'] directly.
-    This makes full_report() safe to call on an arbitrary date-sliced
-    subset of a backtest result -- e.g. an out-of-sample period that
-    doesn't start at the beginning of the original backtest -- which is
-    exactly how walk_forward.py uses it.
+    Recomputes a normalized equity curve (starting at 1.0) from
+    `strategy_return` rather than trusting result['equity_curve']
+    directly, so this is safe to call on an arbitrary date-sliced subset
+    of a backtest result -- e.g. an out-of-sample period -- which is how
+    walk_forward.py uses it.
     """
     strategy_return = result["strategy_return"].fillna(0)
     equity = (1 + strategy_return).cumprod()
@@ -76,9 +73,9 @@ def full_report(result: pd.DataFrame) -> dict:
         "total_return": equity.iloc[-1] - 1,
         "num_trades": int(trades),
         "win_rate": win_rate,
-        # exposure/turnover were added for the adaptive strategies, which
-        # hold fractional positions -- num_trades alone can't tell you
-        # whether a strategy was 100% invested or 10% invested.
+        # exposure/turnover matter for adaptive strategies with fractional
+        # positions, where num_trades alone can't distinguish 100% invested
+        # from 10% invested.
         "exposure": exposure(result["position"]),
         "turnover": turnover(result["position"]),
         "cagr": cagr(equity),
@@ -90,10 +87,9 @@ def full_report(result: pd.DataFrame) -> dict:
 
 
 def exposure(position: pd.Series) -> float:
-    """Fraction of the period actually holding risk. A strategy with a
-    great Sharpe and 8% exposure is a different animal from one with the
-    same Sharpe and 95% exposure -- the first is mostly cash and the
-    number is built on very few observations."""
+    """Fraction of the period spent holding a nonzero position. Distinguishes
+    a Sharpe earned at 8% exposure (mostly cash, few observations) from the
+    same Sharpe at 95% exposure."""
     if len(position) == 0:
         return 0.0
     return float(position.abs().mean())
@@ -101,10 +97,10 @@ def exposure(position: pd.Series) -> float:
 
 def turnover(position: pd.Series) -> float:
     """
-    Total position change per year, in units of "full position turned
-    over". num_trades counts discrete flips, which under-describes an
-    adaptive strategy that continuously resizes; turnover captures what
-    the position actually cost to maintain.
+    Total position change per year, in units of a full position turned
+    over. Captures trading cost for continuously-resizing adaptive
+    strategies, where num_trades (which counts discrete flips) understates
+    activity.
     """
     if len(position) < 2:
         return 0.0
@@ -115,21 +111,11 @@ def turnover(position: pd.Series) -> float:
 def performance_by_regime(result: pd.DataFrame, labels: pd.Series, names: dict = None) -> pd.DataFrame:
     """
     Splits a backtest result by market regime and reports the full metric
-    set inside each one.
-
-    This is the table that turns "my strategy has a Sharpe of 0.6" into
-    something a quant can actually act on. A trend strategy will
-    typically show a strong positive Sharpe in the trending regime and a
-    negative one in the choppy regime; the blended 0.6 describes neither
-    and hides the fact that you could simply not trade the bad one.
-
-    A day's return is attributed to the regime in force ON that day --
-    the day the position was held and the P&L was earned. The position
-    itself was decided the day before (backtest.py shifts signals
-    forward), so no future information enters the attribution.
-
-    Read the `days` column before believing any row: 40 days in a regime
-    produces a Sharpe ratio with an enormous error bar around it.
+    set inside each one. A day's return is attributed to the regime in
+    force on that day; the position itself was decided the day before
+    (backtest.py shifts signals forward), so no future information enters
+    the attribution. Regimes with few days produce Sharpe ratios with wide
+    error bars -- check the `days` column before trusting any row.
     """
     labels = labels.reindex(result.index).fillna(-1).astype(int)
     strategy_return = result["strategy_return"].fillna(0)
@@ -143,10 +129,9 @@ def performance_by_regime(result: pd.DataFrame, labels: pd.Series, names: dict =
         if segment_returns.empty:
             continue
 
-        # Chain the in-regime days together into one equity curve. The
-        # gaps (days spent in other regimes) are skipped, not filled --
-        # this measures "what happens while we're in this regime",
-        # not a tradeable standalone strategy.
+        # Chains in-regime days into one equity curve; gaps (other regimes)
+        # are skipped, not filled, since this measures performance while
+        # in the regime, not a standalone tradeable strategy.
         equity = (1 + segment_returns).cumprod()
         nonzero = segment_returns[segment_returns != 0]
 
@@ -169,11 +154,9 @@ def performance_by_regime(result: pd.DataFrame, labels: pd.Series, names: dict =
 
 def benchmark_by_regime(result: pd.DataFrame, labels: pd.Series, names: dict = None) -> pd.DataFrame:
     """
-    The same split applied to buy-and-hold, so a strategy's per-regime
-    numbers can be read against what simply holding the asset did in that
-    regime. Beating a flat Sharpe in a crisis regime is easy if the
-    benchmark was down 60%; this column is what stops that from looking
-    like skill.
+    Applies the same regime split to buy-and-hold, so a strategy's
+    per-regime numbers can be read against simply holding the asset in
+    that regime.
     """
     benchmark = result.copy()
     benchmark["strategy_return"] = result["daily_return"]

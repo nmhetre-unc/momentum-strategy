@@ -13,29 +13,14 @@ def run_backtest(
     regimes: pd.Series = None,
 ) -> pd.DataFrame:
     """
-    Signal is shifted forward by 1 day before being applied: you can only
-    act on a signal the day AFTER it's generated, using that day's close.
-    Skipping this shift is the single most common way to accidentally
-    build a backtest with lookahead bias.
-
-    `signal` may be binary (1 = long, 0 = flat), which is what every
-    function in strategies.py returns, or fractional in [0, 1], which is
-    what the volatility-targeting and regime-sizing wrappers in
-    adaptive.py return. The arithmetic is identical either way.
-
-    `cost_bps` charges a one-way transaction cost, in basis points, on
-    every unit of position change -- so flipping 0 -> 1 costs cost_bps
-    and resizing 0.4 -> 0.5 costs a tenth of it. It defaults to 5.0,
-    a realistic floor for liquid ETFs, because a frictionless backtest
-    systematically flatters high-turnover and adaptive strategies: they
-    buy their improved risk profile with extra trading, and at 5-10bps
-    round-trip a lot of apparent edge quietly disappears. That
-    disappearance is a finding, not a nuisance. Pass 0.0 explicitly for
-    the frictionless comparison.
-
-    `regimes` is optional; when supplied, its labels are carried along in
-    the result so analytics.performance_by_regime() can split the P&L up
-    afterwards without needing to re-align anything.
+    Shifts `signal` forward by one day before applying it, so a position
+    can only act on the close after it was generated; skipping this
+    shift is the most common way to introduce lookahead bias. `signal`
+    may be binary (1/0) or fractional in [0, 1] -- the arithmetic is the
+    same either way. `cost_bps` charges a one-way cost per unit of
+    position change (default 5.0; pass 0.0 for gross returns), and
+    `regimes`, if supplied, is carried into the result for later
+    per-regime attribution.
     """
     daily_return = df["Close"].pct_change()
     position = signal.reindex(df.index).shift(1).fillna(0)
