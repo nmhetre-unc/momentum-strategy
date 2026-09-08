@@ -53,8 +53,9 @@ def main():
                          help="Save equity curve and drawdown charts as PNG files")
     parser.add_argument("--model-report", action="store_true",
                          help="For --strategy ml_direction: print train/test accuracy and feature importance")
-    parser.add_argument("--cost-bps", type=float, default=0.0,
-                         help="Transaction cost in basis points per unit of position change (try 5)")
+    parser.add_argument("--cost-bps", type=float, default=5.0,
+                         help="Transaction cost in basis points per unit of position change. "
+                              "Defaults to 5bps one-way; pass --cost-bps 0 for gross returns.")
     parser.add_argument("--regimes", action="store_true",
                          help="Detect market regimes and break performance down by regime")
     parser.add_argument("--regime-method", default="hmm", choices=REGIME_METHODS)

@@ -24,7 +24,8 @@ from qbt.backtest import run_backtest
 from qbt.analytics import full_report, performance_by_regime
 
 
-def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.7, **strategy_params) -> dict:
+def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.7,
+                           cost_bps: float = 5.0, **strategy_params) -> dict:
     """
     Computes the signal and backtest ONCE on the full dataset (so rolling
     windows have full history available from the start), then splits the
@@ -36,7 +37,7 @@ def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.
     that captures something real.
     """
     signal = strategy_fn(df, **strategy_params)
-    result = run_backtest(df, signal)
+    result = run_backtest(df, signal, cost_bps=cost_bps)
 
     split_idx = int(len(result) * split_frac)
     split_date = result.index[split_idx]
@@ -52,7 +53,7 @@ def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.
 
 
 def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
-                         test_days: int = 126, cost_bps: float = 0.0,
+                         test_days: int = 126, cost_bps: float = 5.0,
                          **strategy_params) -> dict:
     """
     Slides a train/test window through history and evaluates each
@@ -135,7 +136,7 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
 
 
 def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: float = 0.7,
-                          cost_bps: float = 0.0, strategy_params: dict = None) -> dict:
+                          cost_bps: float = 5.0, strategy_params: dict = None) -> dict:
     """
     Walk-forward validation, with the in-sample and out-of-sample results
     each broken down by market regime.
@@ -190,7 +191,7 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
 
 
 def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0.7,
-                       cost_bps: float = 0.0) -> pd.DataFrame:
+                       cost_bps: float = 5.0) -> pd.DataFrame:
     """
     Runs several strategies over identical data and returns one table of
     in-sample vs out-of-sample metrics.

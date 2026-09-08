@@ -9,7 +9,7 @@ import pandas as pd
 def run_backtest(
     df: pd.DataFrame,
     signal: pd.Series,
-    cost_bps: float = 0.0,
+    cost_bps: float = 5.0,
     regimes: pd.Series = None,
 ) -> pd.DataFrame:
     """
@@ -25,12 +25,13 @@ def run_backtest(
 
     `cost_bps` charges a one-way transaction cost, in basis points, on
     every unit of position change -- so flipping 0 -> 1 costs cost_bps
-    and resizing 0.4 -> 0.5 costs a tenth of it. It defaults to 0.0 so
-    existing results are unchanged, but it is worth turning on before
-    believing any adaptive strategy: adaptive logic buys its improved
-    risk profile with extra trading, and at 5-10bps round-trip a lot of
-    apparent edge quietly disappears. That disappearance is a finding,
-    not a nuisance.
+    and resizing 0.4 -> 0.5 costs a tenth of it. It defaults to 5.0,
+    a realistic floor for liquid ETFs, because a frictionless backtest
+    systematically flatters high-turnover and adaptive strategies: they
+    buy their improved risk profile with extra trading, and at 5-10bps
+    round-trip a lot of apparent edge quietly disappears. That
+    disappearance is a finding, not a nuisance. Pass 0.0 explicitly for
+    the frictionless comparison.
 
     `regimes` is optional; when supplied, its labels are carried along in
     the result so analytics.performance_by_regime() can split the P&L up
