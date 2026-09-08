@@ -13,17 +13,17 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from analytics import full_report, performance_by_regime, sharpe_ratio
-from backtest import run_backtest
-from metric_docs import METRIC_DOCS
-from regime_dashboard import (cached_regimes, caveat, chart_caption,
+from components import (cached_regimes, caveat, chart_caption,
     drawdown_chart, equity_chart, explainer, how_to_read, metric_row,
     PERFORMANCE_CONFIG, position_chart, require_data, show_metric_table,
     table_caption
 )
-from regime_features import efficiency_ratio
-from strategies import PARAM_SPECS, STRATEGIES, STRATEGY_DOCS, default_params
-from walk_forward import evaluate_out_of_sample
+from metric_docs import METRIC_DOCS
+from qbt.analytics import full_report, performance_by_regime, sharpe_ratio
+from qbt.backtest import run_backtest
+from qbt.regime_features import efficiency_ratio
+from qbt.strategies import PARAM_SPECS, STRATEGIES, STRATEGY_DOCS, default_params
+from qbt.walk_forward import evaluate_out_of_sample
 
 df = require_data()
 ticker = st.session_state["ticker"]

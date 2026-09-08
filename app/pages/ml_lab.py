@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from ml_strategy import MIN_REGIME_TRAIN_ROWS, model_report
-from regime_dashboard import (caveat, chart_caption, explainer,
+from components import (caveat, chart_caption, explainer,
     how_to_read, require_regimes, table_caption, _ink
 )
-from strategies import STRATEGIES
-from walk_forward import evaluate_out_of_sample
+from qbt.ml import MIN_REGIME_TRAIN_ROWS, model_report
+from qbt.strategies import STRATEGIES
+from qbt.walk_forward import evaluate_out_of_sample
 
 df, regimes = require_regimes()
 

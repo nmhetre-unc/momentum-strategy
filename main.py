@@ -14,14 +14,17 @@ console as well as a POSIX terminal.
 """
 
 import argparse
+from pathlib import Path
 
-from adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES, describe_choices
-from analytics import full_report, performance_by_regime
-from backtest import run_backtest
-from data_loader import fetch_ohlcv
-from regime import REGIME_METHODS, detect_regimes, detect_regimes_walk_forward, regime_stability, regime_summary
-from visualize import plot_equity_curve, plot_drawdown
-from walk_forward import evaluate_out_of_sample, rolling_walk_forward
+from qbt.adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES, describe_choices
+from qbt.analytics import full_report, performance_by_regime
+from qbt.backtest import run_backtest
+from qbt.data import fetch_ohlcv
+from qbt.regime import REGIME_METHODS, detect_regimes, detect_regimes_walk_forward, regime_stability, regime_summary
+from qbt.visualize import plot_equity_curve, plot_drawdown
+from qbt.walk_forward import evaluate_out_of_sample, rolling_walk_forward
+
+REPO_ROOT = Path(__file__).resolve().parent
 
 
 def print_report(label: str, stats: dict):
@@ -150,8 +153,8 @@ def main():
         print(f"\n  {rolling['fitted_note']}")
 
     if args.plot:
-        equity_path = f"{args.ticker}_{args.strategy}_equity.png"
-        drawdown_path = f"{args.ticker}_{args.strategy}_drawdown.png"
+        equity_path = str(REPO_ROOT / f"{args.ticker}_{args.strategy}_equity.png")
+        drawdown_path = str(REPO_ROOT / f"{args.ticker}_{args.strategy}_drawdown.png")
         plot_equity_curve(result, header, out_path=equity_path)
         plot_drawdown(result, header, out_path=drawdown_path)
         print(f"\nSaved charts: {equity_path}, {drawdown_path}")
@@ -160,7 +163,7 @@ def main():
         if args.strategy not in ("ml_direction", "ml_regime_conditional"):
             print("\n--model-report only applies to --strategy ml_direction or ml_regime_conditional")
         else:
-            from ml_strategy import model_report
+            from qbt.ml import model_report
 
             report_kwargs = {}
             if args.strategy == "ml_regime_conditional" and regimes is not None:

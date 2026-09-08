@@ -5,7 +5,7 @@ and returns a pandas Series of positions: 1 = long, 0 = flat.
 
 import pandas as pd
 
-from ml_strategy import ml_direction_signal
+from qbt.ml import ml_direction_signal
 
 
 def sma_crossover(df: pd.DataFrame, short_window: int = 50, long_window: int = 200) -> pd.Series:

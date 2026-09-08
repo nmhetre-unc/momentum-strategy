@@ -44,7 +44,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from features import build_features, build_labels
+from qbt.features import build_features, build_labels
 
 MODEL_TYPES = {
     "logistic": lambda: make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000)),

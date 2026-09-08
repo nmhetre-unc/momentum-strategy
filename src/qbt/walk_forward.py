@@ -20,8 +20,8 @@ Three levels of rigour live here, in increasing order:
 import numpy as np
 import pandas as pd
 
-from backtest import run_backtest
-from analytics import full_report, performance_by_regime
+from qbt.backtest import run_backtest
+from qbt.analytics import full_report, performance_by_regime
 
 
 def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.7, **strategy_params) -> dict:

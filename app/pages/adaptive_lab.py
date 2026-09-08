@@ -12,16 +12,16 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from adaptive import ADAPTIVE_DOCS, ADAPTIVE_STRATEGIES, describe_choices, describe_filter
-from analytics import full_report, performance_by_regime
-from backtest import run_backtest
-from regime_dashboard import (caveat, chart_caption, drawdown_chart,
+from components import (caveat, chart_caption, drawdown_chart,
     equity_chart, explainer, how_to_read, metric_row,
     PERFORMANCE_CONFIG, position_chart, require_regimes, show_metric_table,
     table_caption
 )
-from strategies import STRATEGIES
-from walk_forward import evaluate_out_of_sample
+from qbt.adaptive import ADAPTIVE_DOCS, ADAPTIVE_STRATEGIES, describe_choices, describe_filter
+from qbt.analytics import full_report, performance_by_regime
+from qbt.backtest import run_backtest
+from qbt.strategies import STRATEGIES
+from qbt.walk_forward import evaluate_out_of_sample
 
 df, regimes = require_regimes()
 ticker = st.session_state["ticker"]

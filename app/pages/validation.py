@@ -17,12 +17,12 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES
-from regime_dashboard import (caveat, chart_caption, comparison_chart,
+from components import (caveat, chart_caption, comparison_chart,
     COMPARISON_CONFIG, explainer, fold_chart, how_to_read,
     PERFORMANCE_CONFIG, require_regimes, table_caption
 )
-from walk_forward import compare_strategies, evaluate_with_regimes, rolling_walk_forward
+from qbt.adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES
+from qbt.walk_forward import compare_strategies, evaluate_with_regimes, rolling_walk_forward
 
 df, regimes = require_regimes()
 

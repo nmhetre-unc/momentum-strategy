@@ -13,20 +13,20 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from analytics import benchmark_by_regime, performance_by_regime
-from backtest import run_backtest
-from regime import (
-    REGIME_METHOD_DOCS, SMOOTHING_DOCS, detect_regimes, regime_episodes,
-    regime_stability, regime_summary,
-)
-from regime_dashboard import (caveat, chart_caption, duration_histogram,
+from components import (caveat, chart_caption, duration_histogram,
     explainer, how_to_read, performance_by_regime_chart,
     PERFORMANCE_CONFIG, regime_feature_chart, regime_palette,
     regime_probability_chart, regime_ribbon_chart, REGIME_SUMMARY_CONFIG, require_regimes,
     show_regime_health, table_caption, transition_heatmap
 )
-from regime_features import FEATURE_DOCS
-from strategies import STRATEGIES, STRATEGY_DOCS
+from qbt.analytics import benchmark_by_regime, performance_by_regime
+from qbt.backtest import run_backtest
+from qbt.regime import (
+    REGIME_METHOD_DOCS, SMOOTHING_DOCS, detect_regimes, regime_episodes,
+    regime_stability, regime_summary,
+)
+from qbt.regime_features import FEATURE_DOCS
+from qbt.strategies import STRATEGIES, STRATEGY_DOCS
 
 df, regimes = require_regimes()
 settings = st.session_state["regime_settings"]
@@ -623,7 +623,7 @@ if st.button("Compare honest and leaky labels", icon=":material/compare_arrows:"
             smooth=settings["smooth"], min_duration=settings["min_duration"],
         )
         try:
-            from regime import detect_regimes_walk_forward
+            from qbt.regime import detect_regimes_walk_forward
 
             honest = detect_regimes_walk_forward(
                 df, method=settings["method"], n_regimes=settings["n_regimes"],

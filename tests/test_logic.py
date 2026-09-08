@@ -6,10 +6,10 @@ Finance API. Run main.py directly on your own machine for real data.
 import numpy as np
 import pandas as pd
 
-from strategies import STRATEGIES
-from backtest import run_backtest
-from analytics import full_report
-from walk_forward import evaluate_out_of_sample
+from qbt.strategies import STRATEGIES
+from qbt.backtest import run_backtest
+from qbt.analytics import full_report
+from qbt.walk_forward import evaluate_out_of_sample
 
 np.random.seed(42)
 n = 600

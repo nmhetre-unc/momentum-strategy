@@ -46,8 +46,8 @@ from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.mixture import GaussianMixture
 
-from analytics import annualized_volatility, max_drawdown, TRADING_DAYS_PER_YEAR
-from regime_features import build_regime_features, reduce_dimensions, standardize_features
+from qbt.analytics import annualized_volatility, max_drawdown, TRADING_DAYS_PER_YEAR
+from qbt.regime_features import build_regime_features, reduce_dimensions, standardize_features
 
 REGIME_METHODS = ("rules", "kmeans", "gmm", "hmm", "supervised")
 

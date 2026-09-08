@@ -56,12 +56,12 @@ learned, so you can check whether it still made sense afterwards.
 import numpy as np
 import pandas as pd
 
-from analytics import sharpe_ratio
-from backtest import run_backtest
-from ml_strategy import ml_direction_signal
-from regime import UNKNOWN, detect_regimes, detect_regimes_walk_forward
-from regime_features import realized_volatility
-from strategies import STRATEGIES
+from qbt.analytics import sharpe_ratio
+from qbt.backtest import run_backtest
+from qbt.ml import ml_direction_signal
+from qbt.regime import UNKNOWN, detect_regimes, detect_regimes_walk_forward
+from qbt.regime_features import realized_volatility
+from qbt.strategies import STRATEGIES
 
 # Strategies the `auto` selectors are allowed to choose between. The ML
 # strategy is deliberately excluded: it would be refit inside every

@@ -1,10 +1,10 @@
 """
 Quant training terminal — entry point.
 
-Run with: streamlit run app.py
+Run with: streamlit run app/app.py
 
 This file owns everything shared across pages: the data selection, the
-regime-detection settings, and the navigation. Each page in app_pages/ is
+regime-detection settings, and the navigation. Each page in pages/ is
 a plain script that reads that shared state and renders one workspace.
 
 The split exists for a performance reason as much as a tidiness one:
@@ -23,8 +23,8 @@ st.set_page_config(
     layout="wide",
 )
 
-from regime_dashboard import MAX_REGIMES, load_prices  # noqa: E402  (must follow set_page_config)
-from regime import REGIME_METHODS  # noqa: E402
+from components import MAX_REGIMES, load_prices  # noqa: E402  (must follow set_page_config)
+from qbt.regime import REGIME_METHODS  # noqa: E402
 
 # --------------------------------------------------------------------------
 # Shared state, initialized in one place
@@ -155,12 +155,12 @@ with st.sidebar:
 page = st.navigation(
     {
         "Research": [
-            st.Page("app_pages/backtest_lab.py", title="Backtest", icon=":material/query_stats:",
+            st.Page("pages/backtest_lab.py", title="Backtest", icon=":material/query_stats:",
                     default=True),
-            st.Page("app_pages/regimes.py", title="Regimes", icon=":material/layers:"),
-            st.Page("app_pages/adaptive_lab.py", title="Adaptive", icon=":material/tune:"),
-            st.Page("app_pages/ml_lab.py", title="ML lab", icon=":material/network_intelligence:"),
-            st.Page("app_pages/validation.py", title="Validation", icon=":material/fact_check:"),
+            st.Page("pages/regimes.py", title="Regimes", icon=":material/layers:"),
+            st.Page("pages/adaptive_lab.py", title="Adaptive", icon=":material/tune:"),
+            st.Page("pages/ml_lab.py", title="ML lab", icon=":material/network_intelligence:"),
+            st.Page("pages/validation.py", title="Validation", icon=":material/fact_check:"),
         ],
     },
     position="sidebar",

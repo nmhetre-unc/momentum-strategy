@@ -17,17 +17,17 @@ Run with: python test_regime.py
 import numpy as np
 import pandas as pd
 
-from adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES, describe_choices, describe_filter
-from analytics import full_report, performance_by_regime
-from backtest import run_backtest
-from ml_strategy import model_report
-from regime import (
+from qbt.adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES, describe_choices, describe_filter
+from qbt.analytics import full_report, performance_by_regime
+from qbt.backtest import run_backtest
+from qbt.ml import model_report
+from qbt.regime import (
     REGIME_METHODS, UNKNOWN, detect_regimes, detect_regimes_walk_forward,
     regime_episodes, regime_stability, regime_summary, smooth_labels,
 )
-from regime_features import build_regime_features, standardize_features
-from strategies import STRATEGIES
-from walk_forward import (
+from qbt.regime_features import build_regime_features, standardize_features
+from qbt.strategies import STRATEGIES
+from qbt.walk_forward import (
     compare_strategies, evaluate_out_of_sample, evaluate_with_regimes, rolling_walk_forward,
 )
 

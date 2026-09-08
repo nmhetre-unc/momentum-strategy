@@ -4,10 +4,13 @@ so repeated runs don't keep hitting the Yahoo Finance API.
 """
 
 import os
+from pathlib import Path
+
 import pandas as pd
 import yfinance as yf
 
-CACHE_DIR = "data_cache"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CACHE_DIR = str(REPO_ROOT / "data_cache")
 
 
 def fetch_ohlcv(ticker: str, start: str, end: str, use_cache: bool = True) -> pd.DataFrame:

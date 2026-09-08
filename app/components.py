@@ -2,8 +2,8 @@
 Shared Streamlit rendering for the quant training dashboard.
 
 Chart builders, table formatters and the teaching-note widgets live here
-so the page scripts in app_pages/ stay short and readable. Named
-regime_dashboard.py because the regime visualizations are the bulk of it,
+so the page scripts in pages/ stay short and readable. Named
+components.py because the regime visualizations are the bulk of it,
 but the equity/drawdown/metric helpers are shared by every page.
 
 COLOR. Regimes are an ORDERED variable -- regime.py guarantees ID 0 is the
@@ -26,9 +26,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from analytics import drawdown_series
 from metric_docs import METRIC_DOCS
-from regime import regime_episodes
+from qbt.analytics import drawdown_series
+from qbt.regime import regime_episodes
 
 # --------------------------------------------------------------------------
 # Palette
@@ -618,7 +618,7 @@ def show_regime_health(regime_result, stability: dict):
 @st.cache_data(show_spinner=False, ttl="6h", max_entries=20)
 def load_prices(ticker: str, start: str, end: str) -> pd.DataFrame:
     """Price history, cached so switching pages doesn't re-hit Yahoo."""
-    from data_loader import fetch_ohlcv
+    from qbt.data import fetch_ohlcv
 
     return fetch_ohlcv(ticker, start, end)
 
@@ -631,7 +631,7 @@ def cached_regimes(df: pd.DataFrame, method: str, n_regimes: int, fit_frac: floa
     result is needed on four different pages, so it's cached on the exact
     parameter set. Changing any control refits; nothing else does.
     """
-    from regime import detect_regimes, detect_regimes_walk_forward
+    from qbt.regime import detect_regimes, detect_regimes_walk_forward
 
     if walk_forward:
         return detect_regimes_walk_forward(
