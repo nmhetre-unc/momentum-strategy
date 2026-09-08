@@ -13,6 +13,7 @@ dependencies = [
     "matplotlib>=3.8",
     "altair>=5.4",
     "scikit-learn>=1.4",
+    "scipy>=1.11",
     "streamlit>=1.62",
 ]
 
