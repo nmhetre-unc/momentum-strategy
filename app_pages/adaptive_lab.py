@@ -15,9 +15,9 @@ import streamlit as st
 from adaptive import ADAPTIVE_DOCS, ADAPTIVE_STRATEGIES, describe_choices, describe_filter
 from analytics import full_report, performance_by_regime
 from backtest import run_backtest
-from regime_dashboard import (caveat, chart_caption, common_mistakes, drawdown_chart,
-    equity_chart, explainer, how_to_read, metric_row, next_steps, page_intro,
-    PERFORMANCE_CONFIG, position_chart, quant_note, require_regimes, show_metric_table,
+from regime_dashboard import (caveat, chart_caption, drawdown_chart,
+    equity_chart, explainer, how_to_read, metric_row,
+    PERFORMANCE_CONFIG, position_chart, require_regimes, show_metric_table,
     table_caption
 )
 from strategies import STRATEGIES
@@ -26,8 +26,7 @@ from walk_forward import evaluate_out_of_sample
 df, regimes = require_regimes()
 ticker = st.session_state["ticker"]
 
-page_intro("adaptive")
-common_mistakes("adaptive")
+st.title("Adaptive")
 
 # --------------------------------------------------------------------------
 # Onboarding: what adaptation is, before any of it runs
@@ -121,8 +120,6 @@ with st.expander("How to read this page", icon=":material/map:"):
 """
     )
 
-quant_note("adaptive", expanded=True)
-
 # ---------- Controls ----------
 with st.container(border=True):
     controls = st.columns([2, 1, 1])
@@ -177,16 +174,6 @@ than the turnover it added?**
 """,
     title="What this mechanism actually does",
 )
-
-# Mechanism-specific note, so the relevant one is surfaced rather than all six.
-if adaptive_name == "regime_filtered":
-    quant_note("adaptive_filtering")
-elif adaptive_name in ("regime_switch", "adaptive_ensemble"):
-    quant_note("adaptive_switching")
-elif adaptive_name in ("volatility_targeted", "regime_sized"):
-    quant_note("volatility_targeting")
-elif adaptive_name in ("regime_parameters", "ml_regime_conditional"):
-    quant_note("adaptive_overfitting")
 
 explainer(
     "The four mechanisms, as driving",
@@ -276,8 +263,6 @@ if stats["turnover"] > 3.0:
         f"comparison below is where you find out whether that trade was worth making."
     )
 
-quant_note("exposure_caveat")
-
 st.altair_chart(equity_chart(result))
 chart_caption(
     "Growth of $1 in the adapted strategy against buy-and-hold.",
@@ -321,8 +306,6 @@ how_to_read(
   ribbon on the Regimes page: is it avoiding what you'd expect it to avoid?
 """
 )
-quant_note("turnover_costs")
-
 # ---------- Did adapting help? ----------
 st.subheader("Did adapting actually help?", divider="gray")
 comparison = pd.DataFrame({
@@ -473,7 +456,6 @@ if adaptive_name in ("regime_switch", "adaptive_ensemble", "regime_filtered"):
   mining, and the out-of-sample section below is the only honest read on it.
 """
     )
-    quant_note("adaptive_overfitting")
 
 # ---------- Per-regime attribution ----------
 st.subheader("Where the P&L came from", divider="gray")
@@ -591,9 +573,3 @@ how_to_read(
   which is the single most common outcome for the more complex mechanisms.
 """
 )
-quant_note("position_sizing")
-
-# --------------------------------------------------------------------------
-# Where to go next
-# --------------------------------------------------------------------------
-next_steps("adaptive")

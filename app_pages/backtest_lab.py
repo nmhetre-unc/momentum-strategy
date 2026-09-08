@@ -16,9 +16,9 @@ import streamlit as st
 from analytics import full_report, performance_by_regime, sharpe_ratio
 from backtest import run_backtest
 from metric_docs import METRIC_DOCS
-from regime_dashboard import (cached_regimes, caveat, chart_caption, common_mistakes,
-    drawdown_chart, equity_chart, explainer, how_to_read, metric_row, next_steps, page_intro,
-    PERFORMANCE_CONFIG, position_chart, quant_note, require_data, show_metric_table,
+from regime_dashboard import (cached_regimes, caveat, chart_caption,
+    drawdown_chart, equity_chart, explainer, how_to_read, metric_row,
+    PERFORMANCE_CONFIG, position_chart, require_data, show_metric_table,
     table_caption
 )
 from regime_features import efficiency_ratio
@@ -28,8 +28,7 @@ from walk_forward import evaluate_out_of_sample
 df = require_data()
 ticker = st.session_state["ticker"]
 
-page_intro("backtest")
-common_mistakes("backtest")
+st.title("Backtest")
 
 with st.expander("How to read this page", icon=":material/map:"):
     st.markdown(
@@ -354,12 +353,6 @@ how_to_read(
 """
 )
 
-quant_note("equity_curve")
-quant_note("drawdown_vs_return")
-quant_note("sharpe_can_mislead")
-if doc["family"] == "Trend-following":
-    quant_note("trend_in_chop")
-
 detail_left, detail_right = st.columns([1, 1])
 with detail_left:
     st.markdown("**Full metrics**")
@@ -631,7 +624,6 @@ if wf["out_sample"]["num_trades"] < 10:
         f"it is describing that many independent bets — state that caveat before quoting the number.",
         level="info",
     )
-quant_note("walk_forward")
 
 # ---------- Optional regime attribution ----------
 if show_regimes and regimes is not None:
@@ -675,9 +667,3 @@ if show_regimes and regimes is not None:
                   "rows carry error bars wide enough to contain almost any conclusion.",
                 level="info",
             )
-    quant_note("risk_by_regime")
-
-# --------------------------------------------------------------------------
-# Where to go next
-# --------------------------------------------------------------------------
-next_steps("backtest")

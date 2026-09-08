@@ -18,16 +18,15 @@ import pandas as pd
 import streamlit as st
 
 from adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES
-from regime_dashboard import (caveat, chart_caption, common_mistakes, comparison_chart,
-    COMPARISON_CONFIG, explainer, fold_chart, how_to_read, next_steps, page_intro,
-    PERFORMANCE_CONFIG, quant_note, require_regimes, table_caption
+from regime_dashboard import (caveat, chart_caption, comparison_chart,
+    COMPARISON_CONFIG, explainer, fold_chart, how_to_read,
+    PERFORMANCE_CONFIG, require_regimes, table_caption
 )
 from walk_forward import compare_strategies, evaluate_with_regimes, rolling_walk_forward
 
 df, regimes = require_regimes()
 
-page_intro("validation")
-common_mistakes("validation")
+st.title("Validation")
 
 # --------------------------------------------------------------------------
 # Onboarding: what validation is and why one number isn't enough
@@ -123,8 +122,6 @@ split, plotted as in-sample against out-of-sample Sharpe.
 """
     )
 
-quant_note("walkforward_reason")
-quant_note("walk_forward", expanded=True)
 explainer(
     "Validation, as training for a race",
     "walk-forward is running practice laps; the IS→OOS gap is how well your training "
@@ -153,7 +150,6 @@ training, and then reporting the race time as though it were still an independen
 the note on silent fitting below — it is the one bias here with no technical fix.
 """,
 )
-quant_note("silent_fitting")
 
 # Keyed so the selected tab survives a rerun (changing a control in one tab
 # no longer bounces you back to the first), and so the two lazily-computed
@@ -269,7 +265,6 @@ if tab_rolling.open:
                 f"a paper trading record, and it is the number to quote."
             )
 
-        quant_note("fold_uncertainty")
         how_to_read(
             f"""
 - **Read the share positive before the average.** {rolling['pct_folds_positive']:.0%} of folds
@@ -378,7 +373,6 @@ if tab_decay.open:
                 level="info",
             )
 
-        quant_note("is_vs_oos")
         how_to_read(
             """
 - **Read the gap, not the levels.** Under about 0.5 of decay is normal. A collapse means the
@@ -449,14 +443,11 @@ means the strategy is finished.
 """
         )
 
-        quant_note("risk_by_regime")
-
 # --------------------------------------------------------------------------
 # Fair comparison
 # --------------------------------------------------------------------------
 if tab_compare.open:
     with tab_compare:
-        quant_note("fair_comparison", expanded=True)
         compare_cost = st.slider(
             "Transaction cost (bps)", 0.0, 25.0, 5.0, step=1.0, key="v_compare_cost",
             help="Drag this from 0 upward and watch the ranking reorder. The post-cost ranking is the real one.",
@@ -519,7 +510,6 @@ if tab_compare.open:
                     level="info",
                 )
 
-        quant_note("survivorship_bias")
         how_to_read(
             """
 - **Read the whole table, never the top row.** Picking the best out-of-sample Sharpe from
@@ -543,11 +533,3 @@ if tab_compare.open:
             "The honest report is the whole table.",
             icon=":material/warning:",
         )
-
-# --------------------------------------------------------------------------
-# Where to go next
-
-# --------------------------------------------------------------------------
-# Where to go next
-# --------------------------------------------------------------------------
-next_steps("validation")

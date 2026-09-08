@@ -14,16 +14,15 @@ import pandas as pd
 import streamlit as st
 
 from ml_strategy import MIN_REGIME_TRAIN_ROWS, model_report
-from regime_dashboard import (caveat, chart_caption, common_mistakes, explainer,
-    how_to_read, next_steps, page_intro, quant_note, require_regimes, table_caption, _ink
+from regime_dashboard import (caveat, chart_caption, explainer,
+    how_to_read, require_regimes, table_caption, _ink
 )
 from strategies import STRATEGIES
 from walk_forward import evaluate_out_of_sample
 
 df, regimes = require_regimes()
 
-page_intro("ml_lab")
-common_mistakes("ml_lab")
+st.title("ML lab")
 
 # The shortest-horizon inputs. On a liquid index a one- or two-day move is
 # close to pure noise, so a model leaning hardest on these is leaning on
@@ -134,9 +133,6 @@ Turnover is what it cost to find out — daily models trade constantly, and that
 usually larger than the edge.
 """
     )
-
-quant_note("ml_base_rate")
-quant_note("ml_overfitting", expanded=True)
 
 explainer(
     "The two models, and what each one is",
@@ -274,7 +270,6 @@ if wf["out_sample"]["sharpe_ratio"] < 0.5:
         level="info",
     )
 
-quant_note("ml_accuracy_vs_pnl")
 how_to_read(
     """
 - **Compare in-sample against out-of-sample Sharpe.** A large fall is the same overfitting
@@ -380,7 +375,6 @@ if total_importance > 0:
             level="info",
         )
 
-quant_note("ml_feature_importance")
 explainer(
     "Reading the two right-hand panels",
     "the confusion matrix is a report card of correct versus incorrect guesses; feature "
@@ -476,7 +470,6 @@ if "by_regime" in report and report["by_regime"]:
             level="info",
         )
 
-    quant_note("ml_regime_conditional")
     how_to_read(
         """
 - **Only the edge column is comparable across regimes.** Each regime has its own base rate —
@@ -503,8 +496,3 @@ with st.expander("Try this: run both models back to back", icon=":material/scien
         "flexible model is the better one**, and a disappointing result is not a reason to reach "
         "for more capacity."
     )
-
-# --------------------------------------------------------------------------
-# Where to go next
-# --------------------------------------------------------------------------
-next_steps("ml_lab")

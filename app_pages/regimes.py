@@ -19,9 +19,9 @@ from regime import (
     REGIME_METHOD_DOCS, SMOOTHING_DOCS, detect_regimes, regime_episodes,
     regime_stability, regime_summary,
 )
-from regime_dashboard import (caveat, chart_caption, common_mistakes, duration_histogram,
-    explainer, how_to_read, next_steps, page_intro, performance_by_regime_chart,
-    PERFORMANCE_CONFIG, quant_note, regime_feature_chart, regime_palette,
+from regime_dashboard import (caveat, chart_caption, duration_histogram,
+    explainer, how_to_read, performance_by_regime_chart,
+    PERFORMANCE_CONFIG, regime_feature_chart, regime_palette,
     regime_probability_chart, regime_ribbon_chart, REGIME_SUMMARY_CONFIG, require_regimes,
     show_regime_health, table_caption, transition_heatmap
 )
@@ -31,8 +31,7 @@ from strategies import STRATEGIES, STRATEGY_DOCS
 df, regimes = require_regimes()
 settings = st.session_state["regime_settings"]
 
-page_intro("regimes")
-common_mistakes("regimes")
+st.title("Regimes")
 
 # --------------------------------------------------------------------------
 # Onboarding: what a regime is, before any model output appears
@@ -200,8 +199,6 @@ if settings.get("smooth") == "min_duration" and settings.get("min_duration", 0) 
         icon=":material/schedule:",
     )
 
-quant_note("regime_volatility_clusters")
-
 # ---------- The ribbon ----------
 st.subheader("Regimes over time", divider="gray")
 st.altair_chart(regime_ribbon_chart(df, regimes))
@@ -223,7 +220,6 @@ how_to_read(
   after the fact. Compare where the band changes against where the price actually broke.
 """
 )
-quant_note("regimes")
 explainer(
     "What a regime really is",
     "weather patterns for the market — you can't forecast next month's weather, but knowing "
@@ -387,7 +383,6 @@ how_to_read(
 """,
     title="How to interpret the episode histogram",
 )
-quant_note("regime_transition_persistence")
 explainer(
     "Persistence, transitions, and why smoothing costs you",
     "persistence is how long the weather lasts; transitions are how often it changes; "
@@ -529,9 +524,6 @@ else:
 """
     )
 
-quant_note("risk_by_regime")
-quant_note("trend_vs_chop")
-
 # ---------- Features ----------
 st.subheader("What the model is looking at", divider="gray")
 available = [c for c in regimes.features.columns if c in FEATURE_DOCS]
@@ -592,7 +584,6 @@ coloured by the regime it ended up in.
 
 # ---------- The lookahead demonstration ----------
 st.subheader("The lookahead demonstration", divider="gray")
-quant_note("regime_lookahead", expanded=True)
 explainer(
     "Why this is the most expensive mistake in the field",
     "grading a student's exam using tomorrow's answer key — they'll look brilliant, and "
@@ -620,7 +611,6 @@ fitted on training data only. It is one of the most common serious errors in sub
 quant work, and it is worth being slightly paranoid about.
 """,
 )
-quant_note("lookahead_bias")
 st.markdown(
     "Below, the same detection method fitted on the **full sample** versus refitted on an "
     "**expanding window**. Both label the same days. Only one of them could have existed at the time."
@@ -685,10 +675,3 @@ if st.button("Compare honest and leaky labels", icon=":material/compare_arrows:"
   strategy still have worked? That is what the Adaptive and Validation pages are for.
 """
         )
-
-quant_note("regime_drift")
-
-# --------------------------------------------------------------------------
-# Where to go next
-# --------------------------------------------------------------------------
-next_steps("regimes")
