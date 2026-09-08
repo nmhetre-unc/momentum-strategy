@@ -79,7 +79,7 @@ MIN_LEARN_DAYS = 60
 # Shared plumbing
 # --------------------------------------------------------------------------
 def _resolve_regimes(df: pd.DataFrame, regimes=None, regime_method: str = "hmm",
-                     n_regimes: int = 3, regime_fit_frac: float = 0.6,
+                     n_regimes: int = 3, regime_fit_frac: float = 0.7,
                      regime_smooth: str = "min_duration", min_duration: int = 5,
                      regime_walk_forward: bool = False):
     """

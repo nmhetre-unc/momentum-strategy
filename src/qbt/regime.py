@@ -587,7 +587,8 @@ def detect_regimes(
     df: pd.DataFrame,
     method: str = "hmm",
     n_regimes: int = 3,
-    fit_frac: float = 1.0,
+    fit_frac: float = 0.7,
+    fit_end: str | pd.Timestamp | None = None,
     standardize: str = "expanding",
     use_pca: bool = False,
     n_components: int = 3,
@@ -606,7 +607,15 @@ def detect_regimes(
     on all the data it then labels, so the labels embed knowledge of the
     future -- fine for describing history, NOT fine for feeding a
     backtest. Anything below 1.0 fits on the leading slice only, and
-    `causal` on the result records which you asked for.
+    `causal` on the result records which you asked for. Defaults to 0.7
+    so the non-causal full-sample fit is something you opt into, not the
+    default you get by omitting the argument.
+
+    `fit_end` fixes the fit window by date instead of by fraction, and
+    takes precedence over `fit_frac` when supplied -- the model is fit on
+    every row on or before `fit_end`. Useful when you want the split to
+    land on a specific, memorable date rather than wherever `fit_frac`
+    happens to fall for this ticker's date range.
 
     `rules` is always causal because it fits nothing.
     """
@@ -627,24 +636,36 @@ def detect_regimes(
             "Fetch a longer history — the long-window features need about a year to spin up."
         )
 
-    split_idx = max(int(len(X) * fit_frac), 30)
-    fit_index = X.index[:split_idx]
-    fit_end = fit_index[-1]
+    if fit_end is not None:
+        resolved_fit_end = pd.Timestamp(fit_end)
+        fit_index = X.index[X.index <= resolved_fit_end]
+        if len(fit_index) < 30:
+            raise ValueError(
+                f"Only {len(fit_index)} rows on or before fit_end={resolved_fit_end.date()} "
+                "survive the regime-feature warm-up (need 30+). Push fit_end later, or fetch "
+                "a longer history."
+            )
+    else:
+        split_idx = max(int(len(X) * fit_frac), 30)
+        fit_index = X.index[:split_idx]
+        resolved_fit_end = fit_index[-1]
+
+    last_label_date = df.index[-1]
 
     if method == "rules":
         ids, names, proba, model = _rules_labels(raw_features, X.index)
-        n_regimes, causal, fit_end = 4, True, None
+        n_regimes, causal, resolved_fit_end = 4, True, None
     elif method == "supervised":
         ids, names, proba, model = _supervised_labels(df, X, fit_index, horizon, random_state)
         ids = ids.reindex(raw_features.index, fill_value=UNKNOWN)
         proba = proba.reindex(raw_features.index)
-        n_regimes, causal = 4, fit_frac < 1.0
+        n_regimes, causal = 4, resolved_fit_end < last_label_date
     else:
         ids, proba, model = _fit_predict(method, X, fit_index, n_regimes, decode, random_state)
         ids = ids.reindex(raw_features.index, fill_value=UNKNOWN)
         proba = proba.reindex(raw_features.index)
         names = None
-        causal = fit_frac < 1.0 and decode == "filter"
+        causal = resolved_fit_end < last_label_date and decode == "filter"
 
     if names is None:
         ids, names, remap = _order_and_name(ids, raw_features)
@@ -671,7 +692,7 @@ def detect_regimes(
         causal=causal,
         probabilities=None if proba is None else proba.reindex(df.index),
         model=model,
-        fit_end=fit_end,
+        fit_end=resolved_fit_end,
         meta={
             "fit_frac": fit_frac, "smooth": smooth, "min_duration": min_duration,
             "decode": decode, "standardize": standardize, "use_pca": use_pca,

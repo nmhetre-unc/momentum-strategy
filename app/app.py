@@ -33,7 +33,7 @@ st.session_state.setdefault("prices", None)
 st.session_state.setdefault("ticker", "SPY")
 st.session_state.setdefault("load_error", None)
 st.session_state.setdefault("regime_settings", {
-    "method": "hmm", "n_regimes": 3, "fit_frac": 0.6, "smooth": "min_duration",
+    "method": "hmm", "n_regimes": 3, "fit_frac": 0.7, "smooth": "min_duration",
     "min_duration": 5, "decode": "filter", "walk_forward": False,
 })
 
@@ -43,7 +43,7 @@ st.session_state.setdefault("regime_settings", {
 # settings["fit_frac"] makes the widget's identity change every time it moves,
 # so Streamlit re-registers it and the new value can silently fail to stick.
 REGIME_DEFAULTS = {
-    "rg_method": "hmm", "rg_n_regimes": 3, "rg_fit_frac": 0.6,
+    "rg_method": "hmm", "rg_n_regimes": 3, "rg_fit_frac": 0.7,
     "rg_smooth": "min_duration", "rg_min_duration": 5, "rg_decode": "filter",
     "rg_walk_forward": False,
 }

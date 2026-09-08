@@ -81,7 +81,7 @@ def main():
         detect = detect_regimes_walk_forward if args.regime_walk_forward else detect_regimes
         kwargs = {"method": args.regime_method, "n_regimes": args.n_regimes}
         if not args.regime_walk_forward:
-            kwargs["fit_frac"] = 0.6
+            kwargs["fit_frac"] = 0.7
         regimes = detect(df, **kwargs)
 
     strategy_params = {"regimes": regimes} if args.strategy in ADAPTIVE_STRATEGIES else {}
@@ -99,7 +99,7 @@ def main():
     if regimes is not None:
         stability = regime_stability(regimes.labels)
         print(f"\n--- Regimes ({args.regime_method}, "
-              f"{'walk-forward' if args.regime_walk_forward else 'fit_frac=0.6'}) ---")
+              f"{'walk-forward' if args.regime_walk_forward else 'fit_frac=0.7'}) ---")
         print(f"  Labelled days: {stability['labelled_days']}  episodes: {stability['n_episodes']}  "
               f"avg duration: {stability['avg_duration']:.0f}d  switches/yr: {stability['switches_per_year']:.1f}")
         if stability["avg_duration"] < 15:

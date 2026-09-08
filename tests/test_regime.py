@@ -182,7 +182,7 @@ print(f"Refits: {wf_regimes.meta['n_refits']}, first label {first_labelled.date(
 # --------------------------------------------------------------------------
 print("\n=== Backtest: costs and regime passthrough ===")
 signal = STRATEGIES["sma_crossover"](df)
-free = run_backtest(df, signal)
+free = run_backtest(df, signal, cost_bps=0)
 costed = run_backtest(df, signal, cost_bps=10, regimes=hmm_result.labels)
 
 assert np.allclose(free["cost"], 0), "cost_bps=0 charged a cost"
