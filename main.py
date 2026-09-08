@@ -8,7 +8,6 @@ Usage:
     python main.py --ticker SPY --strategy sma_crossover --regimes
     python main.py --ticker SPY --strategy adaptive_ensemble --regimes --cost-bps 5
     python main.py --ticker SPY --strategy sma_crossover --rolling
-    python main.py --ticker SPY --exercises
 
 Output is deliberately plain ASCII so it renders correctly in a Windows
 console as well as a POSIX terminal.
@@ -61,28 +60,14 @@ def main():
                          help="Refit the regime model on an expanding window (the honest, non-leaky version)")
     parser.add_argument("--rolling", action="store_true",
                          help="Rolling walk-forward: many consecutive out-of-sample windows instead of one split")
-    parser.add_argument("--exercises", action="store_true",
-                         help="Run every automated exercise check against this ticker and print the results")
     args = parser.parse_args()
 
     if not args.ticker:
         parser.error("--ticker is required")
     df = fetch_ohlcv(args.ticker, args.start, args.end)
 
-    # ---- Exercises mode: no strategy needed ----
-    if args.exercises:
-        from exercises import run_all
-
-        print(f"Exercise checks for {args.ticker} ({args.start} to {args.end})\n")
-        for _, row in run_all(df, args.ticker).iterrows():
-            marker = "OK " if row["observed"] else ("-- " if row["observed"] is False else "ERR")
-            print(f"[{marker}] {row['exercise']}")
-            print(f"        {row['message']}\n")
-        if not args.strategy:
-            return
-
     if not args.strategy:
-        parser.error("--strategy is required (or use --exercises on its own)")
+        parser.error("--strategy is required")
 
     strategy_fn = ALL_STRATEGIES[args.strategy]
 

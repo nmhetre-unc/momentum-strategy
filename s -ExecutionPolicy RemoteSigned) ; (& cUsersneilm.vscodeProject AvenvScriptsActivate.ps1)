@@ -1,0 +1,32 @@
+[33m84d8b91[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Rewrite the README from the polished draft
+[33m114ea55[m Final polish: three residual inconsistencies
+[33m6e2375e[m Add Graduation checklist and Next steps pages
+[33m7f01470[m Close the remaining consistency gaps across the eight pages
+[33m3337caa[m Caption every table, completing the consistency pass
+[33mdd48d56[m Unify tone, structure and UX across all eight pages
+[33m41f0c65[m Update README for the live app and the teaching layer
+[33m5c6a4a3[m Add a Start here onboarding page
+[33m4eb5260[m Add the teaching layer to the Learn page
+[33m2314178[m Add the teaching layer to the Exercises page
+[33m9d047c3[m Add the teaching layer to the Validation page
+[33m3e40c09[m Add the teaching layer to the ML Lab page
+[33mb109288[m Add the teaching layer to the Adaptive page
+[33m6f07ac1[m Add the teaching layer to the Regimes page
+[33m06b68f0[m Bump the dev container to Python 3.13
+[33ma6b1d8c[m Add the teaching layer to the Backtest page
+[33m93e655b[m Added Dev Container Folder
+[33mf9f5a1e[m Note Python 3.14 as the tested target in requirements
+[33m2ee0880[m Pin dependency floors and document Python 3.12+ requirement
+[33m0887c46[m Finished first steps in  educational app
+[33m4318178[m Week 4 editing
+[33m138fdee[m App completed
+[33m93e398c[m fixed a repeated function call in the analytics.py file and added a new visualization feature in visualize.py to enhance data representation.
+[33mfc2b89c[m Add .gitignore, stop tracking __pycache__
+[33m41bf041[m Merge branch 'main' of https://github.com/nmhetre-unc/momentum-strategy
+[33m19e567d[m Week 2 work done
+[33m1397f15[m edited comments
+[33m5db6c81[m Delete strategy.py
+[33m122426a[m delete strategy.py
+[33mc9e245f[m Merge remote README
+[33mf7a3749[m Week 1: multi-strategy backtest engine
+[33m6c21106[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Initial commit: SPY momentum trading strategy

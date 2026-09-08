@@ -154,27 +154,13 @@ with st.sidebar:
 # --------------------------------------------------------------------------
 page = st.navigation(
     {
-        # Ungrouped pages render above the named sections, so the onboarding
-        # page is the first thing a new user sees and the landing default.
-        "": [
-            st.Page("app_pages/start_here.py", title="Start here",
-                    icon=":material/rocket_launch:", default=True),
-        ],
         "Research": [
-            st.Page("app_pages/backtest_lab.py", title="Backtest", icon=":material/query_stats:"),
+            st.Page("app_pages/backtest_lab.py", title="Backtest", icon=":material/query_stats:",
+                    default=True),
             st.Page("app_pages/regimes.py", title="Regimes", icon=":material/layers:"),
             st.Page("app_pages/adaptive_lab.py", title="Adaptive", icon=":material/tune:"),
             st.Page("app_pages/ml_lab.py", title="ML lab", icon=":material/network_intelligence:"),
             st.Page("app_pages/validation.py", title="Validation", icon=":material/fact_check:"),
-        ],
-        "Training": [
-            st.Page("app_pages/exercises_lab.py", title="Exercises", icon=":material/assignment:"),
-            st.Page("app_pages/learn.py", title="Learn", icon=":material/menu_book:"),
-        ],
-        "Graduation": [
-            st.Page("app_pages/graduation.py", title="Graduation checklist",
-                    icon=":material/checklist:"),
-            st.Page("app_pages/next_steps.py", title="Next steps", icon=":material/rocket:"),
         ],
     },
     position="sidebar",
