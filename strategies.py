@@ -3,7 +3,6 @@ Each strategy function takes a price DataFrame (with a 'Close' column)
 and returns a pandas Series of positions: 1 = long, 0 = flat.
 """
 
-import numpy as np
 import pandas as pd
 
 from ml_strategy import ml_direction_signal
@@ -176,13 +175,6 @@ PARAM_SPECS = {
          "help": "Share of history used for fitting. The rest is the only part whose performance means anything."},
     ],
 }
-
-
-def get_strategy(name: str):
-    """Look up a strategy function by name, with a useful error if it's missing."""
-    if name not in STRATEGIES:
-        raise KeyError(f"Unknown strategy {name!r}. Available: {sorted(STRATEGIES)}")
-    return STRATEGIES[name]
 
 
 def default_params(name: str) -> dict:

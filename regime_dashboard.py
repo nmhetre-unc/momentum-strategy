@@ -28,7 +28,7 @@ import streamlit as st
 
 from analytics import drawdown_series
 from metric_docs import METRIC_DOCS
-from regime import UNKNOWN, regime_episodes
+from regime import regime_episodes
 
 # --------------------------------------------------------------------------
 # Palette
@@ -58,8 +58,6 @@ SERIES = {
     "dark": {"strategy": "#3987e5", "benchmark": "#d95926", "drawdown": "#e66767",
              "muted": "#898781", "grid": "#2c2c2a"},
 }
-
-STATUS = {"good": "#0ca30c", "warning": "#fab219", "serious": "#ec835a", "critical": "#d03b3b"}
 
 # Four chart heights, used everywhere. A drawdown strip should not be as
 # tall as the equity curve it sits under, but it should be exactly as tall
