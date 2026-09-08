@@ -15,7 +15,7 @@ import streamlit as st
 
 from analytics import full_report, performance_by_regime, sharpe_ratio
 from backtest import run_backtest
-from quant_notes import METRIC_DOCS
+from metric_docs import METRIC_DOCS
 from regime_dashboard import (cached_regimes, caveat, chart_caption, common_mistakes,
     drawdown_chart, equity_chart, explainer, how_to_read, metric_row, next_steps, page_intro,
     PERFORMANCE_CONFIG, position_chart, quant_note, require_data, show_metric_table,

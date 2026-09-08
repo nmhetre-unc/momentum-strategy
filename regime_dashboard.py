@@ -27,7 +27,8 @@ import pandas as pd
 import streamlit as st
 
 from analytics import drawdown_series
-from quant_notes import METRIC_DOCS, QUANT_NOTES
+from metric_docs import METRIC_DOCS
+from quant_notes import QUANT_NOTES
 from regime import UNKNOWN, regime_episodes
 
 # --------------------------------------------------------------------------

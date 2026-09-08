@@ -1,0 +1,15 @@
+METRIC_DOCS = {
+    "total_return": "Cumulative growth over the whole period. Says nothing about how much risk was taken to get it, or whether it arrived smoothly.",
+    "cagr": "The constant annual growth rate that would produce the same ending value. Comparable across periods of different length, unlike total return.",
+    "annualized_volatility": "Standard deviation of daily returns, scaled to a year. The denominator of the Sharpe ratio, and the thing position sizing controls.",
+    "sharpe_ratio": "Excess return per unit of total volatility. Above ~1.0 is good for a single strategy; above 2 on a daily backtest usually means a bug or lookahead bias. Assumes returns are roughly normal, which market returns are not — it understates tail risk.",
+    "sortino_ratio": "Like Sharpe, but only downside deviation is in the denominator. Higher than Sharpe means the volatility was mostly upside, which is the good kind.",
+    "max_drawdown": "Worst peak-to-trough loss. The number that actually decides whether a strategy is survivable — this is what you would have had to sit through, and what a risk manager would have cut you at.",
+    "num_trades": "Count of position changes. Very low counts mean your metrics rest on a handful of independent bets, no matter how many days the backtest covers.",
+    "win_rate": "Share of non-flat days that were profitable. Deliberately weak on its own: a strategy can win 70% of days and still lose money if the 30% are much larger.",
+    "exposure": "Average absolute position. A Sharpe of 1.0 at 20% exposure and at 100% exposure are very different results — the first used a fifth of the capital and a fifth of the observations.",
+    "turnover": "Position change per year, in full-position units. Turnover of 20 means you turned the book over 20 times — at 5bps a side that is roughly 1% a year of pure cost.",
+    "benchmark_return": "Buy-and-hold over the same window. The bar every strategy has to clear, and the one most backtests quietly omit.",
+    "test_base_rate": "Accuracy you'd get by always predicting the majority class. On daily equity data this is about 53% — any model at or below it has learned nothing.",
+    "sharpe_decay": "In-sample Sharpe minus out-of-sample Sharpe. Large positive values mean the in-sample number was substantially fitted to that period.",
+}
