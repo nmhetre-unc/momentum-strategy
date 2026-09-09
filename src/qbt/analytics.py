@@ -8,12 +8,38 @@ import pandas as pd
 TRADING_DAYS_PER_YEAR = 252
 
 
+def _annualized_return_from_log(log_growth: float, periods_per_year: float) -> float:
+    """
+    exp(log_growth * periods_per_year) - 1: what a per-period log growth
+    rate compounds to over a year. Computed in log space, with the
+    exponent clipped to stay inside float64's exp() range, rather than
+    raising a ratio directly to a power -- a short window or a single
+    volatile period can make the "true" annualized figure astronomical
+    (e.g. a 300x move over two days), so this saturates at a very large
+    but finite number instead of overflowing to inf.
+    """
+    exponent = np.clip(log_growth * periods_per_year, -700.0, 700.0)
+    return float(np.exp(exponent) - 1)
+
+
 def cagr(equity_curve: pd.Series) -> float:
-    """Compound Annual Growth Rate, based on however many days are in equity_curve."""
-    if len(equity_curve) < 2 or equity_curve.iloc[0] == 0:
+    """
+    Compound Annual Growth Rate, based on however many days are in
+    equity_curve. A non-positive or non-finite start/end leaves the
+    growth ratio undefined (returns 0.0); a total loss (end == 0) is a
+    real -100% annualized return, reported as exactly -1.0.
+    """
+    if len(equity_curve) < 2:
         return 0.0
-    years = len(equity_curve) / TRADING_DAYS_PER_YEAR
-    return (equity_curve.iloc[-1] / equity_curve.iloc[0]) ** (1 / years) - 1
+    start, end = float(equity_curve.iloc[0]), float(equity_curve.iloc[-1])
+    if not (np.isfinite(start) and np.isfinite(end)):
+        return 0.0
+    if end == 0.0 and start > 0:
+        return -1.0
+    if start <= 0 or end <= 0:
+        return 0.0
+    periods_per_year = TRADING_DAYS_PER_YEAR / len(equity_curve)
+    return _annualized_return_from_log(np.log(end) - np.log(start), periods_per_year)
 
 
 def annualized_volatility(daily_returns: pd.Series) -> float:
@@ -127,6 +153,24 @@ def turnover(position: pd.Series) -> float:
     return float(total / (len(position) / TRADING_DAYS_PER_YEAR))
 
 
+def _daily_mean_to_ann_return(mean_daily_return: float) -> float:
+    """
+    (1 + mean_daily_return) ** TRADING_DAYS_PER_YEAR - 1, computed the
+    same safe way as cagr(): a short or volatile regime segment can leave
+    a single extreme day undiluted in the mean, and TRADING_DAYS_PER_YEAR
+    is already a large fixed exponent, so this is vulnerable to the same
+    float64 overflow cagr() had.
+    """
+    base = 1 + mean_daily_return
+    if not np.isfinite(base):
+        return 0.0
+    if base == 0.0:
+        return -1.0
+    if base < 0:
+        return 0.0
+    return _annualized_return_from_log(np.log(base), TRADING_DAYS_PER_YEAR)
+
+
 def performance_by_regime(result: pd.DataFrame, labels: pd.Series, names: dict = None) -> pd.DataFrame:
     """
     Splits a backtest result by market regime and reports the full metric
@@ -159,7 +203,7 @@ def performance_by_regime(result: pd.DataFrame, labels: pd.Series, names: dict =
             "name": (names or {}).get(regime_id, str(regime_id)),
             "days": int(mask.sum()),
             "total_return": equity.iloc[-1] - 1,
-            "ann_return": (1 + segment_returns.mean()) ** TRADING_DAYS_PER_YEAR - 1,
+            "ann_return": _daily_mean_to_ann_return(segment_returns.mean()),
             "annualized_volatility": annualized_volatility(segment_returns),
             "sharpe_ratio": sharpe_ratio(segment_returns),
             "sortino_ratio": sortino_ratio(segment_returns),

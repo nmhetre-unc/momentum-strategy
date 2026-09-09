@@ -163,4 +163,7 @@ leverage, no cross-sectional universe. Costs are a flat 5bps one-way spread
 proxy with no market impact, borrow, or financing. Regime labels come from a
 3-state HMM fit on the first 70% of history; the walk-forward variant is
 available but the reported numbers use the fixed fit. Fitted strategies are not
-refit per fold in the rolling walk-forward.
+refit per fold in the rolling walk-forward. Walk-forward folds are sliced from a full-length backtest, so each fold
+inherits the position going into it rather than starting flat. Fold-level
+costs therefore exclude the entry cost of initiating a position at the fold's
+start.

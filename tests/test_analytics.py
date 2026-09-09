@@ -4,13 +4,37 @@ features.py -- edge cases (zero variance, an unknown regime, a maximally
 overbought RSI window) that a full backtest wouldn't reliably exercise.
 """
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from qbt.analytics import max_drawdown, sharpe_ratio, sortino_ratio, turnover
+from qbt.analytics import cagr, max_drawdown, sharpe_ratio, sortino_ratio, turnover
 from qbt.features import build_features
 from qbt.ml import _regime_dummies
+
+
+def test_cagr_does_not_overflow_on_hypothesis_found_example():
+    # The exact equity_curve Hypothesis's property test landed full_report()
+    # on: 1.0 -> 300.0 over 2 rows (years = 2/252). (300) ** (1/years) =
+    # 300 ** 126 previously overflowed float64 with a RuntimeWarning;
+    # computed in log space with a clipped exponent, this should land on a
+    # large but finite number instead.
+    equity = pd.Series([1.0, 300.0], index=pd.date_range("2020-01-01", periods=2, freq="B"))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = cagr(equity)
+    assert np.isfinite(result)
+    assert result > 0
+
+
+def test_cagr_on_total_loss_is_minus_one():
+    equity = pd.Series([1.0, 0.0], index=pd.date_range("2020-01-01", periods=2, freq="B"))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = cagr(equity)
+    assert result == -1.0
 
 
 def test_max_drawdown_on_monotonic_increase_is_zero():
