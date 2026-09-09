@@ -23,9 +23,15 @@ def annualized_volatility(daily_returns: pd.Series) -> float:
 def sharpe_ratio(daily_returns: pd.Series, risk_free_rate: float = 0.0) -> float:
     """Return per unit of total volatility (upside and downside both count)."""
     excess = daily_returns - risk_free_rate / TRADING_DAYS_PER_YEAR
-    if excess.std() == 0:
+    std = excess.std()
+    # A repeated constant should have zero std, but mean-then-subtract
+    # floating-point arithmetic leaves ~1e-17 rather than exactly 0 --
+    # `== 0` misses that and lets the ratio blow up. Daily return values
+    # live at the 1e-3 to 1e-1 scale, so 1e-12 is generous headroom above
+    # that noise floor without masking any real (if tiny) volatility.
+    if pd.isna(std) or np.isclose(std, 0.0, atol=1e-12):
         return 0.0
-    return (excess.mean() / excess.std()) * np.sqrt(TRADING_DAYS_PER_YEAR)
+    return (excess.mean() / std) * np.sqrt(TRADING_DAYS_PER_YEAR)
 
 
 def sortino_ratio(daily_returns: pd.Series, risk_free_rate: float = 0.0) -> float:
@@ -33,7 +39,7 @@ def sortino_ratio(daily_returns: pd.Series, risk_free_rate: float = 0.0) -> floa
     excess = daily_returns - risk_free_rate / TRADING_DAYS_PER_YEAR
     downside = excess[excess < 0]
     downside_std = downside.std()
-    if downside_std == 0 or pd.isna(downside_std):
+    if pd.isna(downside_std) or np.isclose(downside_std, 0.0, atol=1e-12):
         return 0.0
     return (excess.mean() / downside_std) * np.sqrt(TRADING_DAYS_PER_YEAR)
 
