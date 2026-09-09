@@ -21,8 +21,14 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-cov",
-    "ruff",
-    "mypy",
+    # ruff and mypy are pinned exactly so local and CI type-check/lint against
+    # the same rules -- an unpinned mypy in particular drifts in how it infers
+    # pandas ufunc results across releases, which reads as a code bug until
+    # you notice the version differs. mypy==1.10.0 predates the "librt"
+    # compiled runtime newer mypy ships, which this machine's Windows
+    # Application Control policy blocks outright.
+    "ruff==0.16.6",
+    "mypy==1.10.0",
     "pandas-stubs==3.0.5.260730",
     "hypothesis",
 ]

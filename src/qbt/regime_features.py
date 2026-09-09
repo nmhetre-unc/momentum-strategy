@@ -109,10 +109,11 @@ def parkinson_volatility(df: pd.DataFrame, window: int = 20) -> pd.Series:
     volatility but correctly looks violent here.
     """
     # np.log() on a Series returns a Series at runtime (pandas implements
-    # __array_ufunc__), but numpy's own stubs type ufuncs generically as
-    # ndarray -- how that resolves depends on the pandas-stubs version, so
-    # pin the type explicitly rather than relying on ufunc-overload inference.
-    log_range: pd.Series = np.log(df["High"] / df["Low"])
+    # __array_ufunc__), but numpy's ufunc stubs type the return generically
+    # and different stubs versions resolve it differently (Series vs
+    # ndarray) -- wrap it in an explicit constructor rather than annotating
+    # the inferred expression, which every version reads the same way.
+    log_range = pd.Series(np.log(df["High"] / df["Low"]), index=df.index)
     variance = (log_range ** 2).rolling(window).mean() / (4 * np.log(2))
     return np.sqrt(variance * TRADING_DAYS_PER_YEAR)
 
