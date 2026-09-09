@@ -735,7 +735,10 @@ def detect_regimes_walk_forward(
         ordering = sorted(vol_by_label, key=lambda k: (np.isnan(vol_by_label[k]), vol_by_label[k]))
         remap = {old: new for new, old in enumerate(ordering)}
 
-        ids.loc[test_index] = [remap.get(v, UNKNOWN) for v in chunk_ids.loc[test_index]]
+        remapped = pd.Series(
+            [remap.get(v, UNKNOWN) for v in chunk_ids.loc[test_index]], index=test_index
+        )
+        ids.loc[test_index] = remapped
         if chunk_proba is not None:
             reordered = chunk_proba.loc[test_index, ordering]
             reordered.columns = range(len(ordering))

@@ -108,7 +108,11 @@ def parkinson_volatility(df: pd.DataFrame, window: int = 20) -> pd.Series:
     A day that crashed 5% and recovered looks quiet to close-to-close
     volatility but correctly looks violent here.
     """
-    log_range = np.log(df["High"] / df["Low"])
+    # np.log() on a Series returns a Series at runtime (pandas implements
+    # __array_ufunc__), but numpy's own stubs type ufuncs generically as
+    # ndarray -- how that resolves depends on the pandas-stubs version, so
+    # pin the type explicitly rather than relying on ufunc-overload inference.
+    log_range: pd.Series = np.log(df["High"] / df["Low"])
     variance = (log_range ** 2).rolling(window).mean() / (4 * np.log(2))
     return np.sqrt(variance * TRADING_DAYS_PER_YEAR)
 
