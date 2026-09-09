@@ -171,6 +171,68 @@ objects. Ruff, mypy, and pandas-stubs are now pinned to exact versions, since
 an unpinned linter or type checker turns CI into a nondeterministic test that
 can fail on a commit which changed nothing relevant.
 
+## 12. Cross-sectional momentum: the signal works long, the construction fails
+
+12-1 momentum on the S&P 100, 2008-2025, decile long-short, equal weight,
+monthly rebalance, 5bps. Combined Sharpe 0.001 [-0.398, 0.430]. Max drawdown
+-77.0%, annualized volatility 26.0%, turnover 12.95x.
+
+The long leg alone has a Sharpe of 1.071 [0.727, 1.441] — the only strategy in
+this project whose confidence interval clearly excludes zero. The short leg
+alone is -0.882 [-1.281, -0.483], significantly negative. The short leg exactly
+cancels a working long leg.
+
+Equal dollar weights did not produce equal market exposure. The winner decile
+skewed defensive (AMGN, BMY, MCD, SO, WMT recur), giving the long leg a beta of
++0.789, while shorting the loser decile gave a normal -1.003. Net beta -0.214,
+CI [-0.384, -0.072], against a universe that returned +1059% over the period.
+
+A log-space decomposition attributes 88.7% of the -45% total loss to that beta
+mismatch and 11.3% to signal and volatility drag combined. The first attempt
+summed simple returns and failed to reconstruct the actual loss, because
+returns compound multiplicatively; at 26% annualized volatility the drag term
+is roughly 3.4% per year.
+
+The 2009 short leg held AIG, BAC, C, MS, AXP, COF, GE, and F going into March —
+the beaten-down financials — and lost 73.4% that year while the long leg gained
+23.7%. That is the Daniel & Moskowitz momentum crash reproduced directly. It is
+not, however, what killed the strategy: March-May 2009 and February-April 2020
+each account for about 1% of accumulated drawdown. The short leg lost money in
+15 of 17 years.
+
+## 13. Hedging the beta recovers about half of what it should
+
+A beta-neutral variant rescales the short leg by trailing 252-day causal leg
+betas, recomputed monthly. Net beta halves to -0.131, though the CI
+[-0.218, -0.050] still excludes zero — trailing beta is a noisy forecast of
+next month's realized beta, with scale factors ranging 0.26 to 2.87.
+
+Max drawdown halves to -42.5%, kurtosis falls from 14.8 to 7.7, skew from -1.03
+to -0.42, and 2009 improves from -63.6% to -12.4%. The hedge targets exactly the
+mechanism it was designed for.
+
+Sharpe rises to 0.196, but the CI [-0.170, 0.569] still contains zero and
+overlaps the unhedged interval, so the improvement is directional rather than
+established. Non-crisis years get worse — 2019 falls from -8.3% to -26.7%, and
+2014 and 2017 also deteriorate — because in years where the problem was not
+beta, the hedge adds sizing noise without addressing the cause. Turnover rises
+from 12.95x to 14.60x.
+
+Beta was the majority of the problem but not all of it. The short leg's
+standalone Sharpe of -0.882 excludes zero on its own terms: past losers on this
+universe did not keep underperforming enough to make shorting them profitable.
+
+Note on benchmarking: a beta-neutral book is not designed to capture the
+market's return, so its -0.602 difference versus equal-weight buy-and-hold
+conflates stock selection with the intentional absence of market exposure. The
+absolute Sharpe is the relevant read for this construction.
+
+The universe is current S&P 100 membership, so companies that left the index
+between 2008 and 2025 are absent. Those are disproportionately the sustained
+underperformers a short leg would have profited from, so the survivorship bias
+runs in the strategy's favor and this negative result is if anything
+understated.
+
 ## Limitations
 
 Single asset, single 17-year window, long/flat positions only. No shorting, no
