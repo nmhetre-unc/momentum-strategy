@@ -156,6 +156,21 @@ only the two call sites that render a confidence interval pass a nonzero value,
 at 200 replicates. The default path is back to 0.94ms and the test suite to
 9.4s.
 
+## 11. Unpinned tooling makes CI nondeterministic
+
+CI failed twice on mypy errors that did not reproduce locally, and in opposite
+directions: first that `np.log(Series)` returns an ndarray so `.rolling()` is
+invalid, then that the same expression returns an ndarray so it cannot be
+assigned to a `pd.Series` variable. Both runs agreed with each other and
+disagreed with local mypy 1.10.0, which infers a Series. At runtime it is a
+Series, since pandas implements `__array_ufunc__`.
+
+The code was never wrong. Local and runner had resolved different mypy and
+pandas-stubs versions, which disagree about numpy ufunc return types on pandas
+objects. Ruff, mypy, and pandas-stubs are now pinned to exact versions, since
+an unpinned linter or type checker turns CI into a nondeterministic test that
+can fail on a commit which changed nothing relevant.
+
 ## Limitations
 
 Single asset, single 17-year window, long/flat positions only. No shorting, no
