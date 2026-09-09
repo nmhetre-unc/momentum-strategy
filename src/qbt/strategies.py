@@ -4,6 +4,7 @@ and returns a pandas Series of positions: 1 = long, 0 = flat.
 """
 
 from collections.abc import Callable
+from typing import cast
 
 import pandas as pd
 
@@ -52,6 +53,84 @@ def mean_reversion_rsi(
     signal[rsi > overbought] = 0
     signal = signal.ffill().fillna(0)
     return signal.astype(int)
+
+
+def _momentum_eligibility(prices: pd.DataFrame, lookback: int = 252) -> pd.DataFrame:
+    """
+    True where a ticker has accumulated at least `lookback` non-NaN
+    observations as of that date -- an expanding count, not "the trailing
+    `lookback` days are all non-NaN". Kept separate from whether the
+    momentum score itself happens to be computable, so this is a rule
+    about the ticker's history, not an artifact of the score formula.
+    An all-NaN column (a ticker whose fetch failed outright, e.g. via
+    qbt.universe) self-excludes here with no special case: it never
+    accumulates any valid history to be eligible with.
+    """
+    return prices.notna().cumsum() >= lookback
+
+
+def cross_sectional_momentum(
+    prices: pd.DataFrame, lookback: int = 252, skip: int = 21, decile: float = 0.1
+) -> pd.DataFrame:
+    """
+    12-1 month cross-sectional momentum. Unlike every other strategy in
+    this module, this one operates on a multi-ticker price matrix (dates
+    x tickers, e.g. from qbt.universe.fetch_universe) rather than a
+    single asset's `Close` column, and returns a weights DataFrame (dates
+    x tickers) rather than a 1/0 position Series -- it needs
+    run_portfolio_backtest(), not run_backtest(), and is intentionally
+    not registered in STRATEGIES below.
+
+    Ranks tickers by trailing return from `lookback` days ago through
+    `skip` days ago -- the classic 12-1 month formula, which excludes the
+    most recent month because short-term reversal contaminates raw
+    momentum there. Goes equal-weight long the top decile and
+    equal-weight short the bottom decile of ELIGIBLE tickers, rebalanced
+    on the last trading day of each calendar month. A ticker not yet
+    eligible (see _momentum_eligibility) gets zero weight and cannot be
+    ranked, no matter how extreme its raw price move looks.
+
+    The returned weights hold constant between rebalance dates -- this is
+    what run_portfolio_backtest() expects to shift and apply, the same
+    way a single-asset strategy's signal holds between changes. Before
+    the first rebalance, and on any month with fewer than 2 eligible
+    tickers, the portfolio holds flat at zero rather than take a
+    degenerate one-sided position.
+    """
+    momentum_score = prices.shift(skip) / prices.shift(lookback) - 1
+    eligible = _momentum_eligibility(prices, lookback) & momentum_score.notna()
+
+    # Last trading day actually present in the index for each calendar
+    # month -- not a fixed calendar date, which might be a holiday.
+    date_index = pd.DatetimeIndex(prices.index)
+    month_of: pd.Series = date_index.to_series().groupby(date_index.to_period("M")).max()
+    rebalance_dates = pd.DatetimeIndex(month_of.to_numpy())
+
+    weights = pd.DataFrame(index=prices.index, columns=prices.columns, dtype=float)
+
+    for date in rebalance_dates:
+        # `.loc[date]` on a DataFrame is typed as possibly returning a
+        # DataFrame (duplicate-index case); the index is unique here by
+        # construction, so it's always actually a Series -- cast rather
+        # than fight pandas-stubs' overload for a case that can't happen.
+        elig_tickers = cast(pd.Series, eligible.loc[date])
+        n_eligible = int(elig_tickers.sum())
+        if n_eligible < 2:
+            continue
+
+        n_leg = max(1, int(n_eligible * decile))
+        n_leg = min(n_leg, n_eligible // 2)
+
+        date_scores = cast(pd.Series, momentum_score.loc[date])
+        scores = date_scores[elig_tickers].sort_values()
+        shorts, longs = scores.index[:n_leg], scores.index[-n_leg:]
+
+        row = pd.Series(0.0, index=prices.columns)
+        row[longs] = 1.0 / n_leg
+        row[shorts] = -1.0 / n_leg
+        weights.loc[date] = row
+
+    return weights.ffill().fillna(0.0)
 
 
 STRATEGIES: dict[str, Callable[..., pd.Series]] = {

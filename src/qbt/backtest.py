@@ -52,6 +52,55 @@ def run_backtest(
     return result
 
 
+def run_portfolio_backtest(
+    weights: pd.DataFrame, prices: pd.DataFrame, cost_bps: float = 5.0
+) -> pd.DataFrame:
+    """
+    Portfolio-level analog of run_backtest(): takes a target-weight matrix
+    (dates x tickers, e.g. from cross_sectional_momentum()) instead of a
+    single-asset signal, and a matching price matrix instead of a single
+    `Close` column. Applies the exact same shift(1)-then-apply convention
+    -- a weight decided on day t can only act on day t+1's return -- and
+    the exact same day-0 entry-cost convention (a NaN diff on the first
+    row falls back to that row's own position size, as if entering fresh
+    from flat), just summed across tickers: `cost_bps` is charged on the
+    sum of absolute weight changes across every ticker at each rebalance,
+    not per ticker independently.
+
+    Returns the same output columns as run_backtest() wherever a column
+    reduces to one scalar per date at the portfolio level (gross_return,
+    cost, strategy_return, equity_curve); `close`, `signal`, `position`
+    and `daily_return` don't -- they're inherently per-ticker matrices
+    here, not single columns, so they're left out rather than forced into
+    a shape they don't fit. `benchmark_curve` is the equal-weight
+    buy-and-hold of every ticker in `prices`, the portfolio analog of
+    run_backtest()'s single-asset buy-and-hold.
+    """
+    position = weights.reindex(index=prices.index, columns=prices.columns).shift(1).fillna(0.0)
+    daily_return = prices.pct_change()
+
+    cost = (
+        position.diff().abs().fillna(position.abs()).sum(axis=1) * (cost_bps / 10_000.0)
+    )
+
+    # A ticker's own data gap (held, but its price is momentarily NaN)
+    # contributes 0 that day rather than NaN-ing the whole portfolio's
+    # return -- a data gap in one name shouldn't erase every other
+    # holding's return on the same day.
+    gross_return = (position * daily_return.fillna(0.0)).sum(axis=1)
+    strategy_return = gross_return - cost
+    equity_curve = (1 + strategy_return).cumprod()
+    benchmark_curve = (1 + daily_return.mean(axis=1)).cumprod()
+
+    return pd.DataFrame({
+        "gross_return": gross_return,
+        "cost": cost,
+        "strategy_return": strategy_return,
+        "equity_curve": equity_curve,
+        "benchmark_curve": benchmark_curve,
+    })
+
+
 def summary_stats(result: pd.DataFrame) -> dict:
     """Basic stats from a full-period backtest result. See analytics.full_report
     for the richer version that's also safe to use on sliced sub-periods."""
