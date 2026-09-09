@@ -14,12 +14,13 @@ from qbt.analytics import full_report, performance_by_regime
 
 
 def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.7,
-                           cost_bps: float = 5.0, **strategy_params) -> dict:
+                           cost_bps: float = 5.0, n_boot: int = 0, **strategy_params) -> dict:
     """
     Computes the signal and backtest once on the full dataset, then
     splits the result chronologically at `split_frac`: everything before
     is in-sample, everything after is out-of-sample. Reports full metrics
-    for each half separately.
+    for each half separately. `n_boot` is forwarded to full_report(); it
+    defaults to 0 (no Sharpe CI) since this runs in loops elsewhere.
     """
     signal = strategy_fn(df, **strategy_params)
     result = run_backtest(df, signal, cost_bps=cost_bps)
@@ -32,14 +33,14 @@ def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.
 
     return {
         "split_date": str(split_date.date()),
-        "in_sample": full_report(in_sample),
-        "out_sample": full_report(out_sample),
+        "in_sample": full_report(in_sample, n_boot=n_boot),
+        "out_sample": full_report(out_sample, n_boot=n_boot),
     }
 
 
 def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
                          test_days: int = 126, cost_bps: float = 5.0,
-                         **strategy_params) -> dict:
+                         n_boot: int = 0, **strategy_params) -> dict:
     """
     Slides a train/test window through history and evaluates each
     out-of-sample block separately. The signal is generated once on the
@@ -47,7 +48,10 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
     an approximation for fitted strategies (ml_direction, and the adaptive
     wrappers), which fit once rather than refitting per fold -- the
     returned `fitted_note` states this. Returns per-fold metrics plus a
-    stitched equity curve of only the out-of-sample days.
+    stitched equity curve of only the out-of-sample days. `n_boot` is
+    forwarded to full_report() for each fold; it defaults to 0 (no
+    Sharpe CI), since this function's own per-fold loop multiplies
+    whatever full_report costs.
     """
     signal = strategy_fn(df, **strategy_params)
     result = run_backtest(df, signal, cost_bps=cost_bps)
@@ -62,7 +66,7 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
     start = train_days
     while start + test_days <= len(result):
         window = result.iloc[start:start + test_days]
-        stats = full_report(window)
+        stats = full_report(window, n_boot=n_boot)
         folds.append({
             "fold": len(folds) + 1,
             "train_end": result.index[start - 1],
@@ -86,7 +90,7 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
         "n_folds": len(fold_table),
         "oos_equity": (1 + stitched).cumprod(),
         "oos_returns": stitched,
-        "oos_report": full_report(result.loc[stitched.index]),
+        "oos_report": full_report(result.loc[stitched.index], n_boot=n_boot),
         # Median and pct-positive are reported alongside the mean since
         # consistency across folds matters as much as the average.
         "mean_sharpe": float(sharpes.mean()),
@@ -102,7 +106,8 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
 
 
 def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: float = 0.7,
-                          cost_bps: float = 5.0, strategy_params: dict = None) -> dict:
+                          cost_bps: float = 5.0, n_boot: int = 0,
+                          strategy_params: dict = None) -> dict:
     """
     Walk-forward validation with the in-sample and out-of-sample results
     each broken down by market regime, so a Sharpe drop can be attributed
@@ -110,7 +115,9 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
     `regime_mix` between the two periods first. `strategy_params` is an
     explicit dict rather than **kwargs because the adaptive wrappers take
     a `regimes` argument themselves, which would collide with this
-    function's own `regimes` parameter under **kwargs.
+    function's own `regimes` parameter under **kwargs. `n_boot` is
+    forwarded to full_report(); it defaults to 0 (no Sharpe CI) since
+    this is often called once per strategy in a comparison loop.
     """
     labels = regimes.labels if hasattr(regimes, "labels") else regimes
     names = getattr(regimes, "names", None)
@@ -128,8 +135,8 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
 
     return {
         "split_date": str(split_date.date()),
-        "in_sample": full_report(in_sample),
-        "out_sample": full_report(out_sample),
+        "in_sample": full_report(in_sample, n_boot=n_boot),
+        "out_sample": full_report(out_sample, n_boot=n_boot),
         "in_sample_by_regime": performance_by_regime(in_sample, labels, names),
         "out_sample_by_regime": performance_by_regime(out_sample, labels, names),
         "regime_mix": pd.DataFrame({
@@ -141,7 +148,7 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
 
 
 def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0.7,
-                       cost_bps: float = 5.0) -> pd.DataFrame:
+                       cost_bps: float = 5.0, n_boot: int = 0) -> pd.DataFrame:
     """
     Runs several strategies over identical data, dates, costs and split,
     and returns one table of in-sample vs out-of-sample metrics.
@@ -149,6 +156,9 @@ def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0
     (callable, params_dict) tuple. Selecting the best out-of-sample
     Sharpe from this table is itself an in-sample result, since the
     out-of-sample data was used to choose it -- report the whole table.
+    `n_boot` is forwarded to full_report() for every strategy; it
+    defaults to 0 (no Sharpe CI), since this function calls full_report
+    twice per strategy.
     """
     rows = []
     for name, entry in strategies.items():
@@ -157,8 +167,8 @@ def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0
             signal = fn(df, **params)
             result = run_backtest(df, signal, cost_bps=cost_bps)
             split_date = result.index[int(len(result) * split_frac)]
-            in_stats = full_report(result.loc[:split_date])
-            out_stats = full_report(result.loc[split_date:])
+            in_stats = full_report(result.loc[:split_date], n_boot=n_boot)
+            out_stats = full_report(result.loc[split_date:], n_boot=n_boot)
             rows.append({
                 "strategy": name,
                 "is_sharpe": in_stats["sharpe_ratio"],

@@ -183,11 +183,17 @@ if tab_rolling.open:
         try:
             rolling = rolling_walk_forward(
                 df, ALL_STRATEGIES[strategy_name], train_days=int(train_days),
-                test_days=int(test_days), cost_bps=cost_bps, **params,
+                test_days=int(test_days), cost_bps=cost_bps, n_boot=200, **params,
             )
         except ValueError as exc:
             st.warning(str(exc), icon=":material/warning:")
             st.stop()
+
+        st.caption(
+            "Sharpe confidence intervals on this tab use a 200-replicate stationary "
+            "bootstrap per fold, not the library default of 2,000 -- fast enough to "
+            "rerun on every widget change, at the cost of a noisier interval."
+        )
 
         summary = st.columns(4)
         summary[0].metric("Folds", rolling["n_folds"])
@@ -457,8 +463,15 @@ if tab_compare.open:
                 df,
                 {name: (fn, {"regimes": regimes} if name in ADAPTIVE_STRATEGIES else {})
                  for name, fn in ALL_STRATEGIES.items()},
-                cost_bps=compare_cost,
+                cost_bps=compare_cost, n_boot=200,
             )
+
+        st.caption(
+            "Sharpe confidence intervals here use a 200-replicate stationary bootstrap "
+            "per strategy, not the library default of 2,000 -- this table already runs "
+            "the bootstrap twice for every strategy in ALL_STRATEGIES, so the full "
+            "replicate count would make this tab unusable."
+        )
 
         chart = comparison_chart(table)
         if chart is not None:

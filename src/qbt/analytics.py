@@ -54,13 +54,16 @@ def max_drawdown(equity_curve: pd.Series) -> float:
     return drawdown_series(equity_curve).min()
 
 
-def full_report(result: pd.DataFrame) -> dict:
+def full_report(result: pd.DataFrame, n_boot: int = 0) -> dict:
     """
     Recomputes a normalized equity curve (starting at 1.0) from
     `strategy_return` rather than trusting result['equity_curve']
     directly, so this is safe to call on an arbitrary date-sliced subset
     of a backtest result -- e.g. an out-of-sample period -- which is how
-    walk_forward.py uses it.
+    walk_forward.py uses it. `n_boot=0` (default) skips the bootstrap
+    entirely and reports `sharpe_ci_low`/`sharpe_ci_high` as None, since
+    a stationary bootstrap over thousands of replicates dominates this
+    function's cost; pass `n_boot > 0` to compute them.
     """
     strategy_return = result["strategy_return"].fillna(0)
     equity = (1 + strategy_return).cumprod()
@@ -68,6 +71,14 @@ def full_report(result: pd.DataFrame) -> dict:
     trades = (result["position"].diff().abs() > 0).sum()
     nonzero_returns = strategy_return[strategy_return != 0]
     win_rate = (nonzero_returns > 0).sum() / len(nonzero_returns) if len(nonzero_returns) > 0 else 0.0
+
+    if n_boot > 0:
+        # Lazy import: qbt.stats imports sharpe_ratio from this module,
+        # so a top-level import here would be circular.
+        from qbt.stats import stationary_bootstrap_sharpe
+        _, sharpe_ci_low, sharpe_ci_high = stationary_bootstrap_sharpe(strategy_return, n_boot=n_boot)
+    else:
+        sharpe_ci_low = sharpe_ci_high = None
 
     return {
         "total_return": equity.iloc[-1] - 1,
@@ -81,6 +92,8 @@ def full_report(result: pd.DataFrame) -> dict:
         "cagr": cagr(equity),
         "annualized_volatility": annualized_volatility(strategy_return),
         "sharpe_ratio": sharpe_ratio(strategy_return),
+        "sharpe_ci_low": sharpe_ci_low,
+        "sharpe_ci_high": sharpe_ci_high,
         "sortino_ratio": sortino_ratio(strategy_return),
         "max_drawdown": max_drawdown(equity),
     }

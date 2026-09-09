@@ -3,6 +3,8 @@ Sanity-checks strategies.py, backtest.py, analytics.py, and walk_forward.py
 against synthetic price data, since this sandbox can't reach the Yahoo
 Finance API. Run main.py directly on your own machine for real data.
 """
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -49,5 +51,21 @@ straight_up = pd.DataFrame({"Close": np.linspace(100, 200, 60)}, index=pd.date_r
 rsi_signal = STRATEGIES["mean_reversion"](straight_up)
 assert not rsi_signal.isna().any(), "RSI signal produced NaN on the zero-avg-loss edge case"
 print("\nRSI zero-average-loss edge case handled without NaN or crash.")
+
+print("\n=== full_report() bootstrap stays opt-in ===")
+big_dates = pd.date_range("2010-01-01", periods=4000, freq="B")
+big_returns = np.random.normal(0.0004, 0.012, 4000)
+big_prices = 100 * (1 + pd.Series(big_returns)).cumprod()
+big_df = pd.DataFrame({"Close": big_prices.values}, index=big_dates)
+big_result = run_backtest(big_df, STRATEGIES["sma_crossover"](big_df))
+
+t0 = time.perf_counter()
+big_stats = full_report(big_result)
+elapsed_ms = (time.perf_counter() - t0) * 1000
+
+assert big_stats["sharpe_ci_low"] is None, "sharpe_ci_low should be None when n_boot=0 (the default)"
+assert big_stats["sharpe_ci_high"] is None, "sharpe_ci_high should be None when n_boot=0 (the default)"
+assert elapsed_ms < 50, f"full_report() with default args took {elapsed_ms:.1f}ms on 4000 rows, expected <50ms"
+print(f"full_report() on {len(big_result)} rows, default args: {elapsed_ms:.2f}ms, CI keys None as expected.")
 
 print("\nAll checks passed on synthetic data.")
