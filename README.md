@@ -1,5 +1,8 @@
 # Quant Training Terminal
 
+![CI](https://github.com/nmhetre-unc/momentum-strategy/actions/workflows/ci.yml/badge.svg?branch=restructure)
+   
+
 A multi-strategy backtesting engine — rule-based, ML-driven, and regime-adaptive — wrapped
 inside a training platform for incoming quant traders and interns. It includes risk-adjusted
 metrics, walk-forward validation, market regime detection, adaptive strategies, guided
