@@ -77,8 +77,12 @@ def test_regime_fit_end_ignores_future_data():
         pd.DataFrame({"Close": extra_close}, index=extra_dates),
     ])
 
-    result_through_2022 = detect_regimes(df_through_2022, method="hmm", n_regimes=3, fit_end="2020-01-01")
-    result_through_2024 = detect_regimes(df_through_2024, method="hmm", n_regimes=3, fit_end="2020-01-01")
+    result_through_2022 = detect_regimes(
+        df_through_2022, method="hmm", n_regimes=3, fit_end="2020-01-01"
+    )
+    result_through_2024 = detect_regimes(
+        df_through_2024, method="hmm", n_regimes=3, fit_end="2020-01-01"
+    )
 
     labels_on_original_index = result_through_2024.labels.loc[df_through_2022.index]
     assert result_through_2022.labels.equals(labels_on_original_index), (

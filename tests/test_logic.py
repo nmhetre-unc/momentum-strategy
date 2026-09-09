@@ -9,9 +9,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from qbt.strategies import STRATEGIES
-from qbt.backtest import run_backtest
 from qbt.analytics import full_report
+from qbt.backtest import run_backtest
+from qbt.strategies import STRATEGIES
 from qbt.walk_forward import evaluate_out_of_sample
 
 
@@ -45,7 +45,9 @@ def test_strategy_backtest_stats_in_range(df, name):
     result = run_backtest(df, signal)
     stats = full_report(result)
 
-    assert -1.0 <= stats["max_drawdown"] <= 0.0, f"{name} max_drawdown out of range: {stats['max_drawdown']}"
+    assert -1.0 <= stats["max_drawdown"] <= 0.0, (
+        f"{name} max_drawdown out of range: {stats['max_drawdown']}"
+    )
     assert 0.0 <= stats["win_rate"] <= 1.0, f"{name} win_rate out of range: {stats['win_rate']}"
 
 
@@ -76,6 +78,12 @@ def test_full_report_bootstrap_stays_opt_in(big_df):
     big_stats = full_report(big_result)
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
-    assert big_stats["sharpe_ci_low"] is None, "sharpe_ci_low should be None when n_boot=0 (the default)"
-    assert big_stats["sharpe_ci_high"] is None, "sharpe_ci_high should be None when n_boot=0 (the default)"
-    assert elapsed_ms < 50, f"full_report() with default args took {elapsed_ms:.1f}ms on 4000 rows, expected <50ms"
+    assert big_stats["sharpe_ci_low"] is None, (
+        "sharpe_ci_low should be None when n_boot=0 (the default)"
+    )
+    assert big_stats["sharpe_ci_high"] is None, (
+        "sharpe_ci_high should be None when n_boot=0 (the default)"
+    )
+    assert elapsed_ms < 50, (
+        f"full_report() with default args took {elapsed_ms:.1f}ms on 4000 rows, expected <50ms"
+    )

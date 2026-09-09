@@ -11,12 +11,21 @@ Every control and chart from the plain version is unchanged.
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-from components import (caveat, chart_caption, drawdown_chart,
-    equity_chart, explainer, how_to_read, metric_row,
-    PERFORMANCE_CONFIG, position_chart, require_regimes, show_metric_table,
-    table_caption
+from components import (
+    PERFORMANCE_CONFIG,
+    caveat,
+    chart_caption,
+    drawdown_chart,
+    equity_chart,
+    explainer,
+    how_to_read,
+    metric_row,
+    position_chart,
+    require_regimes,
+    show_metric_table,
+    table_caption,
 )
+
 from qbt.adaptive import ADAPTIVE_DOCS, ADAPTIVE_STRATEGIES, describe_choices, describe_filter
 from qbt.analytics import full_report, performance_by_regime
 from qbt.backtest import run_backtest
@@ -61,14 +70,20 @@ with st.container(border=True):
             "mechanism captures most of the benefit. When it does, that is the finding."
         )
 
-    st.markdown("**The four mechanisms — they fail in different ways, so know which you're running**")
+    st.markdown(
+        "**The four mechanisms — they fail in different ways, so know which you're running**"
+    )
     st.markdown(
         "| Mechanism | What it does | Strategies here | Main risk |\n"
         "|---|---|---|---|\n"
-        "| **Filtering** | Keeps the rule, sits out bad regimes | `regime_filtered` | Cuts exposure — metrics rest on fewer days |\n"
-        "| **Switching** | Different rule per regime | `regime_switch` | Late labels + full position flips = turnover |\n"
-        "| **Re-parameterizing** | Same rule, regime-specific settings | `regime_parameters` | Most degrees of freedom, easiest to overfit |\n"
-        "| **Position sizing** | Same signal, scaled size | `volatility_targeted`, `regime_sized` | Improvement may just be *holding less* |\n"
+        "| **Filtering** | Keeps the rule, sits out bad regimes | `regime_filtered` | Cuts "
+        "exposure — metrics rest on fewer days |\n"
+        "| **Switching** | Different rule per regime | `regime_switch` | Late labels + full "
+        "position flips = turnover |\n"
+        "| **Re-parameterizing** | Same rule, regime-specific settings | `regime_parameters` "
+        "| Most degrees of freedom, easiest to overfit |\n"
+        "| **Position sizing** | Same signal, scaled size | `volatility_targeted`, "
+        "`regime_sized` | Improvement may just be *holding less* |\n"
         "\n"
         "`adaptive_ensemble` stacks switching and sizing; `ml_regime_conditional` conditions the "
         "ML model on regime. Both inherit the risks of their parts."
@@ -128,20 +143,26 @@ with st.container(border=True):
     )
     base = controls[1].selectbox(
         "Base strategy", list(STRATEGIES)[:3], key="ad_base",
-        help="The underlying rule the wrapper adapts. Ignored by regime_switch and adaptive_ensemble, which choose per regime.",
+        help="The underlying rule the wrapper adapts. Ignored by regime_switch and "
+             "adaptive_ensemble, which choose per regime.",
     )
     cost_bps = controls[2].number_input(
         "Cost (bps)", 0.0, 50.0, 5.0, step=1.0, key="ad_cost",
-        help="Adaptive strategies trade more than the rules they wrap. Comparing them at zero cost flatters them.",
+        help="Adaptive strategies trade more than the rules they wrap. Comparing them at "
+             "zero cost flatters them.",
     )
 
     params = {"regimes": regimes}
-    if adaptive_name in ("regime_filtered", "regime_parameters", "regime_sized", "volatility_targeted"):
+    base_param_strategies = (
+        "regime_filtered", "regime_parameters", "regime_sized", "volatility_targeted"
+    )
+    if adaptive_name in base_param_strategies:
         params["base"] = base
     if adaptive_name in ("volatility_targeted", "adaptive_ensemble"):
         params["target_vol"] = st.slider(
             "Target volatility (annualized)", 0.05, 0.40, 0.15, step=0.01, key="ad_target",
-            help="Aim for roughly this much volatility. Setting it far above what the asset realizes makes the cap inactive.",
+            help="Aim for roughly this much volatility. Setting it far above what the asset "
+                 "realizes makes the cap inactive.",
         )
     if adaptive_name == "ml_regime_conditional":
         params["regime_mode"] = st.segmented_control(
@@ -273,7 +294,8 @@ st.altair_chart(drawdown_chart(result))
 chart_caption(
     "Depth below the running peak for the adapted strategy.",
     "This is where most of what adaptation buys you actually shows up.",
-    "a shallower trough than the unadapted version — then check exposure before crediting it to skill.",
+    "a shallower trough than the unadapted version — then check exposure before crediting "
+    "it to skill.",
 )
 how_to_read(
     """
@@ -325,8 +347,11 @@ extra_turnover = stats["turnover"] - base_stats["turnover"]
 
 verdict = st.columns(3)
 verdict[0].metric("Sharpe change", f"{sharpe_gain:+.2f}")
-verdict[1].metric("Drawdown change", f"{drawdown_gain:+.1%}",
-                  help="Positive is better here — both numbers are negative, so a positive change means a shallower drawdown.")
+verdict[1].metric(
+    "Drawdown change", f"{drawdown_gain:+.1%}",
+    help="Positive is better here — both numbers are negative, so a positive change "
+         "means a shallower drawdown.",
+)
 verdict[2].metric("Extra turnover", f"{extra_turnover:+.1f}x",
                   help="What the adaptation cost you in trading, per year.")
 
@@ -394,7 +419,8 @@ if adaptive_name in ("regime_switch", "adaptive_ensemble", "regime_filtered"):
         ])
         table_caption(
             "Which strategy the automatic rule selected for each regime.",
-            "The choice is just the argmax of the evidence table below; read that before trusting it.",
+            "The choice is just the argmax of the evidence table below; read that before "
+            "trusting it.",
         )
         st.dataframe(choices, hide_index=True, key="ad_choices")
         evidence = described["table"]
@@ -402,8 +428,10 @@ if adaptive_name in ("regime_switch", "adaptive_ensemble", "regime_filtered"):
     evidence = evidence.copy()
     evidence["regime"] = evidence["regime"].map(lambda r: regimes.names.get(r, str(r)))
     table_caption(
-        "Each candidate strategy's Sharpe inside each regime, measured only on the learning window.",
-        "This is the reasoning behind the choice — compare the winner's margin against the day count.",
+        "Each candidate strategy's Sharpe inside each regime, measured only on the "
+        "learning window.",
+        "This is the reasoning behind the choice — compare the winner's margin against "
+        "the day count.",
     )
     st.dataframe(
         evidence, hide_index=True, key="ad_evidence",
@@ -471,7 +499,9 @@ else:
                  column_config=PERFORMANCE_CONFIG, key="ad_by_regime")
 
     base_table = performance_by_regime(
-        run_backtest(df, STRATEGIES[base_for_comparison](df), cost_bps=cost_bps, regimes=regimes.labels),
+        run_backtest(
+            df, STRATEGIES[base_for_comparison](df), cost_bps=cost_bps, regimes=regimes.labels
+        ),
         regimes.labels, regimes.names,
     )
     if not base_table.empty:
@@ -485,7 +515,8 @@ else:
         st.markdown("**What adaptation changed, regime by regime**")
         table_caption(
             "Adapted against unadapted, regime by regime.",
-            "The exposure-change column shows where the mechanism actually acted; zero means it was inactive there.",
+            "The exposure-change column shows where the mechanism actually acted; zero "
+            "means it was inactive there.",
         )
         st.dataframe(
             merged[["name", "days", "sharpe_ratio_base", "sharpe_ratio",
@@ -494,7 +525,9 @@ else:
             column_config={
                 "name": st.column_config.TextColumn("Regime"),
                 "days": st.column_config.NumberColumn("Days"),
-                "sharpe_ratio_base": st.column_config.NumberColumn("Sharpe (unadapted)", format="%.2f"),
+                "sharpe_ratio_base": st.column_config.NumberColumn(
+                    "Sharpe (unadapted)", format="%.2f"
+                ),
                 "sharpe_ratio": st.column_config.NumberColumn("Sharpe (adapted)", format="%.2f"),
                 "sharpe_delta": st.column_config.NumberColumn(
                     "Change", format="%.2f",
@@ -510,7 +543,9 @@ else:
         if len(hurt) and len(helped):
             caveat(
                 f"**Adaptation helped in {len(helped)} regime(s) and hurt in {len(hurt)}** — "
-                + "; ".join(f"{row['name']} {row['sharpe_delta']:+.2f}" for _, row in merged.iterrows())
+                + "; ".join(
+                    f"{row['name']} {row['sharpe_delta']:+.2f}" for _, row in merged.iterrows()
+                )
                 + ". Inconsistent results across regimes mean the mechanism is not doing one "
                   "coherent thing. Before accepting the net improvement, check whether it comes "
                   "from a single regime with few days, which would make it an accident rather "
@@ -535,8 +570,9 @@ else:
 # ---------- Honest evaluation ----------
 st.subheader("Out-of-sample", divider="gray")
 st.caption(
-    "The adaptive wrappers learn their rules from the first 60% of history; this split holds out "
-    "the last 30%, so the held-out period is genuinely unseen by the rule as well as by the strategy."
+    "The adaptive wrappers learn their rules from the first 60% of history; this split holds "
+    "out the last 30%, so the held-out period is genuinely unseen by the rule as well as by "
+    "the strategy."
 )
 wf = evaluate_out_of_sample(df, ADAPTIVE_STRATEGIES[adaptive_name], **params)
 wf_left, wf_right = st.columns(2)

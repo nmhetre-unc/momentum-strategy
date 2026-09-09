@@ -12,18 +12,34 @@ the explanations, caveats and reading guides are layered on top.
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-from components import (caveat, chart_caption, duration_histogram,
-    explainer, how_to_read, performance_by_regime_chart,
-    PERFORMANCE_CONFIG, regime_feature_chart, regime_palette,
-    regime_probability_chart, regime_ribbon_chart, REGIME_SUMMARY_CONFIG, require_regimes,
-    show_regime_health, table_caption, transition_heatmap
+from components import (
+    PERFORMANCE_CONFIG,
+    REGIME_SUMMARY_CONFIG,
+    caveat,
+    chart_caption,
+    duration_histogram,
+    explainer,
+    how_to_read,
+    performance_by_regime_chart,
+    regime_feature_chart,
+    regime_palette,
+    regime_probability_chart,
+    regime_ribbon_chart,
+    require_regimes,
+    show_regime_health,
+    table_caption,
+    transition_heatmap,
 )
+
 from qbt.analytics import benchmark_by_regime, performance_by_regime
 from qbt.backtest import run_backtest
 from qbt.regime import (
-    REGIME_METHOD_DOCS, SMOOTHING_DOCS, detect_regimes, regime_episodes,
-    regime_stability, regime_summary,
+    REGIME_METHOD_DOCS,
+    SMOOTHING_DOCS,
+    detect_regimes,
+    regime_episodes,
+    regime_stability,
+    regime_summary,
 )
 from qbt.regime_features import FEATURE_DOCS
 from qbt.strategies import STRATEGIES, STRATEGY_DOCS
@@ -78,10 +94,12 @@ with st.container(border=True):
             "which direction:\n\n"
             "| Name | Means |\n|---|---|\n"
             "| **Calm Uptrend** | Low volatility, rising. The easy money environment. |\n"
-            "| **Quiet Range / Choppy** | Low-to-mid volatility, going nowhere. Trend strategies bleed here. |\n"
+            "| **Quiet Range / Choppy** | Low-to-mid volatility, going nowhere. Trend "
+            "strategies bleed here. |\n"
             "| **Turbulent** | High volatility, no clear direction. Violent both ways. |\n"
             "| **Crisis / Selloff** | High volatility, falling. Where drawdowns are made. |\n"
-            "| **Warm-up** | *Not a regime.* The first ~1 year has no labels because the features need that much history to exist. |\n\n"
+            "| **Warm-up** | *Not a regime.* The first ~1 year has no labels because the "
+            "features need that much history to exist. |\n\n"
             "When two regimes land in the same quadrant they're distinguished by their actual "
             "volatility, e.g. *Crisis / Selloff (33% vol)*."
         )
@@ -95,8 +113,12 @@ with st.container(border=True):
         )
         legend = pd.DataFrame({
             "Regime": [regimes.names[i] for i in sorted(regimes.names)],
-            "Severity": [f"{i} — {'calmest' if i == 0 else 'most violent' if i == max(regimes.names) else 'middle'}"
-                         for i in sorted(regimes.names)],
+            "Severity": [
+                f"{i} — calmest" if i == 0
+                else f"{i} — most violent" if i == max(regimes.names)
+                else f"{i} — middle"
+                for i in sorted(regimes.names)
+            ],
         })
         table_caption(
             "The detected regimes in severity order, calmest first.",
@@ -255,7 +277,8 @@ if probability_chart is not None:
         chart_caption(
             "The model's confidence in each regime, day by day, stacked to 100%.",
     "A dominant band means the model is sure; interleaved bands mean it is guessing.",
-    "stretches where no band clears about 60% — those are transitions, and they are when a switching strategy acts.",
+    "stretches where no band clears about 60% — those are transitions, and they are when "
+    "a switching strategy acts.",
         )
         st.markdown(
             "Where the bands are cleanly separated the model is confident. Where they interleave "
@@ -286,8 +309,9 @@ if not summary.empty:
     if spread < 0.05:
         caveat(
             f"Annualized volatility differs by only {spread:.1%} across these regimes. They are "
-            "barely distinguishable, which means there is nothing here to condition a strategy on — "
-            "no amount of downstream cleverness creates a difference that isn't in the data."
+            "barely distinguishable, which means there is nothing here to condition a "
+            "strategy on — no amount of downstream cleverness creates a difference that "
+            "isn't in the data."
         )
 
     rare = summary[summary["share"] < 0.10]
@@ -338,7 +362,8 @@ with transition_right:
         chart_caption(
             "How long each actual visit to a regime lasted.",
     "Each bar counts episodes of that length.",
-    "mass on the right, in weeks and months. Mass piled at the left edge means the labels are flickering.",
+    "mass on the right, in weeks and months. Mass piled at the left edge means the "
+    "labels are flickering.",
         )
     if not matrix.empty:
         expected = pd.DataFrame({
@@ -350,11 +375,14 @@ with transition_right:
         })
         table_caption(
             "How long each regime is expected to last, from the transition matrix diagonal.",
-            "Computed as 1/(1 − p_stay). Weeks to months is healthy; days means the labels are flickering.",
+            "Computed as 1/(1 − p_stay). Weeks to months is healthy; days means the labels "
+            "are flickering.",
         )
         st.dataframe(
             expected, hide_index=True, key="expected_duration",
-            column_config={"Expected duration (days)": st.column_config.NumberColumn(format="%.0f")},
+            column_config={
+                "Expected duration (days)": st.column_config.NumberColumn(format="%.0f")
+            },
         )
         st.caption("Expected duration is 1/(1 − p_stay), straight off the diagonal above.")
 
@@ -450,7 +478,8 @@ else:
 
     table_caption(
         "The selected strategy's profit and loss split by regime.",
-        "Read the days column first — a short regime gives a Sharpe ratio with a very wide error bar.",
+        "Read the days column first — a short regime gives a Sharpe ratio with a very "
+        "wide error bar.",
     )
     st.dataframe(
         table.drop(columns=["regime"]), hide_index=True,
@@ -493,17 +522,20 @@ else:
         if gap < combined_error:
             caveat(
                 f"**The regime difference is not statistically meaningful.** {best['name']} "
-                f"({best['sharpe_ratio']:.2f}) versus {worst['name']} ({worst['sharpe_ratio']:.2f}) "
-                f"is a gap of {gap:.2f}, against a combined standard error of roughly "
+                f"({best['sharpe_ratio']:.2f}) versus {worst['name']} "
+                f"({worst['sharpe_ratio']:.2f}) is a gap of {gap:.2f}, against a combined "
+                f"standard error of roughly "
                 f"±{combined_error:.2f} on those sample sizes. That gap is inside the noise — "
                 f"you cannot conclude this strategy prefers one regime over the other, and a "
                 f"filter built on it would be fitting randomness."
             )
         else:
             st.success(
-                f"**{best['name']}** (Sharpe {best['sharpe_ratio']:.2f}, {int(best['days'])}d) versus "
-                f"**{worst['name']}** ({worst['sharpe_ratio']:.2f}, {int(worst['days'])}d) — a gap of "
-                f"{gap:.2f} against a combined standard error of about ±{combined_error:.2f}. "
+                f"**{best['name']}** (Sharpe {best['sharpe_ratio']:.2f}, "
+                f"{int(best['days'])}d) versus "
+                f"**{worst['name']}** ({worst['sharpe_ratio']:.2f}, {int(worst['days'])}d) "
+                f"— a gap of {gap:.2f} against a combined standard error of about "
+                f"±{combined_error:.2f}. "
                 f"The difference clears the noise, so it is worth acting on: try filtering out "
                 f"{worst['name']} on the Adaptive page.",
                 icon=":material/insights:",
@@ -539,7 +571,8 @@ if feature_chart is not None:
     chart_caption(
         "One regime feature over time, each day coloured by the regime it produced.",
     "This is why a day was labelled the way it was.",
-    "clean colour separation by height on volatility features, and far more overlap on trend features.",
+    "clean colour separation by height on volatility features, and far more overlap on "
+    "trend features.",
     )
 
 # How strongly does this feature actually separate the regimes? Between-group
@@ -613,10 +646,13 @@ quant work, and it is worth being slightly paranoid about.
 )
 st.markdown(
     "Below, the same detection method fitted on the **full sample** versus refitted on an "
-    "**expanding window**. Both label the same days. Only one of them could have existed at the time."
+    "**expanding window**. Both label the same days. Only one of them could have existed "
+    "at the time."
 )
 
-if st.button("Compare honest and leaky labels", icon=":material/compare_arrows:", key="lookahead_run"):
+if st.button(
+    "Compare honest and leaky labels", icon=":material/compare_arrows:", key="lookahead_run"
+):
     with st.spinner("Fitting both versions..."):
         leaky = detect_regimes(
             df, method=settings["method"], n_regimes=settings["n_regimes"], fit_frac=1.0,
@@ -640,7 +676,8 @@ if st.button("Compare honest and leaky labels", icon=":material/compare_arrows:"
         chart_caption(
             "Regimes from a model fitted on the entire history.",
             "Boundaries look crisp because the model already knew what came next.",
-            "how closely the bands align with the turning points — that precision was never available.",
+            "how closely the bands align with the turning points — that precision was "
+            "never available.",
         )
     if honest is not None:
         with honest_column:
@@ -649,7 +686,8 @@ if st.button("Compare honest and leaky labels", icon=":material/compare_arrows:"
             chart_caption(
                 "The same method, refitted on an expanding window and labelling only forward.",
                 "Noisier, later to turn, and blank for the first two years.",
-                "the missing start — you genuinely had no model then, and this is what honest looks like.",
+                "the missing start — you genuinely had no model then, and this is what "
+                "honest looks like.",
             )
 
         agreement = (leaky.labels == honest.labels)[honest.valid()].mean()

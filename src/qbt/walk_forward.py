@@ -9,8 +9,8 @@ market regime).
 import numpy as np
 import pandas as pd
 
-from qbt.backtest import run_backtest
 from qbt.analytics import full_report, performance_by_regime
+from qbt.backtest import run_backtest
 
 
 def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.7,
@@ -62,7 +62,8 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
             f"walk-forward; got {len(result)}. Shorten the windows or widen the date range."
         )
 
-    folds, oos_returns = [], []
+    folds: list[dict] = []
+    oos_returns = []
     start = train_days
     while start + test_days <= len(result):
         window = result.iloc[start:start + test_days]
@@ -107,7 +108,7 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
 
 def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: float = 0.7,
                           cost_bps: float = 5.0, n_boot: int = 0,
-                          strategy_params: dict = None) -> dict:
+                          strategy_params: dict | None = None) -> dict:
     """
     Walk-forward validation with the in-sample and out-of-sample results
     each broken down by market regime, so a Sharpe drop can be attributed
@@ -131,7 +132,9 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
 
     def regime_mix(segment: pd.DataFrame) -> pd.Series:
         valid = segment.loc[segment["regime"] != -1, "regime"]
-        return valid.value_counts(normalize=True).sort_index() if len(valid) else pd.Series(dtype=float)
+        if len(valid):
+            return valid.value_counts(normalize=True).sort_index()
+        return pd.Series(dtype=float)
 
     return {
         "split_date": str(split_date.date()),

@@ -52,7 +52,7 @@ def _regime_dummies(regimes: pd.Series, index: pd.Index) -> pd.DataFrame:
     return dummies
 
 
-def _prepare_data(df: pd.DataFrame, regimes: pd.Series = None, encode_regime: bool = False):
+def _prepare_data(df: pd.DataFrame, regimes: pd.Series | None = None, encode_regime: bool = False):
     """
     Builds features + labels and drops any row with a NaN in either
     (warm-up rows). When `regimes` is supplied the regime label is
@@ -76,7 +76,7 @@ def _prepare_data(df: pd.DataFrame, regimes: pd.Series = None, encode_regime: bo
 
 
 def train_ml_model(df: pd.DataFrame, train_frac: float = 0.7, model_type: str = "logistic",
-                   regimes: pd.Series = None):
+                   regimes: pd.Series | None = None):
     """
     Fits a classifier on the first `train_frac` of valid rows,
     chronologically -- never on rows after the split, so the model never
@@ -98,7 +98,7 @@ def train_ml_model(df: pd.DataFrame, train_frac: float = 0.7, model_type: str = 
 
 
 def train_regime_conditional_models(df: pd.DataFrame, train_frac: float = 0.7,
-                                    model_type: str = "logistic", regimes: pd.Series = None,
+                                    model_type: str = "logistic", regimes: pd.Series | None = None,
                                     min_train_rows: int = MIN_REGIME_TRAIN_ROWS):
     """
     One model per regime, each fitted only on training-period days in
@@ -132,7 +132,9 @@ def train_regime_conditional_models(df: pd.DataFrame, train_frac: float = 0.7,
     return models, fallback, feature_cols, split_date, data, train_counts
 
 
-def _conditional_predict(models: dict, fallback, data: pd.DataFrame, feature_cols: list) -> pd.Series:
+def _conditional_predict(
+    models: dict, fallback, data: pd.DataFrame, feature_cols: list
+) -> pd.Series:
     """Routes each row to its regime's model, falling back where there isn't one."""
     predictions = pd.Series(index=data.index, dtype=float)
     for regime_id, model in models.items():
@@ -147,7 +149,8 @@ def _conditional_predict(models: dict, fallback, data: pd.DataFrame, feature_col
 
 
 def ml_direction_signal(df: pd.DataFrame, train_frac: float = 0.7, model_type: str = "logistic",
-                        regimes: pd.Series = None, regime_mode: str = "feature") -> pd.Series:
+                        regimes: pd.Series | None = None,
+                        regime_mode: str = "feature") -> pd.Series:
     """
     Trains once on the first `train_frac` of history, then predicts
     direction for every valid row (both the training period and the
@@ -177,12 +180,12 @@ def ml_direction_signal(df: pd.DataFrame, train_frac: float = 0.7, model_type: s
 def _feature_importance(model, feature_cols: list, model_type: str) -> dict:
     if model_type == "logistic":
         clf = model.named_steps["logisticregression"]
-        return dict(zip(feature_cols, clf.coef_[0]))
-    return dict(zip(feature_cols, model.feature_importances_))
+        return dict(zip(feature_cols, clf.coef_[0], strict=True))
+    return dict(zip(feature_cols, model.feature_importances_, strict=True))
 
 
 def model_report(df: pd.DataFrame, train_frac: float = 0.7, model_type: str = "logistic",
-                 regimes: pd.Series = None, regime_mode: str = "feature") -> dict:
+                 regimes: pd.Series | None = None, regime_mode: str = "feature") -> dict:
     """
     Diagnostics on the model itself (accuracy, feature importance) --
     separate from the trading-strategy metrics in analytics.py, which
@@ -192,7 +195,8 @@ def model_report(df: pd.DataFrame, train_frac: float = 0.7, model_type: str = "l
     conditional = regimes is not None and regime_mode == "conditional"
 
     if conditional:
-        models, fallback, feature_cols, split_date, data, train_counts = train_regime_conditional_models(
+        (models, fallback, feature_cols, split_date,
+         data, train_counts) = train_regime_conditional_models(
             df, train_frac, model_type, regimes
         )
         train_data, test_data = data.loc[:split_date], data.loc[split_date:]
@@ -228,7 +232,8 @@ def model_report(df: pd.DataFrame, train_frac: float = 0.7, model_type: str = "l
             if mask.sum() < 20:
                 continue
             actual = test_labels.to_numpy()[mask]
-            predicted = np.asarray(test_pred)[mask]
+            test_pred_array: np.ndarray = np.asarray(test_pred)
+            predicted = test_pred_array[mask]
             rows.append({
                 "regime": int(regime_id),
                 "test_days": int(mask.sum()),

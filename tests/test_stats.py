@@ -7,7 +7,9 @@ Newey-West standard error against known directional properties.
 import numpy as np
 
 from qbt.stats import (
-    deflated_sharpe_ratio, iid_bootstrap_sharpe, newey_west_se,
+    deflated_sharpe_ratio,
+    iid_bootstrap_sharpe,
+    newey_west_se,
     stationary_bootstrap_sharpe,
 )
 
@@ -30,8 +32,14 @@ def test_stationary_interval_wider_than_iid_under_autocorrelation():
     iid_width = iid_hi - iid_lo
     stat_width = stat_hi - stat_lo
 
-    print(f"IID bootstrap:        point={iid_point:.3f}  [{iid_lo:.3f}, {iid_hi:.3f}]  width={iid_width:.3f}")
-    print(f"Stationary bootstrap: point={stat_point:.3f}  [{stat_lo:.3f}, {stat_hi:.3f}]  width={stat_width:.3f}")
+    print(
+        f"IID bootstrap:        point={iid_point:.3f}  "
+        f"[{iid_lo:.3f}, {iid_hi:.3f}]  width={iid_width:.3f}"
+    )
+    print(
+        f"Stationary bootstrap: point={stat_point:.3f}  "
+        f"[{stat_lo:.3f}, {stat_hi:.3f}]  width={stat_width:.3f}"
+    )
 
     assert stat_width > iid_width, (
         f"stationary bootstrap width {stat_width:.4f} not wider than iid width {iid_width:.4f}"
@@ -44,7 +52,9 @@ def test_dsr_decreases_monotonically_with_n_trials():
         deflated_sharpe_ratio(sharpe=0.05, n_trials=n, skew=-0.3, kurtosis=4.5, n_obs=1250)
         for n in n_trials_list
     ]
-    assert all(a > b for a, b in zip(dsrs, dsrs[1:])), f"DSR not strictly decreasing: {dsrs}"
+    assert all(a > b for a, b in zip(dsrs, dsrs[1:], strict=False)), (
+        f"DSR not strictly decreasing: {dsrs}"
+    )
 
 
 def test_dsr_of_very_high_sharpe_at_one_trial_is_near_one():
@@ -70,8 +80,13 @@ def test_newey_west_se_exceeds_naive_se_under_autocorrelation():
 
 
 def test_dsr_sensitive_to_skew():
-    dsr_symmetric = deflated_sharpe_ratio(sharpe=0.06, n_trials=5, skew=0.0, kurtosis=3.0, n_obs=1000)
-    dsr_neg_skew = deflated_sharpe_ratio(sharpe=0.06, n_trials=5, skew=-1.5, kurtosis=3.0, n_obs=1000)
+    dsr_symmetric = deflated_sharpe_ratio(
+        sharpe=0.06, n_trials=5, skew=0.0, kurtosis=3.0, n_obs=1000
+    )
+    dsr_neg_skew = deflated_sharpe_ratio(
+        sharpe=0.06, n_trials=5, skew=-1.5, kurtosis=3.0, n_obs=1000
+    )
     assert dsr_neg_skew < dsr_symmetric, (
-        f"negatively skewed DSR ({dsr_neg_skew:.4f}) not lower than symmetric DSR ({dsr_symmetric:.4f})"
+        f"negatively skewed DSR ({dsr_neg_skew:.4f}) not lower than symmetric DSR "
+        f"({dsr_symmetric:.4f})"
     )

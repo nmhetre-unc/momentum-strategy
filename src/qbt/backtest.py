@@ -10,7 +10,7 @@ def run_backtest(
     df: pd.DataFrame,
     signal: pd.Series,
     cost_bps: float = 5.0,
-    regimes: pd.Series = None,
+    regimes: pd.Series | None = None,
 ) -> pd.DataFrame:
     """
     Shifts `signal` forward by one day before applying it, so a position
@@ -61,7 +61,9 @@ def summary_stats(result: pd.DataFrame) -> dict:
     trades = (result["position"].diff().abs() > 0).sum()
 
     nonzero_returns = result["strategy_return"][result["strategy_return"] != 0]
-    win_rate = (nonzero_returns > 0).sum() / len(nonzero_returns) if len(nonzero_returns) > 0 else 0.0
+    win_rate = (
+        (nonzero_returns > 0).sum() / len(nonzero_returns) if len(nonzero_returns) > 0 else 0.0
+    )
 
     return {
         "total_return": total_return,

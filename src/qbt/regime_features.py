@@ -15,21 +15,63 @@ TRADING_DAYS_PER_YEAR = 252
 # Short descriptions surfaced as tooltips in the dashboard. Keys must
 # match the column names produced by build_regime_features().
 FEATURE_DOCS = {
-    "vol_20d": "Annualized realized volatility over the last 20 days. The single most useful regime variable — volatility clusters, so high-vol days beget high-vol days.",
-    "vol_ratio": "20-day vol divided by 100-day vol. Above 1 means volatility is EXPANDING (stress building); below 1 means it's contracting (calm returning).",
-    "vol_percentile": "Where today's 20-day vol sits in its own expanding history (0 = calmest ever, 1 = most violent ever). Expanding, not full-sample, so it never peeks ahead.",
-    "trend_60d": "Trailing 60-day return. Crude but honest measure of which way the market has been going.",
-    "price_vs_sma200": "Price relative to its 200-day moving average. The classic bull/bear dividing line.",
-    "sma_slope": "20-day change in the 50-day moving average, scaled by price. Captures whether the trend is accelerating or rolling over.",
-    "efficiency_ratio": "Kaufman efficiency ratio: net move divided by total path travelled over 60 days. Near 1 = clean trend, near 0 = the market went nowhere loudly (chop).",
-    "autocorr_60": "Rolling lag-1 autocorrelation of daily returns. Positive = momentum-friendly (moves follow through), negative = mean-reversion-friendly (moves get given back).",
-    "drawdown_252d": "How far below the trailing 1-year high we are. Distinguishes 'high vol on the way up' from 'high vol on the way down'.",
-    "downside_share": "Share of total volatility coming from down days. High values mean the risk is one-sided and unpleasant.",
-    "parkinson_vol": "Volatility estimated from the daily high-low range. Reacts faster than close-to-close vol because it sees intraday damage.",
-    "range_pct": "Average daily high-low range as a fraction of price. A direct read on intraday turbulence.",
-    "volume_z": "Volume relative to its own recent history, in standard deviations. Volume spikes usually accompany regime changes.",
-    "volume_trend": "20-day average volume divided by 100-day average volume. Rising participation vs. drying up.",
-    "illiquidity": "Amihud-style illiquidity: how much price moves per dollar traded. Higher = thinner, more fragile market.",
+    "vol_20d": (
+        "Annualized realized volatility over the last 20 days. The single most useful "
+        "regime variable — volatility clusters, so high-vol days beget high-vol days."
+    ),
+    "vol_ratio": (
+        "20-day vol divided by 100-day vol. Above 1 means volatility is EXPANDING (stress "
+        "building); below 1 means it's contracting (calm returning)."
+    ),
+    "vol_percentile": (
+        "Where today's 20-day vol sits in its own expanding history (0 = calmest ever, 1 = "
+        "most violent ever). Expanding, not full-sample, so it never peeks ahead."
+    ),
+    "trend_60d": (
+        "Trailing 60-day return. Crude but honest measure of which way the market has been going."
+    ),
+    "price_vs_sma200": (
+        "Price relative to its 200-day moving average. The classic bull/bear dividing line."
+    ),
+    "sma_slope": (
+        "20-day change in the 50-day moving average, scaled by price. Captures whether the "
+        "trend is accelerating or rolling over."
+    ),
+    "efficiency_ratio": (
+        "Kaufman efficiency ratio: net move divided by total path travelled over 60 days. "
+        "Near 1 = clean trend, near 0 = the market went nowhere loudly (chop)."
+    ),
+    "autocorr_60": (
+        "Rolling lag-1 autocorrelation of daily returns. Positive = momentum-friendly (moves "
+        "follow through), negative = mean-reversion-friendly (moves get given back)."
+    ),
+    "drawdown_252d": (
+        "How far below the trailing 1-year high we are. Distinguishes 'high vol on the way "
+        "up' from 'high vol on the way down'."
+    ),
+    "downside_share": (
+        "Share of total volatility coming from down days. High values mean the risk is "
+        "one-sided and unpleasant."
+    ),
+    "parkinson_vol": (
+        "Volatility estimated from the daily high-low range. Reacts faster than close-to-close "
+        "vol because it sees intraday damage."
+    ),
+    "range_pct": (
+        "Average daily high-low range as a fraction of price. A direct read on intraday turbulence."
+    ),
+    "volume_z": (
+        "Volume relative to its own recent history, in standard deviations. Volume spikes "
+        "usually accompany regime changes."
+    ),
+    "volume_trend": (
+        "20-day average volume divided by 100-day average volume. Rising participation vs. "
+        "drying up."
+    ),
+    "illiquidity": (
+        "Amihud-style illiquidity: how much price moves per dollar traded. Higher = thinner, "
+        "more fragile market."
+    ),
 }
 
 # Features that must exist for the naming/ordering logic in regime.py to
@@ -140,7 +182,9 @@ def build_regime_features(
             volume.rolling(vol_window).mean() / vol_mean.replace(0, np.nan)
         )
         dollar_volume = (volume * close).replace(0, np.nan)
-        features["illiquidity"] = np.log1p(returns.abs() / dollar_volume * 1e9).rolling(vol_window).mean()
+        features["illiquidity"] = (
+            np.log1p(returns.abs() / dollar_volume * 1e9).rolling(vol_window).mean()
+        )
 
     # Infinities come from near-zero denominators in a degenerate stretch
     # (e.g. a flat synthetic series); treat them as missing rather than
@@ -175,7 +219,9 @@ def standardize_features(
     return scaled.replace([np.inf, -np.inf], np.nan).clip(-clip, clip)
 
 
-def reduce_dimensions(features: pd.DataFrame, n_components: int = 3, fit_rows: pd.Index = None):
+def reduce_dimensions(
+    features: pd.DataFrame, n_components: int = 3, fit_rows: pd.Index | None = None
+):
     """
     Optional PCA compression of the (correlated) regime features. Returns
     (components_df, fitted_pca) so the caller can inspect the loadings.
@@ -190,7 +236,9 @@ def reduce_dimensions(features: pd.DataFrame, n_components: int = 3, fit_rows: p
 
     fit_data = valid.loc[valid.index.intersection(fit_rows)] if fit_rows is not None else valid
     if len(fit_data) <= n_components:
-        raise ValueError(f"Need more than {n_components} complete rows to fit PCA; got {len(fit_data)}.")
+        raise ValueError(
+            f"Need more than {n_components} complete rows to fit PCA; got {len(fit_data)}."
+        )
 
     pca = PCA(n_components=n_components)
     pca.fit(fit_data)

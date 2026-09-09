@@ -12,10 +12,16 @@ import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-from components import (caveat, chart_caption, explainer,
-    how_to_read, require_regimes, table_caption, _ink
+from components import (
+    _ink,
+    caveat,
+    chart_caption,
+    explainer,
+    how_to_read,
+    require_regimes,
+    table_caption,
 )
+
 from qbt.ml import MIN_REGIME_TRAIN_ROWS, model_report
 from qbt.strategies import STRATEGIES
 from qbt.walk_forward import evaluate_out_of_sample
@@ -172,7 +178,8 @@ with st.container(border=True):
         help="Share of history used for fitting. Only what comes after it means anything.",
     )
     regime_mode = controls[2].segmented_control(
-        "Regime conditioning", ["off", "feature", "conditional"], default="off", key="ml_regime_mode",
+        "Regime conditioning", ["off", "feature", "conditional"],
+        default="off", key="ml_regime_mode",
     ) or "off"
 
 if regime_mode == "conditional":
@@ -182,7 +189,10 @@ if regime_mode == "conditional":
         f"everything — the table below says which did."
     )
 elif regime_mode == "feature":
-    st.caption("One model, with the regime one-hot encoded as extra input columns. Keeps all the training rows.")
+    st.caption(
+        "One model, with the regime one-hot encoded as extra input columns. Keeps all the "
+        "training rows."
+    )
 
 report_kwargs = {"train_frac": train_frac, "model_type": model_type}
 if regime_mode != "off":
@@ -194,14 +204,22 @@ gap = report["train_accuracy"] - report["test_accuracy"]
 
 st.subheader("Model diagnostics", divider="gray")
 accuracy = st.columns(4)
-accuracy[0].metric("Train accuracy", f"{report['train_accuracy']:.1%}",
-                   help="Accuracy on data the model was fitted on. Always optimistic; never quote it.")
-accuracy[1].metric("Test accuracy", f"{report['test_accuracy']:.1%}",
-                   help="Accuracy on held-out data. The only accuracy number worth reporting.")
-accuracy[2].metric("Base rate", f"{report['test_base_rate']:.1%}",
-                   help="What 'always predict the majority class' would score. The real bar to clear.")
-accuracy[3].metric("Train − test gap", f"{gap:+.1%}",
-                   help="The overfitting signature. Large and positive means the model memorized.")
+accuracy[0].metric(
+    "Train accuracy", f"{report['train_accuracy']:.1%}",
+    help="Accuracy on data the model was fitted on. Always optimistic; never quote it.",
+)
+accuracy[1].metric(
+    "Test accuracy", f"{report['test_accuracy']:.1%}",
+    help="Accuracy on held-out data. The only accuracy number worth reporting.",
+)
+accuracy[2].metric(
+    "Base rate", f"{report['test_base_rate']:.1%}",
+    help="What 'always predict the majority class' would score. The real bar to clear.",
+)
+accuracy[3].metric(
+    "Train − test gap", f"{gap:+.1%}",
+    help="The overfitting signature. Large and positive means the model memorized.",
+)
 
 edge = report["test_accuracy"] - report["test_base_rate"]
 st.metric(
@@ -296,7 +314,10 @@ with importance_left:
         alt.Chart(importance)
         .mark_bar(cornerRadiusEnd=3, color=_ink()["strategy"])
         .encode(
-            x=alt.X("Importance:Q", title="Importance" if model_type == "random_forest" else "Coefficient"),
+            x=alt.X(
+                "Importance:Q",
+                title="Importance" if model_type == "random_forest" else "Coefficient",
+            ),
             y=alt.Y("Feature:N", sort=list(importance["Feature"]), title=None),
             tooltip=["Feature:N", alt.Tooltip("Importance:Q", format=".4f")],
         )
@@ -316,7 +337,8 @@ with importance_right:
     )
     table_caption(
         "What actually happened (rows) against what the model predicted (columns).",
-        "The diagonal is correct calls; an entire column of zeros means the model collapsed to a constant.",
+        "The diagonal is correct calls; an entire column of zeros means the model collapsed "
+        "to a constant.",
     )
     st.dataframe(matrix, key="ml_confusion")
     predicted_up = matrix["Predicted up"].sum()
@@ -410,30 +432,44 @@ change in the train fraction (if not, you're reading sampling variation).
 if "by_regime" in report and report["by_regime"]:
     st.subheader("Accuracy by regime", divider="gray")
     st.caption(
-        "The most informative table here. It separates a model that is 56% in one regime and 46% "
-        "in another (worth conditioning on) from one that is 51% everywhere (nothing to condition on)."
+        "The most informative table here. It separates a model that is 56% in one regime "
+        "and 46% in another (worth conditioning on) from one that is 51% everywhere "
+        "(nothing to condition on)."
     )
     by_regime = pd.DataFrame(report["by_regime"])
     by_regime["name"] = by_regime["regime"].map(lambda r: regimes.names.get(r, str(r)))
     by_regime["edge"] = by_regime["test_accuracy"] - by_regime["base_rate"]
     table_caption(
         "Test accuracy by regime, each measured against its own base rate.",
-        "Only the edge column is comparable across regimes, since every regime has a different base rate.",
+        "Only the edge column is comparable across regimes, since every regime has a "
+        "different base rate.",
     )
+    by_regime_cols = [
+        "name", "test_days", "test_accuracy", "base_rate", "edge", "train_rows", "own_model"
+    ]
     st.dataframe(
-        by_regime[["name", "test_days", "test_accuracy", "base_rate", "edge", "train_rows", "own_model"]],
+        by_regime[by_regime_cols],
         hide_index=True, key="ml_by_regime",
         column_config={
             "name": st.column_config.TextColumn("Regime"),
             "test_days": st.column_config.NumberColumn("Test days"),
             "test_accuracy": st.column_config.NumberColumn("Test accuracy", format="percent"),
             "base_rate": st.column_config.NumberColumn("Base rate", format="percent"),
-            "edge": st.column_config.NumberColumn("Edge over base rate", format="percent",
-                                                  help="The only column that matters. Positive means the model beat 'always predict the majority class' in that regime."),
-            "train_rows": st.column_config.NumberColumn("Train rows",
-                                                        help="How much data this regime's model was fitted on. Conditional mode splits your data while the parameter count stays put."),
-            "own_model": st.column_config.CheckboxColumn("Own model?",
-                                                         help="False means this regime borrowed the global fallback model — too few training rows to justify its own."),
+            "edge": st.column_config.NumberColumn(
+                "Edge over base rate", format="percent",
+                help="The only column that matters. Positive means the model beat "
+                     "'always predict the majority class' in that regime.",
+            ),
+            "train_rows": st.column_config.NumberColumn(
+                "Train rows",
+                help="How much data this regime's model was fitted on. Conditional mode "
+                     "splits your data while the parameter count stays put.",
+            ),
+            "own_model": st.column_config.CheckboxColumn(
+                "Own model?",
+                help="False means this regime borrowed the global fallback model — too "
+                     "few training rows to justify its own.",
+            ),
         },
     )
     if (by_regime["edge"] <= 0).all():

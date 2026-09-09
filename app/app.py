@@ -24,6 +24,7 @@ st.set_page_config(
 )
 
 from components import MAX_REGIMES, load_prices  # noqa: E402  (must follow set_page_config)
+
 from qbt.regime import REGIME_METHODS  # noqa: E402
 
 # --------------------------------------------------------------------------
@@ -99,7 +100,10 @@ with st.sidebar:
 
     st.selectbox(
         "Detection method", REGIME_METHODS, key="rg_method",
-        help="Explained in full on the Regimes page. Start with 'rules' — it fits nothing, so nothing can leak.",
+        help=(
+            "Explained in full on the Regimes page. Start with 'rules' — it fits nothing, "
+            "so nothing can leak."
+        ),
     )
     st.slider(
         "Number of regimes", 2, MAX_REGIMES, key="rg_n_regimes",
@@ -127,18 +131,25 @@ with st.sidebar:
         )
     st.selectbox(
         "Label smoothing", ["min_duration", "ema_prob", "median", "none"], key="rg_smooth",
-        help="All options are backward-looking only. A centered filter would look tidier and be lookahead bias.",
+        help=(
+            "All options are backward-looking only. A centered filter would look tidier "
+            "and be lookahead bias."
+        ),
     )
     st.slider(
         "Confirmation days", 1, 21, key="rg_min_duration",
-        help="How long a new regime must persist before it's accepted. Higher means fewer head-fakes and more lag.",
+        help=(
+            "How long a new regime must persist before it's accepted. Higher means fewer "
+            "head-fakes and more lag."
+        ),
     )
     if st.session_state["rg_method"] == "hmm" and not st.session_state["rg_walk_forward"]:
         st.selectbox(
             "HMM decoding", ["filter", "smooth", "viterbi"], key="rg_decode",
             help=(
-                "'filter' uses data up to today only — the one you could have traded. 'smooth' and "
-                "'viterbi' condition on the whole sequence: cleaner labels, not available in real time."
+                "'filter' uses data up to today only — the one you could have traded. "
+                "'smooth' and 'viterbi' condition on the whole sequence: cleaner labels, "
+                "not available in real time."
             ),
         )
 

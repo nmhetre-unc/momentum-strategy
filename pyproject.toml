@@ -23,6 +23,7 @@ dev = [
     "pytest-cov",
     "ruff",
     "mypy",
+    "pandas-stubs",
     "hypothesis",
 ]
 
@@ -31,3 +32,13 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 filterwarnings = ["error"]
+
+[tool.mypy]
+python_version = "3.12"
+
+# sklearn and yfinance ship no inline types and have no dev-installed stub
+# package; scipy-stubs exists but isn't pulled in here. pandas gets real
+# coverage via pandas-stubs above instead of being ignored.
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "scipy.*", "yfinance.*"]
+ignore_missing_imports = true

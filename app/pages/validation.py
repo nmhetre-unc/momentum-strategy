@@ -16,11 +16,19 @@ deliberately cheap -- it renders on every run.
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-from components import (caveat, chart_caption, comparison_chart,
-    COMPARISON_CONFIG, explainer, fold_chart, how_to_read,
-    PERFORMANCE_CONFIG, require_regimes, table_caption
+from components import (
+    COMPARISON_CONFIG,
+    PERFORMANCE_CONFIG,
+    caveat,
+    chart_caption,
+    comparison_chart,
+    explainer,
+    fold_chart,
+    how_to_read,
+    require_regimes,
+    table_caption,
 )
+
 from qbt.adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES
 from qbt.walk_forward import compare_strategies, evaluate_with_regimes, rolling_walk_forward
 
@@ -68,7 +76,8 @@ with st.container(border=True):
         "| IS 1.2 → OOS 1.0 | Small gap. The process generalizes. **This is the good outcome.** |\n"
         "| IS 1.8 → OOS 0.2 | Collapse. The in-sample number was mostly fitting. |\n"
         "| IS 1.8 → OOS −0.4 | Sign flip. What was learned is actively wrong on new data. |\n"
-        "| IS 0.3 → OOS 0.4 | No gap, but nothing to generalize either. Honest and unremarkable. |\n"
+        "| IS 0.3 → OOS 0.4 | No gap, but nothing to generalize either. Honest and "
+        "unremarkable. |\n"
         "\n"
         "A **small gap at a modest level** beats a **large level with a large gap**, every time. "
         "The first describes a process you can repeat; the second describes one lucky period."
@@ -171,10 +180,16 @@ if tab_rolling.open:
         )
         with st.container(border=True):
             controls = st.columns([2, 1, 1, 1])
-            strategy_name = controls[0].selectbox("Strategy", list(ALL_STRATEGIES), key="v_strategy")
-            train_days = controls[1].number_input("Train days", 252, 2520, 756, step=126, key="v_train")
+            strategy_name = controls[0].selectbox(
+                "Strategy", list(ALL_STRATEGIES), key="v_strategy"
+            )
+            train_days = controls[1].number_input(
+                "Train days", 252, 2520, 756, step=126, key="v_train"
+            )
             test_days = controls[2].number_input("Test days", 21, 504, 126, step=21, key="v_test")
-            cost_bps = controls[3].number_input("Cost (bps)", 0.0, 50.0, 5.0, step=1.0, key="v_cost")
+            cost_bps = controls[3].number_input(
+                "Cost (bps)", 0.0, 50.0, 5.0, step=1.0, key="v_cost"
+            )
 
         # The adaptive wrappers take the sidebar's regime model; the base
         # strategies take no regime argument at all.
@@ -197,8 +212,11 @@ if tab_rolling.open:
 
         summary = st.columns(4)
         summary[0].metric("Folds", rolling["n_folds"])
-        summary[1].metric("Folds positive", f"{rolling['pct_folds_positive']:.0%}",
-                          help="Consistency. More informative than the average — 10 of 12 positive beats a high mean off two huge folds.")
+        summary[1].metric(
+            "Folds positive", f"{rolling['pct_folds_positive']:.0%}",
+            help="Consistency. More informative than the average — 10 of 12 positive "
+                 "beats a high mean off two huge folds.",
+        )
         summary[2].metric("Median fold Sharpe", f"{rolling['median_sharpe']:.2f}")
         summary[3].metric("Worst fold", f"{rolling['worst_fold_sharpe']:.2f}",
                           help="The fold you would actually have had to live through.")
@@ -209,7 +227,8 @@ if tab_rolling.open:
             chart_caption(
                 "Out-of-sample Sharpe for each consecutive walk-forward fold.",
     "Each bar is one test window the strategy had never seen.",
-    "most bars above zero, and no downward trend from left to right — the sequence matters as much as the spread.",
+    "most bars above zero, and no downward trend from left to right — the sequence "
+    "matters as much as the spread.",
             )
 
         if rolling["pct_folds_positive"] < 0.5:
@@ -291,7 +310,8 @@ if tab_rolling.open:
         with st.expander("Fold-by-fold detail", icon=":material/table_rows:"):
             table_caption(
                 "Every walk-forward fold in time order.",
-                "Scan the trades column first, then check whether negative folds cluster in one period.",
+                "Scan the trades column first, then check whether negative folds cluster "
+                "in one period.",
             )
             st.dataframe(
                 rolling["folds"], hide_index=True, key="v_folds",
@@ -339,11 +359,12 @@ if tab_decay.open:
 
         headline = st.columns(3)
         headline[0].metric("In-sample Sharpe", f"{evaluation['in_sample']['sharpe_ratio']:.2f}")
-        headline[1].metric("Out-of-sample Sharpe", f"{evaluation['out_sample']['sharpe_ratio']:.2f}")
-        headline[2].metric(
-            "Decay",
-            f"{evaluation['in_sample']['sharpe_ratio'] - evaluation['out_sample']['sharpe_ratio']:+.2f}",
+        headline[1].metric(
+            "Out-of-sample Sharpe", f"{evaluation['out_sample']['sharpe_ratio']:.2f}"
         )
+        is_sharpe = evaluation["in_sample"]["sharpe_ratio"]
+        oos_sharpe = evaluation["out_sample"]["sharpe_ratio"]
+        headline[2].metric("Decay", f"{is_sharpe - oos_sharpe:+.2f}")
 
         is_stats, oos_stats = evaluation["in_sample"], evaluation["out_sample"]
         decay = is_stats["sharpe_ratio"] - oos_stats["sharpe_ratio"]
@@ -396,13 +417,18 @@ if tab_decay.open:
         mix["change"] = mix["out_sample"] - mix["in_sample"]
         table_caption(
             "How the regime mix shifted between the in-sample and out-of-sample periods.",
-            "A large shift means the market changed — check the per-regime numbers before blaming the strategy.",
+            "A large shift means the market changed — check the per-regime numbers before "
+            "blaming the strategy.",
         )
         st.dataframe(
             mix, key="v_mix",
             column_config={
-                "in_sample": st.column_config.NumberColumn("In-sample share", format="percent"),
-                "out_sample": st.column_config.NumberColumn("Out-of-sample share", format="percent"),
+                "in_sample": st.column_config.NumberColumn(
+                    "In-sample share", format="percent"
+                ),
+                "out_sample": st.column_config.NumberColumn(
+                    "Out-of-sample share", format="percent"
+                ),
                 "change": st.column_config.NumberColumn("Change", format="percent"),
             },
         )
@@ -422,16 +448,21 @@ if tab_decay.open:
                 "In-sample performance, split by regime.",
                 "Compare each row against its twin in the out-of-sample table beside it.",
             )
-            st.dataframe(evaluation["in_sample_by_regime"].drop(columns=["regime"]), hide_index=True,
-                         column_config=PERFORMANCE_CONFIG, key="v_is_regime")
+            st.dataframe(
+                evaluation["in_sample_by_regime"].drop(columns=["regime"]), hide_index=True,
+                column_config=PERFORMANCE_CONFIG, key="v_is_regime",
+            )
         with mix_right:
             st.markdown("**Out-of-sample, by regime**")
             table_caption(
                 "Out-of-sample performance, split by regime.",
-                "If these numbers held and only the shares moved, the strategy is intact and the market changed.",
+                "If these numbers held and only the shares moved, the strategy is intact "
+                "and the market changed.",
             )
-            st.dataframe(evaluation["out_sample_by_regime"].drop(columns=["regime"]), hide_index=True,
-                         column_config=PERFORMANCE_CONFIG, key="v_oos_regime")
+            st.dataframe(
+                evaluation["out_sample_by_regime"].drop(columns=["regime"]), hide_index=True,
+                column_config=PERFORMANCE_CONFIG, key="v_oos_regime",
+            )
 
         how_to_read(
             """
@@ -456,7 +487,8 @@ if tab_compare.open:
     with tab_compare:
         compare_cost = st.slider(
             "Transaction cost (bps)", 0.0, 25.0, 5.0, step=1.0, key="v_compare_cost",
-            help="Drag this from 0 upward and watch the ranking reorder. The post-cost ranking is the real one.",
+            help="Drag this from 0 upward and watch the ranking reorder. The post-cost "
+                 "ranking is the real one.",
         )
         with st.spinner("Running every strategy on identical data..."):
             table = compare_strategies(
@@ -483,7 +515,8 @@ if tab_compare.open:
 
         table_caption(
             "Every strategy on identical data, dates, costs and split.",
-            "Read the whole table — picking the best out-of-sample row makes that number in-sample.",
+            "Read the whole table — picking the best out-of-sample row makes that number "
+            "in-sample.",
         )
         st.dataframe(
             table.drop(columns=["error"]), hide_index=True,
@@ -516,8 +549,9 @@ if tab_compare.open:
                 )
             if (scored["oos_sharpe"] <= 0).sum() >= len(scored) / 2:
                 caveat(
-                    f"**{int((scored['oos_sharpe'] <= 0).sum())} of {len(scored)} strategies have a "
-                    f"non-positive out-of-sample Sharpe** at {compare_cost:.0f}bps. That is the "
+                    f"**{int((scored['oos_sharpe'] <= 0).sum())} of {len(scored)} strategies "
+                    f"have a non-positive out-of-sample Sharpe** at {compare_cost:.0f}bps. "
+                    f"That is the "
                     f"honest base rate for this kind of work, and it is the context in which any "
                     f"single good result should be read.",
                     level="info",

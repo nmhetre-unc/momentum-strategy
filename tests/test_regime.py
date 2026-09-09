@@ -21,13 +21,22 @@ from qbt.analytics import full_report, performance_by_regime
 from qbt.backtest import run_backtest
 from qbt.ml import model_report
 from qbt.regime import (
-    REGIME_METHODS, UNKNOWN, detect_regimes, detect_regimes_walk_forward,
-    regime_episodes, regime_stability, regime_summary, smooth_labels,
+    REGIME_METHODS,
+    UNKNOWN,
+    detect_regimes,
+    detect_regimes_walk_forward,
+    regime_episodes,
+    regime_stability,
+    regime_summary,
+    smooth_labels,
 )
 from qbt.regime_features import build_regime_features, standardize_features
 from qbt.strategies import STRATEGIES
 from qbt.walk_forward import (
-    compare_strategies, evaluate_out_of_sample, evaluate_with_regimes, rolling_walk_forward,
+    compare_strategies,
+    evaluate_out_of_sample,
+    evaluate_with_regimes,
+    rolling_walk_forward,
 )
 
 # --------------------------------------------------------------------------
@@ -169,9 +178,13 @@ def test_detect_regimes_produces_usable_labels(df, results, method):
 
     assert labels.index.equals(df.index), f"{method}: labels not aligned to the price index"
     assert not labels.isna().any(), f"{method}: NaN in labels"
-    assert labels.isin(list(result.names) + [UNKNOWN]).all(), f"{method}: label outside the named set"
+    assert labels.isin(list(result.names) + [UNKNOWN]).all(), (
+        f"{method}: label outside the named set"
+    )
     assert result.valid().sum() > 400, f"{method}: only {result.valid().sum()} labelled days"
-    assert set(result.names) == set(range(len(result.names))), f"{method}: regime IDs are not 0..k-1"
+    assert set(result.names) == set(range(len(result.names))), (
+        f"{method}: regime IDs are not 0..k-1"
+    )
 
     stability = regime_stability(labels)
     assert stability["labelled_days"] > 0, f"{method}: regime_stability found no labelled days"
@@ -266,7 +279,9 @@ def test_nonzero_cost_bps_charges_something(backtest_costs):
 
 def test_costs_reduce_strategy_returns(backtest_costs):
     free, costed = backtest_costs
-    assert costed["strategy_return"].sum() < free["strategy_return"].sum(), "costs did not reduce returns"
+    assert costed["strategy_return"].sum() < free["strategy_return"].sum(), (
+        "costs did not reduce returns"
+    )
 
 
 def test_regime_column_passthrough(backtest_costs, hmm_result):
@@ -314,7 +329,9 @@ def test_base_strategies_remain_binary(df, name):
 # --------------------------------------------------------------------------
 
 def test_learning_window_ends_before_full_sample(df, described_choices):
-    assert described_choices["learn_end"] < df.index[-1], "the learning window covers the whole sample"
+    assert described_choices["learn_end"] < df.index[-1], (
+        "the learning window covers the whole sample"
+    )
 
 
 def test_learning_window_has_days(described_choices):
@@ -339,7 +356,8 @@ def test_learned_choice_ignores_post_learning_data(df, hmm_result, described_cho
     mutated.loc[tail, "Close"] = mutated.loc[tail, "Close"] * 1.5
     mutated_choices = describe_choices(mutated, regimes=hmm_result)["choices"]
     assert mutated_choices == described_choices["choices"], (
-        "the learned per-regime choice changed when only post-learning data changed -- it is looking ahead"
+        "the learned per-regime choice changed when only post-learning data changed -- "
+        "it is looking ahead"
     )
 
 
@@ -404,4 +422,6 @@ def test_validation_entry_points_for_every_strategy(df, hmm_result, name):
 def test_evaluate_out_of_sample_shape_unchanged(df):
     # The original single-split entry point must be untouched.
     legacy = evaluate_out_of_sample(df, STRATEGIES["sma_crossover"])
-    assert set(legacy) == {"split_date", "in_sample", "out_sample"}, "evaluate_out_of_sample changed shape"
+    assert set(legacy) == {"split_date", "in_sample", "out_sample"}, (
+        "evaluate_out_of_sample changed shape"
+    )

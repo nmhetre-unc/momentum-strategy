@@ -21,12 +21,12 @@ def iid_bootstrap_sharpe(returns: pd.Series, n_boot: int = 2000, seed: int = 0):
     5th/95th percentiles of the bootstrap distribution. Draws rows
     independently, so it ignores autocorrelation in `returns`.
     """
-    values = np.asarray(returns)
+    values: np.ndarray = np.asarray(returns, dtype=float)
     n = len(values)
     rng = np.random.default_rng(seed)
 
     point = sharpe_ratio(returns)
-    boot_sharpes = np.empty(n_boot)
+    boot_sharpes: np.ndarray = np.empty(n_boot)
     for i in range(n_boot):
         sample = values[rng.integers(0, n, size=n)]
         boot_sharpes[i] = sharpe_ratio(sample)
@@ -64,19 +64,19 @@ def deflated_sharpe_ratio(sharpe: float, n_trials: int, skew: float,
     return float(norm.cdf((sharpe - sr0) / sr_std))
 
 
-def newey_west_se(returns: pd.Series, lags: int = None) -> float:
+def newey_west_se(returns: pd.Series, lags: int | None = None) -> float:
     """
     Newey-West HAC standard error of the sample mean of `returns`,
     robust to serial correlation and heteroskedasticity. `lags` defaults
     to floor(4 * (n/100)**(2/9)), the automatic bandwidth rule from
     Newey & West (1994).
     """
-    values = np.asarray(returns, dtype=float)
+    values: np.ndarray = np.asarray(returns, dtype=float)
     n = len(values)
     if lags is None:
         lags = int(np.floor(4 * (n / 100) ** (2 / 9)))
 
-    demeaned = values - values.mean()
+    demeaned: np.ndarray = values - values.mean()
     variance = np.dot(demeaned, demeaned) / n
     for lag in range(1, lags + 1):
         weight = 1 - lag / (lags + 1)
@@ -96,22 +96,23 @@ def stationary_bootstrap_sharpe(returns: pd.Series, n_boot: int = 2000,
     preserved rather than reshuffled. Same return signature as
     iid_bootstrap_sharpe.
     """
-    values = np.asarray(returns)
+    values: np.ndarray = np.asarray(returns, dtype=float)
     n = len(values)
     p = 1.0 / mean_block
     rng = np.random.default_rng(seed)
 
     point = sharpe_ratio(returns)
-    boot_sharpes = np.empty(n_boot)
+    boot_sharpes: np.ndarray = np.empty(n_boot)
     for i in range(n_boot):
-        pieces = []
+        pieces: list[np.ndarray] = []
         total = 0
         while total < n:
             start = rng.integers(0, n)
             length = rng.geometric(p)
             pieces.append(values[(start + np.arange(length)) % n])
             total += length
-        boot_sharpes[i] = sharpe_ratio(np.concatenate(pieces)[:n])
+        block: np.ndarray = np.concatenate(pieces)
+        boot_sharpes[i] = sharpe_ratio(block[:n])
 
     lo, hi = np.percentile(boot_sharpes, [5, 95])
     return point, lo, hi

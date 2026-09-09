@@ -66,12 +66,14 @@ def _resolve_regimes(df: pd.DataFrame, regimes=None, regime_method: str = "hmm",
     )
 
 
-def _base_signal(df: pd.DataFrame, name: str, params: dict = None) -> pd.Series:
+def _base_signal(df: pd.DataFrame, name: str, params: dict | None = None) -> pd.Series:
     """Runs a base strategy by name and normalizes it to a float series on df.index."""
     if name == "flat":
         return pd.Series(0.0, index=df.index)
     if name not in STRATEGIES:
-        raise KeyError(f"Unknown base strategy {name!r}. Available: {sorted(STRATEGIES)} (or 'flat').")
+        raise KeyError(
+            f"Unknown base strategy {name!r}. Available: {sorted(STRATEGIES)} (or 'flat')."
+        )
     signal = STRATEGIES[name](df, **(params or {}))
     return signal.reindex(df.index).fillna(0).astype(float)
 
@@ -117,21 +119,27 @@ def _best_per_regime(table: pd.DataFrame, allow_flat: bool = True) -> dict:
     table. A regime where nothing achieved a positive Sharpe maps to
     'flat'.
     """
-    choices = {}
+    choices: dict[int, str | None] = {}
     for regime_id, group in table.groupby("regime"):
+        # pandas-stubs types a groupby key as a broad Hashable union (it
+        # can't know from the DataFrame's static type that "regime" holds
+        # plain ints); it always does here, by construction in the caller.
+        regime_key = int(regime_id)  # type: ignore[arg-type]
         scored = group.dropna(subset=["sharpe"])
         if scored.empty:
             # Not enough learning data to judge this regime. Trade it
             # normally rather than inventing a rule from 12 days.
-            choices[int(regime_id)] = None
+            choices[regime_key] = None
             continue
         best = scored.loc[scored["sharpe"].idxmax()]
-        choices[int(regime_id)] = "flat" if (allow_flat and best["sharpe"] <= 0) else best["strategy"]
+        choices[regime_key] = (
+            "flat" if (allow_flat and best["sharpe"] <= 0) else str(best["strategy"])
+        )
     return choices
 
 
 def _apply_by_regime(df: pd.DataFrame, labels: pd.Series, signals: dict,
-                     default: pd.Series = None) -> pd.Series:
+                     default: pd.Series | None = None) -> pd.Series:
     """Selects, for each day, the signal belonging to that day's regime."""
     out = pd.Series(0.0, index=df.index) if default is None else default.astype(float).copy()
     for regime_id, signal in signals.items():
@@ -145,7 +153,7 @@ def _apply_by_regime(df: pd.DataFrame, labels: pd.Series, signals: dict,
 # --------------------------------------------------------------------------
 # 1. Filtering -- same strategy, sit out the bad regimes
 # --------------------------------------------------------------------------
-def regime_filtered(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict = None,
+def regime_filtered(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict | None = None,
                     allowed_regimes=None, learn_frac: float = 0.6, **regime_kwargs) -> pd.Series:
     """
     Runs `base` normally, but forces the position flat in regimes it
@@ -177,7 +185,7 @@ def regime_filtered(df: pd.DataFrame, base: str = "sma_crossover", base_params: 
 # --------------------------------------------------------------------------
 # 2. Switching -- a different strategy in each regime
 # --------------------------------------------------------------------------
-def regime_switch(df: pd.DataFrame, strategy_map: dict = None, candidates=AUTO_CANDIDATES,
+def regime_switch(df: pd.DataFrame, strategy_map: dict | None = None, candidates=AUTO_CANDIDATES,
                   learn_frac: float = 0.6, allow_flat: bool = True, **regime_kwargs) -> pd.Series:
     """
     Runs whichever strategy suits the current regime, motivated by the
@@ -207,7 +215,7 @@ def regime_switch(df: pd.DataFrame, strategy_map: dict = None, candidates=AUTO_C
 # --------------------------------------------------------------------------
 # 3. Re-parameterizing -- same strategy, regime-specific settings
 # --------------------------------------------------------------------------
-def regime_parameters(df: pd.DataFrame, base: str = "sma_crossover", param_map: dict = None,
+def regime_parameters(df: pd.DataFrame, base: str = "sma_crossover", param_map: dict | None = None,
                       **regime_kwargs) -> pd.Series:
     """
     One strategy, different parameters per regime. The default map
@@ -237,9 +245,9 @@ def _default_param_map(base: str, regime_ids: list) -> dict:
     expressible.
     """
     n = max(len(regime_ids), 1)
-    presets = {
-        "sma_crossover": [{"short_window": s, "long_window": l}
-                          for s, l in ((50, 200), (30, 120), (15, 60), (10, 40))],
+    presets: dict[str, list[dict]] = {
+        "sma_crossover": [{"short_window": s, "long_window": lw}
+                          for s, lw in ((50, 200), (30, 120), (15, 60), (10, 40))],
         "momentum": [{"lookback": lb, "threshold": 0.0} for lb in (40, 20, 10, 5)],
         "mean_reversion": [{"period": p, "oversold": o, "overbought": 100 - o}
                            for p, o in ((14, 30), (14, 25), (10, 20), (7, 15))],
@@ -260,9 +268,10 @@ def _default_param_map(base: str, regime_ids: list) -> dict:
 # --------------------------------------------------------------------------
 # 4. Position sizing
 # --------------------------------------------------------------------------
-def volatility_targeted(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict = None,
-                        target_vol: float = 0.15, vol_window: int = 20,
-                        max_leverage: float = 1.0, **_ignored_regime_kwargs) -> pd.Series:
+def volatility_targeted(df: pd.DataFrame, base: str = "sma_crossover",
+                        base_params: dict | None = None, target_vol: float = 0.15,
+                        vol_window: int = 20, max_leverage: float = 1.0,
+                        **_ignored_regime_kwargs) -> pd.Series:
     """
     Keeps the base signal, but scales the position so expected volatility
     stays near `target_vol` annualized:
@@ -284,8 +293,8 @@ def volatility_targeted(df: pd.DataFrame, base: str = "sma_crossover", base_para
     return (signal * scale).clip(0.0, max_leverage).astype(float)
 
 
-def regime_sized(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict = None,
-                 size_map: dict = None, **regime_kwargs) -> pd.Series:
+def regime_sized(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict | None = None,
+                 size_map: dict | None = None, **regime_kwargs) -> pd.Series:
     """
     Keeps the base signal, but sets position size per regime, sized
     inversely to each regime's own volatility and normalized so the
@@ -305,7 +314,7 @@ def regime_sized(df: pd.DataFrame, base: str = "sma_crossover", base_params: dic
         }
         calmest = min((v for v in vol_by_regime.values() if v and not pd.isna(v)), default=None)
         size_map = (
-            {r: 1.0 for r in vol_by_regime} if calmest is None
+            dict.fromkeys(vol_by_regime, 1.0) if calmest is None
             else {r: float(np.clip(calmest / v, 0.0, 1.0)) if v else 0.0
                   for r, v in vol_by_regime.items()}
         )
@@ -386,7 +395,7 @@ def describe_choices(df: pd.DataFrame, candidates=AUTO_CANDIDATES, learn_frac: f
     }
 
 
-def describe_filter(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict = None,
+def describe_filter(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict | None = None,
                     learn_frac: float = 0.6, **regime_kwargs) -> dict:
     """
     The allow-list regime_filtered() would learn, plus the evidence. If
@@ -434,43 +443,97 @@ ADAPTIVE_DOCS = {
     "regime_filtered": {
         "mechanism": "Filtering",
         "what": "Runs one strategy, but stands aside in regimes where it historically lost money.",
-        "why": "Removes a known-bad exposure without predicting anything new. The most robust of the four mechanisms, and the one most likely to survive out-of-sample.",
-        "watch_for": "Exposure. If filtering cuts you to 30% invested, your remaining metrics are computed on far fewer days than the headline period suggests.",
+        "why": (
+            "Removes a known-bad exposure without predicting anything new. The most robust "
+            "of the four mechanisms, and the one most likely to survive out-of-sample."
+        ),
+        "watch_for": (
+            "Exposure. If filtering cuts you to 30% invested, your remaining metrics are "
+            "computed on far fewer days than the headline period suggests."
+        ),
     },
     "regime_switch": {
         "mechanism": "Switching",
-        "what": "Runs a different strategy in each regime — trend-following in trends, mean-reversion in ranges.",
-        "why": "Trend and mean-reversion profit from opposite behaviours. If you can tell which you're in, you can in principle harvest both.",
-        "watch_for": "Turnover and lag. Switching flips the entire position, and smoothed regime labels arrive several days late — right when the new regime's move is largest. Turn on cost_bps before believing the result.",
+        "what": (
+            "Runs a different strategy in each regime — trend-following in trends, "
+            "mean-reversion in ranges."
+        ),
+        "why": (
+            "Trend and mean-reversion profit from opposite behaviours. If you can tell "
+            "which you're in, you can in principle harvest both."
+        ),
+        "watch_for": (
+            "Turnover and lag. Switching flips the entire position, and smoothed regime "
+            "labels arrive several days late — right when the new regime's move is largest. "
+            "Turn on cost_bps before believing the result."
+        ),
     },
     "regime_parameters": {
         "mechanism": "Re-parameterizing",
-        "what": "One strategy, but faster settings in high-volatility regimes and slower ones in calm markets.",
-        "why": "Volatile markets move faster; a window tuned for calm conditions may be far too slow for them.",
-        "watch_for": "Degrees of freedom. Every regime hands you a fresh parameter set to tune. In-sample results will improve almost by construction — that improvement is not evidence.",
+        "what": (
+            "One strategy, but faster settings in high-volatility regimes and slower ones "
+            "in calm markets."
+        ),
+        "why": (
+            "Volatile markets move faster; a window tuned for calm conditions may be far "
+            "too slow for them."
+        ),
+        "watch_for": (
+            "Degrees of freedom. Every regime hands you a fresh parameter set to tune. "
+            "In-sample results will improve almost by construction — that improvement is "
+            "not evidence."
+        ),
     },
     "volatility_targeted": {
         "mechanism": "Position sizing",
         "what": "Keeps the signal, scales position size to hold expected volatility near a target.",
-        "why": "Volatility is far more forecastable than direction. Sizing down before turbulence usually cuts drawdown while leaving return broadly intact.",
-        "watch_for": "This often beats every regime-based mechanism here, using no regime model at all. If it does, that is the finding — report it.",
+        "why": (
+            "Volatility is far more forecastable than direction. Sizing down before "
+            "turbulence usually cuts drawdown while leaving return broadly intact."
+        ),
+        "watch_for": (
+            "This often beats every regime-based mechanism here, using no regime model at "
+            "all. If it does, that is the finding — report it."
+        ),
     },
     "regime_sized": {
         "mechanism": "Position sizing",
         "what": "Position size set per regime, inversely to that regime's volatility.",
-        "why": "The discrete version of volatility targeting. Resizes only at regime boundaries, so it trades far less.",
-        "watch_for": "Compare it directly against volatility_targeted. If the continuous version wins, the regime labels added nothing beyond what trailing volatility already knew.",
+        "why": (
+            "The discrete version of volatility targeting. Resizes only at regime "
+            "boundaries, so it trades far less."
+        ),
+        "watch_for": (
+            "Compare it directly against volatility_targeted. If the continuous version "
+            "wins, the regime labels added nothing beyond what trailing volatility already knew."
+        ),
     },
     "adaptive_ensemble": {
         "mechanism": "All of the above",
         "what": "Regime-based strategy switching with volatility targeting layered on top.",
-        "why": "The full system, and the right thing to benchmark the individual mechanisms against.",
-        "watch_for": "Attribution. Run each mechanism alone before running them together, or you will not know which part earned the result — and stacked mechanisms stack their assumptions.",
+        "why": (
+            "The full system, and the right thing to benchmark the individual "
+            "mechanisms against."
+        ),
+        "watch_for": (
+            "Attribution. Run each mechanism alone before running them together, or you "
+            "will not know which part earned the result — and stacked mechanisms stack "
+            "their assumptions."
+        ),
     },
     "ml_regime_conditional": {
         "mechanism": "Regime-conditioned ML",
-        "what": "The direction classifier, either given the regime as a feature or fitted separately per regime.",
-        "why": "The relationship between today's features and tomorrow's return may genuinely differ across regimes.",
-        "watch_for": "Sample size. Conditional mode splits your training data by regime while the parameter count stays put. Check the per-regime train_rows column in the model report.",
+        "what": (
+            "The direction classifier, either given the regime as a feature or fitted "
+            "separately per regime."
+        ),
+        "why": (
+            "The relationship between today's features and tomorrow's return may "
+            "genuinely differ across regimes."
+        ),
+        "watch_for": (
+            "Sample size. Conditional mode splits your training data by regime while the "
+            "parameter count stays put. Check the per-regime train_rows column in the model report."
+        ),
     },
 }

@@ -51,5 +51,7 @@ def test_backtest_invariants_hold_for_any_signal_and_price_path(data):
     assert np.isfinite(equity).all(), "equity curve produced a NaN or inf"
     assert (equity > 0).all(), "equity curve touched zero or went negative"
 
-    assert -1.0 <= stats["max_drawdown"] <= 0.0, f"max_drawdown out of range: {stats['max_drawdown']}"
+    assert -1.0 <= stats["max_drawdown"] <= 0.0, (
+        f"max_drawdown out of range: {stats['max_drawdown']}"
+    )
     assert 0.0 <= stats["win_rate"] <= 1.0, f"win_rate out of range: {stats['win_rate']}"

@@ -28,7 +28,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.stats import kurtosis as _kurtosis, norm, skew as _skew
+from scipy.stats import kurtosis as _kurtosis
+from scipy.stats import norm
+from scipy.stats import skew as _skew
 
 from qbt.adaptive import ADAPTIVE_STRATEGIES
 from qbt.analytics import TRADING_DAYS_PER_YEAR, full_report, sharpe_ratio
@@ -139,7 +141,9 @@ def build_row(name, result, strat_returns, bench_returns, gross_sharpe, is_bench
     strat_skew = float(_skew(strat_returns))
     strat_kurtosis = float(_kurtosis(strat_returns, fisher=False))
 
-    dsr_zero = deflated_sharpe_ratio(per_period(net_sharpe), N_TRIALS, strat_skew, strat_kurtosis, n_obs)
+    dsr_zero = deflated_sharpe_ratio(
+        per_period(net_sharpe), N_TRIALS, strat_skew, strat_kurtosis, n_obs
+    )
 
     if is_benchmark:
         # buy_and_hold IS the benchmark here, so "beats the benchmark" and
@@ -161,7 +165,9 @@ def build_row(name, result, strat_returns, bench_returns, gross_sharpe, is_bench
         )
         diff_vs_bh = (diff_point, diff_lo, diff_hi)
         sr_benchmark_pp = per_period(sharpe_ratio(bench_returns))
-        dsr_bench = dsr_vs_benchmark(per_period(net_sharpe), sr_benchmark_pp, N_TRIALS, strat_skew, strat_kurtosis, n_obs)
+        dsr_bench = dsr_vs_benchmark(
+            per_period(net_sharpe), sr_benchmark_pp, N_TRIALS, strat_skew, strat_kurtosis, n_obs
+        )
 
     return {
         "strategy": name,
@@ -235,7 +241,9 @@ def render_mean_block_sensitivity(df, bench_returns):
         returns = result["strategy_return"].dropna()
         cells = []
         for mean_block in MEAN_BLOCK_SWEEP:
-            _, lo, hi = stationary_bootstrap_sharpe(returns, n_boot=N_BOOT, mean_block=mean_block, seed=0)
+            _, lo, hi = stationary_bootstrap_sharpe(
+                returns, n_boot=N_BOOT, mean_block=mean_block, seed=0
+            )
             cells.append(f"[{lo:.2f}, {hi:.2f}]")
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
     return "\n".join(lines)
@@ -270,7 +278,8 @@ def render_passive_equivalent(df):
         "",
         "| | Sharpe | Ann. Vol | Max DD |",
         "|---|---|---|---|",
-        f"| {name} (actual) | {report['sharpe_ratio']:.3f} | {report['annualized_volatility']:.1%} | {report['max_drawdown']:.1%} |",
+        f"| {name} (actual) | {report['sharpe_ratio']:.3f} | "
+        f"{report['annualized_volatility']:.1%} | {report['max_drawdown']:.1%} |",
         f"| Passive @ {avg_exposure:.1%} exposure | {passive_report['sharpe_ratio']:.3f} | "
         f"{passive_report['annualized_volatility']:.1%} | {passive_report['max_drawdown']:.1%} |",
     ]

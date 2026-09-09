@@ -12,13 +12,23 @@ educational is layered on top of it rather than replacing anything.
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-from components import (cached_regimes, caveat, chart_caption,
-    drawdown_chart, equity_chart, explainer, how_to_read, metric_row,
-    PERFORMANCE_CONFIG, position_chart, require_data, show_metric_table,
-    table_caption
+from components import (
+    PERFORMANCE_CONFIG,
+    cached_regimes,
+    caveat,
+    chart_caption,
+    drawdown_chart,
+    equity_chart,
+    explainer,
+    how_to_read,
+    metric_row,
+    position_chart,
+    require_data,
+    show_metric_table,
+    table_caption,
 )
 from metric_docs import METRIC_DOCS
+
 from qbt.analytics import full_report, performance_by_regime, sharpe_ratio
 from qbt.backtest import run_backtest
 from qbt.regime_features import efficiency_ratio
@@ -76,14 +86,17 @@ with st.container(border=True):
     )
     log_scale = controls[2].toggle(
         "Log scale", value=False, key="bt_log",
-        help="Steady compounding is a straight line in logs. On a linear axis it always looks like a hockey stick.",
+        help=(
+            "Steady compounding is a straight line in logs. On a linear axis it always "
+            "looks like a hockey stick."
+        ),
     )
 
     params = default_params(strategy_name)
     specs = PARAM_SPECS.get(strategy_name, [])
     if specs:
         param_cols = st.columns(len(specs))
-        for column, spec in zip(param_cols, specs):
+        for column, spec in zip(param_cols, specs, strict=True):
             params[spec["name"]] = column.slider(
                 spec["label"], spec["min"], spec["max"], spec["default"],
                 step=spec["step"], help=spec["help"], key=f"bt_{strategy_name}_{spec['name']}",
@@ -147,7 +160,8 @@ least informative part of the chart.
     )
     explainer(
         "How to interpret the drawdown chart",
-        "the valleys — every stretch where the strategy was underwater and you were losing money you had already made.",
+        "the valleys — every stretch where the strategy was underwater and you were losing "
+        "money you had already made.",
         """
 The drawdown chart shows how far below the running peak the strategy was,
 at every point in time. It is always zero or negative: zero means at a new
@@ -171,7 +185,8 @@ curve shows what you earned; this one shows what you had to endure to earn it.
     )
     explainer(
         "Why buy-and-hold is always shown",
-        "the control group in a drug trial — without it you cannot tell whether the medicine did anything.",
+        "the control group in a drug trial — without it you cannot tell whether the "
+        "medicine did anything.",
         """
 The dashed line on the equity chart is simply holding the asset over the same
 dates. It is the bar every strategy has to clear, and it is the comparison most
@@ -236,7 +251,8 @@ if beat_sharpe < 0:
 else:
     st.success(
         f"Beats buy-and-hold on Sharpe by {beat_sharpe:+.2f} ({beat_return:+.1%} on total return), "
-        f"at {stats['exposure']:.0%} average exposure. Check whether it survives the Validation page.",
+        f"at {stats['exposure']:.0%} average exposure. Check whether it survives the "
+        f"Validation page.",
         icon=":material/check_circle:",
     )
 
@@ -271,9 +287,9 @@ if stats["turnover"] > 3.0:
     annual_drag = stats["turnover"] * cost_bps / 10_000
     caveat(
         f"**Turnover is {stats['turnover']:.1f}x a year.** At {cost_bps:.0f}bps that is roughly "
-        f"{annual_drag:.2%} of annual cost drag before slippage. High-turnover strategies look best "
-        f"in frictionless backtests and degrade fastest in reality — drag the cost input upward and "
-        f"watch what happens."
+        f"{annual_drag:.2%} of annual cost drag before slippage. High-turnover strategies "
+        f"look best in frictionless backtests and degrade fastest in reality — drag the "
+        f"cost input upward and watch what happens."
     )
 
 if stats["max_drawdown"] < -0.40:
@@ -291,8 +307,8 @@ if stats["sharpe_ratio"] < 0.5:
     caveat(
         f"**Sharpe of {stats['sharpe_ratio']:.2f}** is weak — below roughly 0.5 the return is hard "
         f"to distinguish from noise given how wide the error bar on a Sharpe ratio is "
-        f"(about ±{np.sqrt(252 / max(len(result), 1)):.2f} over this sample). Don't tune parameters "
-        f"until it looks better; that is how overfitting starts.",
+        f"(about ±{np.sqrt(252 / max(len(result), 1)):.2f} over this sample). Don't tune "
+        f"parameters until it looks better; that is how overfitting starts.",
         level="info",
     )
 
@@ -332,13 +348,15 @@ st.altair_chart(equity_chart(result, log_scale=log_scale))
 chart_caption(
     "Growth of $1 in the strategy against buy-and-hold.",
     "Both start at 1.0, so the vertical gap is the strategy's contribution.",
-    "the shape and the flat stretches, not the endpoint — and whether the dashed benchmark line is above you.",
+    "the shape and the flat stretches, not the endpoint — and whether the dashed "
+    "benchmark line is above you.",
 )
 st.altair_chart(drawdown_chart(result))
 chart_caption(
     "How far below its running peak the strategy sat, day by day.",
     "Always zero or negative; the trough is the max drawdown.",
-    "both depth and duration — a shallow hole you sit in for two years is still a strategy you would have quit.",
+    "both depth and duration — a shallow hole you sit in for two years is still a "
+    "strategy you would have quit.",
 )
 how_to_read(
     """
@@ -358,7 +376,8 @@ with detail_left:
     st.markdown("**Full metrics**")
     show_metric_table(stats, key="bt_metrics", caption=(
         "Every risk and return metric for the full period.",
-        "Read Sharpe next to exposure, and max drawdown next to trade count — no number stands alone.",
+        "Read Sharpe next to exposure, and max drawdown next to trade count — no number "
+        "stands alone.",
     ))
     st.caption(
         f"Buy-and-hold over the same window for reference: "
@@ -477,9 +496,9 @@ verdicts = [
         f"{'Yes' if behaves_trend else 'No'} — declared **{doc['family']}**",
         (
             f"On days it held a position the trailing 60-day return averaged "
-            f"{trend_when_long:+.2%}, against {trend_when_flat:+.2%} on days it was flat — a gap of "
-            f"{trend_gap:+.2%}. Positive means it systematically holds *after* the market has "
-            f"already risen, which is what trend-following is."
+            f"{trend_when_long:+.2%}, against {trend_when_flat:+.2%} on days it was flat — "
+            f"a gap of {trend_gap:+.2%}. Positive means it systematically holds *after* the "
+            f"market has already risen, which is what trend-following is."
             if behaves_trend else
             f"On days it held, the trailing 60-day return averaged {trend_when_long:+.2%} versus "
             f"{trend_when_flat:+.2%} when flat. It is not buying strength — consistent with a "
@@ -615,13 +634,14 @@ with wf_right:
 if decay > 0.5:
     caveat(
         f"Sharpe fell {decay:.2f} out-of-sample ({wf['in_sample']['sharpe_ratio']:.2f} → "
-        f"{wf['out_sample']['sharpe_ratio']:.2f}). The size of the gap is the finding, not the level "
-        f"of either number."
+        f"{wf['out_sample']['sharpe_ratio']:.2f}). The size of the gap is the finding, "
+        f"not the level of either number."
     )
 if wf["out_sample"]["num_trades"] < 10:
     caveat(
-        f"Only {wf['out_sample']['num_trades']} trades out-of-sample. Whatever the Sharpe ratio says, "
-        f"it is describing that many independent bets — state that caveat before quoting the number.",
+        f"Only {wf['out_sample']['num_trades']} trades out-of-sample. Whatever the Sharpe "
+        f"ratio says, it is describing that many independent bets — state that caveat "
+        f"before quoting the number.",
         level="info",
     )
 
@@ -643,7 +663,8 @@ if show_regimes and regimes is not None:
     else:
         table_caption(
             "This strategy's profit and loss split by the regime in force each day.",
-            "Knowing the worst regime is more actionable than the best — it is the one you can choose not to trade.",
+            "Knowing the worst regime is more actionable than the best — it is the one you "
+            "can choose not to trade.",
         )
         st.dataframe(
             table.drop(columns=["regime"]), hide_index=True,
@@ -662,7 +683,9 @@ if show_regimes and regimes is not None:
         if not thin.empty:
             caveat(
                 "Regimes with under 200 days here: "
-                + ", ".join(f"**{row['name']}** ({int(row['days'])}d)" for _, row in thin.iterrows())
+                + ", ".join(
+                    f"**{row['name']}** ({int(row['days'])}d)" for _, row in thin.iterrows()
+                )
                 + ". Standard error on an annualized Sharpe is roughly sqrt(252/days), so those "
                   "rows carry error bars wide enough to contain almost any conclusion.",
                 level="info",

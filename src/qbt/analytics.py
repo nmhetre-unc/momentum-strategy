@@ -46,8 +46,12 @@ def annualized_volatility(daily_returns: pd.Series) -> float:
     return daily_returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR)
 
 
-def sharpe_ratio(daily_returns: pd.Series, risk_free_rate: float = 0.0) -> float:
-    """Return per unit of total volatility (upside and downside both count)."""
+def sharpe_ratio(daily_returns: pd.Series | np.ndarray, risk_free_rate: float = 0.0) -> float:
+    """
+    Return per unit of total volatility (upside and downside both count).
+    Accepts a plain ndarray too -- stats.py's bootstrap resamplers call
+    this on raw numpy arrays rather than reconstructing a Series per draw.
+    """
     excess = daily_returns - risk_free_rate / TRADING_DAYS_PER_YEAR
     std = excess.std()
     # A repeated constant should have zero std, but mean-then-subtract
@@ -102,13 +106,17 @@ def full_report(result: pd.DataFrame, n_boot: int = 0) -> dict:
 
     trades = (result["position"].diff().abs() > 0).sum()
     nonzero_returns = strategy_return[strategy_return != 0]
-    win_rate = (nonzero_returns > 0).sum() / len(nonzero_returns) if len(nonzero_returns) > 0 else 0.0
+    win_rate = (
+        (nonzero_returns > 0).sum() / len(nonzero_returns) if len(nonzero_returns) > 0 else 0.0
+    )
 
     if n_boot > 0:
         # Lazy import: qbt.stats imports sharpe_ratio from this module,
         # so a top-level import here would be circular.
         from qbt.stats import stationary_bootstrap_sharpe
-        _, sharpe_ci_low, sharpe_ci_high = stationary_bootstrap_sharpe(strategy_return, n_boot=n_boot)
+        _, sharpe_ci_low, sharpe_ci_high = stationary_bootstrap_sharpe(
+            strategy_return, n_boot=n_boot
+        )
     else:
         sharpe_ci_low = sharpe_ci_high = None
 
@@ -171,7 +179,9 @@ def _daily_mean_to_ann_return(mean_daily_return: float) -> float:
     return _annualized_return_from_log(np.log(base), TRADING_DAYS_PER_YEAR)
 
 
-def performance_by_regime(result: pd.DataFrame, labels: pd.Series, names: dict = None) -> pd.DataFrame:
+def performance_by_regime(
+    result: pd.DataFrame, labels: pd.Series, names: dict | None = None
+) -> pd.DataFrame:
     """
     Splits a backtest result by market regime and reports the full metric
     set inside each one. A day's return is attributed to the regime in
@@ -215,7 +225,9 @@ def performance_by_regime(result: pd.DataFrame, labels: pd.Series, names: dict =
     return pd.DataFrame(rows)
 
 
-def benchmark_by_regime(result: pd.DataFrame, labels: pd.Series, names: dict = None) -> pd.DataFrame:
+def benchmark_by_regime(
+    result: pd.DataFrame, labels: pd.Series, names: dict | None = None
+) -> pd.DataFrame:
     """
     Applies the same regime split to buy-and-hold, so a strategy's
     per-regime numbers can be read against simply holding the asset in

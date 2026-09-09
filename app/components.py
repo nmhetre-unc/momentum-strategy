@@ -25,8 +25,8 @@ import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
-
 from metric_docs import METRIC_DOCS
+
 from qbt.analytics import drawdown_series
 from qbt.regime import regime_episodes
 
@@ -208,7 +208,9 @@ def caveat(message: str, level: str = "warning"):
 # --------------------------------------------------------------------------
 # Core charts
 # --------------------------------------------------------------------------
-def equity_chart(result: pd.DataFrame, log_scale: bool = False, height: int = CHART_TALL) -> alt.Chart:
+def equity_chart(
+    result: pd.DataFrame, log_scale: bool = False, height: int = CHART_TALL
+) -> alt.Chart:
     """Strategy equity against buy-and-hold, both normalized to $1."""
     ink = _ink()
     data = pd.DataFrame({
@@ -233,7 +235,8 @@ def equity_chart(result: pd.DataFrame, log_scale: bool = False, height: int = CH
                 legend=alt.Legend(title=None, orient="top"),
             ),
             strokeDash=alt.StrokeDash(
-                "Series:N", scale=alt.Scale(domain=["Strategy", "Buy & hold"], range=[[1, 0], [5, 3]]),
+                "Series:N",
+                scale=alt.Scale(domain=["Strategy", "Buy & hold"], range=[[1, 0], [5, 3]]),
                 legend=None,
             ),
             tooltip=["Date:T", "Series:N", alt.Tooltip("Growth of $1:Q", format=".3f")],
@@ -253,7 +256,10 @@ def drawdown_chart(result: pd.DataFrame, height: int = CHART_SHORT) -> alt.Chart
 
     return (
         alt.Chart(data)
-        .mark_area(opacity=0.65, color=ink["drawdown"], line={"color": ink["drawdown"], "strokeWidth": 1})
+        .mark_area(
+            opacity=0.65, color=ink["drawdown"],
+            line={"color": ink["drawdown"], "strokeWidth": 1},
+        )
         .encode(
             x=alt.X("Date:T", title=None),
             y=alt.Y("Drawdown:Q", title="Drawdown", axis=alt.Axis(format="%")),
@@ -370,7 +376,10 @@ def regime_probability_chart(regime_result, height: int = CHART_SHORT) -> alt.Ch
         .mark_area(opacity=0.85)
         .encode(
             x=alt.X("Date:T", title=None),
-            y=alt.Y("Probability:Q", title="P(regime)", stack="normalize", axis=alt.Axis(format="%")),
+            y=alt.Y(
+                "Probability:Q", title="P(regime)", stack="normalize",
+                axis=alt.Axis(format="%"),
+            ),
             color=alt.Color("Regime:N", scale=regime_color_scale(regime_result.names),
                             legend=alt.Legend(title=None, orient="top", columns=2)),
             tooltip=["Date:T", "Regime:N", alt.Tooltip("Probability:Q", format=".1%")],
@@ -441,15 +450,22 @@ def performance_by_regime_chart(table: pd.DataFrame, metric: str = "sharpe_ratio
     """Bar chart of one metric per regime, with the day count in the tooltip."""
     if table.empty:
         return None
-    axis_format = "%" if metric in ("total_return", "ann_return", "max_drawdown", "win_rate", "exposure") else ".2f"
+    pct_metrics = ("total_return", "ann_return", "max_drawdown", "win_rate", "exposure")
+    axis_format = "%" if metric in pct_metrics else ".2f"
+    regime_names = names or dict(zip(table["regime"], table["name"], strict=True))
     return (
         alt.Chart(table)
         .mark_bar(cornerRadiusEnd=4)
         .encode(
-            x=alt.X("name:N", title=None, sort=list(table["name"]), axis=alt.Axis(labelAngle=-20)),
-            y=alt.Y(f"{metric}:Q", title=metric.replace("_", " "), axis=alt.Axis(format=axis_format)),
-            color=alt.Color("name:N", scale=regime_color_scale(names or dict(zip(table["regime"], table["name"]))),
-                            legend=None),
+            x=alt.X(
+                "name:N", title=None, sort=list(table["name"]), axis=alt.Axis(labelAngle=-20)
+            ),
+            y=alt.Y(
+                f"{metric}:Q", title=metric.replace("_", " "), axis=alt.Axis(format=axis_format)
+            ),
+            color=alt.Color(
+                "name:N", scale=regime_color_scale(regime_names), legend=None
+            ),
             tooltip=[alt.Tooltip("name:N", title="Regime"), alt.Tooltip("days:Q", title="Days"),
                      alt.Tooltip(f"{metric}:Q", format=axis_format)],
         )
@@ -457,7 +473,9 @@ def performance_by_regime_chart(table: pd.DataFrame, metric: str = "sharpe_ratio
     )
 
 
-def duration_histogram(episodes: pd.DataFrame, names: dict = None, height: int = CHART_SHORT) -> alt.Chart:
+def duration_histogram(
+    episodes: pd.DataFrame, names: dict = None, height: int = CHART_SHORT
+) -> alt.Chart:
     """
     How long regimes last. If the mass is at the left edge — episodes of a
     handful of days — the labels are noise, not regimes.
@@ -470,9 +488,13 @@ def duration_histogram(episodes: pd.DataFrame, names: dict = None, height: int =
         .encode(
             x=alt.X("days:Q", bin=alt.Bin(maxbins=25), title="Episode length (trading days)"),
             y=alt.Y("count():Q", title="Episodes"),
-            color=alt.Color("name:N", scale=regime_color_scale(names or {}),
-                            legend=alt.Legend(title=None, orient="top", columns=2)),
-            tooltip=[alt.Tooltip("name:N", title="Regime"), alt.Tooltip("count():Q", title="Episodes")],
+            color=alt.Color(
+                "name:N", scale=regime_color_scale(names or {}),
+                legend=alt.Legend(title=None, orient="top", columns=2),
+            ),
+            tooltip=[
+                alt.Tooltip("name:N", title="Regime"), alt.Tooltip("count():Q", title="Episodes")
+            ],
         )
         .properties(height=height)
     )
@@ -497,13 +519,20 @@ def fold_chart(folds: pd.DataFrame, height: int = CHART_MEDIUM) -> alt.Chart:
         .encode(
             x=alt.X("test_start:T", title="Out-of-sample window start"),
             y=alt.Y("sharpe_ratio:Q", title="Sharpe (out-of-sample)"),
-            color=alt.Color("positive:N",
-                            scale=alt.Scale(domain=[True, False], range=[ink["strategy"], ink["drawdown"]]),
-                            legend=alt.Legend(title=None, labelExpr="datum.label == 'true' ? 'Positive' : 'Negative'",
-                                              orient="top")),
-            tooltip=[alt.Tooltip("fold:Q", title="Fold"), alt.Tooltip("test_start:T", title="From"),
-                     alt.Tooltip("test_end:T", title="To"), alt.Tooltip("sharpe_ratio:Q", format=".2f"),
-                     alt.Tooltip("total_return:Q", format=".1%")],
+            color=alt.Color(
+                "positive:N",
+                scale=alt.Scale(domain=[True, False], range=[ink["strategy"], ink["drawdown"]]),
+                legend=alt.Legend(
+                    title=None,
+                    labelExpr="datum.label == 'true' ? 'Positive' : 'Negative'",
+                    orient="top",
+                ),
+            ),
+            tooltip=[
+                alt.Tooltip("fold:Q", title="Fold"), alt.Tooltip("test_start:T", title="From"),
+                alt.Tooltip("test_end:T", title="To"), alt.Tooltip("sharpe_ratio:Q", format=".2f"),
+                alt.Tooltip("total_return:Q", format=".1%"),
+            ],
         )
         .properties(height=height)
     )
@@ -518,7 +547,9 @@ def comparison_chart(table: pd.DataFrame, height: int = CHART_TALL) -> alt.Chart
     if data.empty:
         return None
     ink = _ink()
-    limit = float(np.nanmax(np.abs(data[["is_sharpe", "oos_sharpe"]].to_numpy()))) * 1.15 or 1.0
+    limit = (
+        float(np.nanmax(np.abs(data[["is_sharpe", "oos_sharpe"]].to_numpy()))) * 1.15 or 1.0
+    )
 
     diagonal = (
         alt.Chart(pd.DataFrame({"x": [-limit, limit], "y": [-limit, limit]}))
@@ -529,8 +560,13 @@ def comparison_chart(table: pd.DataFrame, height: int = CHART_TALL) -> alt.Chart
         alt.Chart(data)
         .mark_circle(size=140, opacity=0.85, color=ink["strategy"])
         .encode(
-            x=alt.X("is_sharpe:Q", title="In-sample Sharpe", scale=alt.Scale(domain=[-limit, limit])),
-            y=alt.Y("oos_sharpe:Q", title="Out-of-sample Sharpe", scale=alt.Scale(domain=[-limit, limit])),
+            x=alt.X(
+                "is_sharpe:Q", title="In-sample Sharpe", scale=alt.Scale(domain=[-limit, limit])
+            ),
+            y=alt.Y(
+                "oos_sharpe:Q", title="Out-of-sample Sharpe",
+                scale=alt.Scale(domain=[-limit, limit]),
+            ),
             tooltip=["strategy:N", alt.Tooltip("is_sharpe:Q", format=".2f"),
                      alt.Tooltip("oos_sharpe:Q", format=".2f"),
                      alt.Tooltip("turnover:Q", format=".1f")],
@@ -545,9 +581,14 @@ def comparison_chart(table: pd.DataFrame, height: int = CHART_TALL) -> alt.Chart
 # --------------------------------------------------------------------------
 REGIME_SUMMARY_CONFIG = {
     "name": st.column_config.TextColumn("Regime"),
-    "days": st.column_config.NumberColumn("Days", help="Sample size. Read this before believing any other number in the row."),
+    "days": st.column_config.NumberColumn(
+        "Days", help="Sample size. Read this before believing any other number in the row."
+    ),
     "share": st.column_config.NumberColumn("Share", format="percent"),
-    "episodes": st.column_config.NumberColumn("Episodes", help="Number of separate visits to this regime. One visit is an event, not a regime."),
+    "episodes": st.column_config.NumberColumn(
+        "Episodes",
+        help="Number of separate visits to this regime. One visit is an event, not a regime.",
+    ),
     "avg_duration": st.column_config.NumberColumn("Avg days", format="%.0f"),
     "ann_return": st.column_config.NumberColumn("Ann. return", format="percent"),
     "ann_volatility": st.column_config.NumberColumn("Ann. vol", format="percent"),
@@ -557,26 +598,36 @@ REGIME_SUMMARY_CONFIG = {
 
 PERFORMANCE_CONFIG = {
     "name": st.column_config.TextColumn("Regime"),
-    "days": st.column_config.NumberColumn("Days", help="Standard error on an annualized Sharpe is roughly sqrt(252/days)."),
+    "days": st.column_config.NumberColumn(
+        "Days", help="Standard error on an annualized Sharpe is roughly sqrt(252/days)."
+    ),
     "total_return": st.column_config.NumberColumn("Return", format="percent"),
     "ann_return": st.column_config.NumberColumn("Ann. return", format="percent"),
     "annualized_volatility": st.column_config.NumberColumn("Ann. vol", format="percent"),
-    "sharpe_ratio": st.column_config.NumberColumn("Sharpe", format="%.2f", help=METRIC_DOCS["sharpe_ratio"]),
+    "sharpe_ratio": st.column_config.NumberColumn(
+        "Sharpe", format="%.2f", help=METRIC_DOCS["sharpe_ratio"]
+    ),
     "sortino_ratio": st.column_config.NumberColumn("Sortino", format="%.2f"),
     "max_drawdown": st.column_config.NumberColumn("Max DD", format="percent"),
     "win_rate": st.column_config.NumberColumn("Win rate", format="percent"),
-    "exposure": st.column_config.NumberColumn("Exposure", format="percent", help=METRIC_DOCS["exposure"]),
+    "exposure": st.column_config.NumberColumn(
+        "Exposure", format="percent", help=METRIC_DOCS["exposure"]
+    ),
 }
 
 COMPARISON_CONFIG = {
     "strategy": st.column_config.TextColumn("Strategy", width="medium"),
     "is_sharpe": st.column_config.NumberColumn("IS Sharpe", format="%.2f"),
     "oos_sharpe": st.column_config.NumberColumn("OOS Sharpe", format="%.2f"),
-    "sharpe_decay": st.column_config.NumberColumn("Decay", format="%.2f", help=METRIC_DOCS["sharpe_decay"]),
+    "sharpe_decay": st.column_config.NumberColumn(
+        "Decay", format="%.2f", help=METRIC_DOCS["sharpe_decay"]
+    ),
     "oos_return": st.column_config.NumberColumn("OOS return", format="percent"),
     "oos_max_dd": st.column_config.NumberColumn("OOS max DD", format="percent"),
     "oos_exposure": st.column_config.NumberColumn("Exposure", format="percent"),
-    "turnover": st.column_config.NumberColumn("Turnover", format="%.1f", help=METRIC_DOCS["turnover"]),
+    "turnover": st.column_config.NumberColumn(
+        "Turnover", format="%.1f", help=METRIC_DOCS["turnover"]
+    ),
 }
 
 
@@ -588,14 +639,22 @@ def show_regime_health(regime_result, stability: dict):
     with st.container(border=True):
         st.markdown("**Are these actually regimes?**")
         cols = st.columns(4)
-        cols[0].metric("Episodes", stability["n_episodes"],
-                       help="Separate visits to any regime. Very high means the labels are flickering.")
-        cols[1].metric("Avg duration", f"{stability['avg_duration']:.0f}d",
-                       help="Real regimes last weeks to months. Under ~15 days, you are looking at noise.")
-        cols[2].metric("Switches / yr", f"{stability['switches_per_year']:.1f}",
-                       help="How often a regime-switching strategy would flip its whole position.")
-        cols[3].metric("Labelled days", stability["labelled_days"],
-                       help="Days with a regime. The rest are warm-up, where the features don't exist yet.")
+        cols[0].metric(
+            "Episodes", stability["n_episodes"],
+            help="Separate visits to any regime. Very high means the labels are flickering.",
+        )
+        cols[1].metric(
+            "Avg duration", f"{stability['avg_duration']:.0f}d",
+            help="Real regimes last weeks to months. Under ~15 days, you are looking at noise.",
+        )
+        cols[2].metric(
+            "Switches / yr", f"{stability['switches_per_year']:.1f}",
+            help="How often a regime-switching strategy would flip its whole position.",
+        )
+        cols[3].metric(
+            "Labelled days", stability["labelled_days"],
+            help="Days with a regime. The rest are warm-up, where the features don't exist yet.",
+        )
 
         if stability["avg_duration"] < 15 and stability["n_episodes"] > 0:
             caveat(

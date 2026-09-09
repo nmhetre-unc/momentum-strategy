@@ -25,7 +25,7 @@ from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.mixture import GaussianMixture
 
-from qbt.analytics import annualized_volatility, max_drawdown, TRADING_DAYS_PER_YEAR
+from qbt.analytics import TRADING_DAYS_PER_YEAR, annualized_volatility, max_drawdown
 from qbt.regime_features import build_regime_features, reduce_dimensions, standardize_features
 
 REGIME_METHODS = ("rules", "kmeans", "gmm", "hmm", "supervised")
@@ -65,10 +65,22 @@ REGIME_METHOD_DOCS = {
 }
 
 SMOOTHING_DOCS = {
-    "none": "Raw model output. Expect the labels to flicker — one-day regime changes that no trader would act on.",
-    "min_duration": "A new regime must repeat for N consecutive days before it's accepted. Causal, and it costs you N days of lag on every real transition. That lag is the honest price of not being whipsawed.",
-    "ema_prob": "Exponentially smooth the model's probabilities, then take the argmax. Causal, softer than min_duration, needs a model that outputs probabilities (gmm/hmm/supervised).",
-    "median": "Rolling majority vote over a trailing window. Causal. Simple and effective, but blunt.",
+    "none": (
+        "Raw model output. Expect the labels to flicker — one-day regime changes that no "
+        "trader would act on."
+    ),
+    "min_duration": (
+        "A new regime must repeat for N consecutive days before it's accepted. Causal, and "
+        "it costs you N days of lag on every real transition. That lag is the honest price "
+        "of not being whipsawed."
+    ),
+    "ema_prob": (
+        "Exponentially smooth the model's probabilities, then take the argmax. Causal, "
+        "softer than min_duration, needs a model that outputs probabilities (gmm/hmm/supervised)."
+    ),
+    "median": (
+        "Rolling majority vote over a trailing window. Causal. Simple and effective, but blunt."
+    ),
 }
 
 
@@ -83,6 +95,13 @@ class GaussianHMM:
     live); `smooth()` and `viterbi()` condition on the whole sequence and
     are historical reconstructions only.
     """
+
+    # Fitted parameters -- set in fit(), not __init__(), the usual
+    # scikit-learn convention for a model that doesn't exist until fitted.
+    means_: np.ndarray
+    variances_: np.ndarray
+    startprob_: np.ndarray
+    transmat_: np.ndarray
 
     def __init__(self, n_states: int = 3, n_iter: int = 100, tol: float = 1e-6,
                  var_floor: float = 1e-3, random_state: int = 42):
@@ -100,7 +119,9 @@ class GaussianHMM:
         """log P(x_t | state k) for every (t, k), diagonal covariance."""
         var = self.variances_
         diff = X[:, None, :] - self.means_[None, :, :]
-        return -0.5 * (np.log(2 * np.pi * var).sum(axis=1)[None, :] + ((diff ** 2) / var).sum(axis=2))
+        return -0.5 * (
+            np.log(2 * np.pi * var).sum(axis=1)[None, :] + ((diff ** 2) / var).sum(axis=2)
+        )
 
     @staticmethod
     def _scaled_emission(log_b: np.ndarray):
@@ -116,8 +137,8 @@ class GaussianHMM:
     def _forward(self, b: np.ndarray):
         """Scaled forward pass. Returns (filtered probabilities, scaling factors)."""
         n_obs = b.shape[0]
-        alpha = np.zeros((n_obs, self.n_states))
-        scale = np.zeros(n_obs)
+        alpha: np.ndarray = np.zeros((n_obs, self.n_states))
+        scale: np.ndarray = np.zeros(n_obs)
 
         a = self.startprob_ * b[0]
         scale[0] = a.sum() or 1e-300
@@ -132,7 +153,7 @@ class GaussianHMM:
 
     def _backward(self, b: np.ndarray, scale: np.ndarray) -> np.ndarray:
         n_obs = b.shape[0]
-        beta = np.zeros((n_obs, self.n_states))
+        beta: np.ndarray = np.zeros((n_obs, self.n_states))
         beta[-1] = 1.0
         for t in range(n_obs - 2, -1, -1):
             beta[t] = (self.transmat_ @ (b[t + 1] * beta[t + 1])) / scale[t + 1]
@@ -192,7 +213,9 @@ class GaussianHMM:
             self.startprob_ = gamma[0] / gamma[0].sum()
 
             row_sums = xi_sum.sum(axis=1, keepdims=True)
-            new_transmat = np.divide(xi_sum, row_sums, out=self.transmat_.copy(), where=row_sums > 0)
+            new_transmat = np.divide(
+                xi_sum, row_sums, out=self.transmat_.copy(), where=row_sums > 0
+            )
             self.transmat_ = new_transmat
 
             weights = gamma.sum(axis=0)
@@ -235,15 +258,15 @@ class GaussianHMM:
             log_start = np.log(self.startprob_)
             log_trans = np.log(self.transmat_)
 
-        delta = np.zeros((n_obs, self.n_states))
-        psi = np.zeros((n_obs, self.n_states), dtype=int)
+        delta: np.ndarray = np.zeros((n_obs, self.n_states))
+        psi: np.ndarray = np.zeros((n_obs, self.n_states), dtype=int)
         delta[0] = log_start + log_b[0]
         for t in range(1, n_obs):
             scores = delta[t - 1][:, None] + log_trans
             psi[t] = scores.argmax(axis=0)
             delta[t] = scores.max(axis=0) + log_b[t]
 
-        path = np.zeros(n_obs, dtype=int)
+        path: np.ndarray = np.zeros(n_obs, dtype=int)
         path[-1] = delta[-1].argmax()
         for t in range(n_obs - 2, -1, -1):
             path[t] = psi[t + 1][path[t + 1]]
@@ -263,7 +286,7 @@ class RegimeResult:
     method: str
     n_regimes: int
     causal: bool                 # False if the fit saw data it's labelling
-    probabilities: pd.DataFrame = None
+    probabilities: pd.DataFrame | None = None
     model: object = None
     fit_end: object = None       # last date the model was allowed to see
     meta: dict = field(default_factory=dict)
@@ -372,7 +395,7 @@ def _order_and_name(labels: pd.Series, features: pd.DataFrame) -> tuple:
 
 
 def smooth_labels(labels: pd.Series, method: str = "min_duration", min_duration: int = 5,
-                  probabilities: pd.DataFrame = None, ema_span: int = 5,
+                  probabilities: pd.DataFrame | None = None, ema_span: int = 5,
                   window: int = 5) -> pd.Series:
     """
     Smooths raw model labels, which flicker day to day. Every method here
@@ -388,7 +411,10 @@ def smooth_labels(labels: pd.Series, method: str = "min_duration", min_duration:
 
     if method == "ema_prob":
         if probabilities is None:
-            raise ValueError("smooth='ema_prob' requires a model that outputs probabilities (gmm/hmm/supervised).")
+            raise ValueError(
+                "smooth='ema_prob' requires a model that outputs probabilities "
+                "(gmm/hmm/supervised)."
+            )
         smoothed_probs = probabilities.ewm(span=ema_span, adjust=False).mean()
         out = labels.copy()
         out.loc[valid] = smoothed_probs.loc[valid].to_numpy().argmax(axis=1)
@@ -553,7 +579,7 @@ def detect_regimes(
     decode: str = "filter",
     horizon: int = 21,
     random_state: int = 42,
-    features: pd.DataFrame = None,
+    features: pd.DataFrame | None = None,
 ) -> RegimeResult:
     """
     Labels every day in `df` with a market regime. At fit_frac=1.0 the
@@ -581,6 +607,7 @@ def detect_regimes(
             "Fetch a longer history — the long-window features need about a year to spin up."
         )
 
+    resolved_fit_end: pd.Timestamp | None
     if fit_end is not None:
         resolved_fit_end = pd.Timestamp(fit_end)
         fit_index = X.index[X.index <= resolved_fit_end]
@@ -656,7 +683,7 @@ def detect_regimes_walk_forward(
     smooth: str = "min_duration",
     min_duration: int = 5,
     random_state: int = 42,
-    features: pd.DataFrame = None,
+    features: pd.DataFrame | None = None,
 ) -> RegimeResult:
     """
     Fits on everything up to date D, labels the next `refit_every` days,
@@ -679,8 +706,8 @@ def detect_regimes_walk_forward(
 
     if len(X) <= initial_train + refit_every:
         raise ValueError(
-            f"Walk-forward regime detection needs more than {initial_train + refit_every} clean rows; "
-            f"got {len(X)}. Either widen the date range or lower initial_train."
+            f"Walk-forward regime detection needs more than {initial_train + refit_every} "
+            f"clean rows; got {len(X)}. Either widen the date range or lower initial_train."
         )
 
     ids = pd.Series(UNKNOWN, index=raw_features.index, dtype=int)
@@ -700,7 +727,9 @@ def detect_regimes_walk_forward(
         # Renumber against training rows only, so regime 0 keeps meaning
         # "calmest" without consulting the days about to be labelled.
         vol_by_label = {
-            k: raw_features.loc[train_index[(chunk_ids.loc[train_index] == k).to_numpy()], "vol_20d"].mean()
+            k: raw_features.loc[
+                train_index[(chunk_ids.loc[train_index] == k).to_numpy()], "vol_20d"
+            ].mean()
             for k in sorted(chunk_ids.loc[train_index].unique())
         }
         ordering = sorted(vol_by_label, key=lambda k: (np.isnan(vol_by_label[k]), vol_by_label[k]))
@@ -735,7 +764,8 @@ def detect_regimes_walk_forward(
         meta={
             "walk_forward": True, "initial_train": initial_train,
             "refit_every": refit_every, "n_refits": len(refit_dates),
-            "refit_dates": refit_dates, "first_label": None if labelled.empty else labelled.index[0],
+            "refit_dates": refit_dates,
+            "first_label": None if labelled.empty else labelled.index[0],
         },
     )
 
@@ -743,7 +773,9 @@ def detect_regimes_walk_forward(
 # --------------------------------------------------------------------------
 # Transition and stability analysis
 # --------------------------------------------------------------------------
-def transition_matrix(labels: pd.Series, names: dict = None, normalize: bool = True) -> pd.DataFrame:
+def transition_matrix(
+    labels: pd.Series, names: dict | None = None, normalize: bool = True
+) -> pd.DataFrame:
     """
     P(tomorrow's regime | today's regime). The diagonal holds the
     persistence probabilities and should be high (0.9+ on daily data); a
@@ -761,12 +793,12 @@ def transition_matrix(labels: pd.Series, names: dict = None, normalize: bool = T
 
     matrix = counts.div(counts.sum(axis=1).replace(0, np.nan), axis=0) if normalize else counts
     if names:
-        label_names = [names.get(i, str(i)) for i in ids]
+        label_names = pd.Index([names.get(i, str(i)) for i in ids])
         matrix.index, matrix.columns = label_names, label_names
     return matrix
 
 
-def regime_episodes(labels: pd.Series, names: dict = None) -> pd.DataFrame:
+def regime_episodes(labels: pd.Series, names: dict | None = None) -> pd.DataFrame:
     """
     Every contiguous run of a single regime, with start, end and length.
     Regimes averaging a few days indicate noise, not detected regimes;

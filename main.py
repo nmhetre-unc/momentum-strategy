@@ -20,8 +20,14 @@ from qbt.adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES, describe_choices
 from qbt.analytics import full_report, performance_by_regime
 from qbt.backtest import run_backtest
 from qbt.data import fetch_ohlcv
-from qbt.regime import REGIME_METHODS, detect_regimes, detect_regimes_walk_forward, regime_stability, regime_summary
-from qbt.visualize import plot_equity_curve, plot_drawdown
+from qbt.regime import (
+    REGIME_METHODS,
+    detect_regimes,
+    detect_regimes_walk_forward,
+    regime_stability,
+    regime_summary,
+)
+from qbt.visualize import plot_drawdown, plot_equity_curve
 from qbt.walk_forward import evaluate_out_of_sample, rolling_walk_forward
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -52,7 +58,8 @@ def main():
     parser.add_argument("--plot", action="store_true",
                          help="Save equity curve and drawdown charts as PNG files")
     parser.add_argument("--model-report", action="store_true",
-                         help="For --strategy ml_direction: print train/test accuracy and feature importance")
+                         help="For --strategy ml_direction: print train/test accuracy and "
+                              "feature importance")
     parser.add_argument("--cost-bps", type=float, default=5.0,
                          help="Transaction cost in basis points per unit of position change. "
                               "Defaults to 5bps one-way; pass --cost-bps 0 for gross returns.")
@@ -61,9 +68,11 @@ def main():
     parser.add_argument("--regime-method", default="hmm", choices=REGIME_METHODS)
     parser.add_argument("--n-regimes", type=int, default=3)
     parser.add_argument("--regime-walk-forward", action="store_true",
-                         help="Refit the regime model on an expanding window (the honest, non-leaky version)")
+                         help="Refit the regime model on an expanding window (the honest, "
+                              "non-leaky version)")
     parser.add_argument("--rolling", action="store_true",
-                         help="Rolling walk-forward: many consecutive out-of-sample windows instead of one split")
+                         help="Rolling walk-forward: many consecutive out-of-sample windows "
+                              "instead of one split")
     args = parser.parse_args()
 
     if not args.ticker:
@@ -100,11 +109,14 @@ def main():
         stability = regime_stability(regimes.labels)
         print(f"\n--- Regimes ({args.regime_method}, "
               f"{'walk-forward' if args.regime_walk_forward else 'fit_frac=0.7'}) ---")
-        print(f"  Labelled days: {stability['labelled_days']}  episodes: {stability['n_episodes']}  "
-              f"avg duration: {stability['avg_duration']:.0f}d  switches/yr: {stability['switches_per_year']:.1f}")
+        print(f"  Labelled days: {stability['labelled_days']}  "
+              f"episodes: {stability['n_episodes']}  "
+              f"avg duration: {stability['avg_duration']:.0f}d  "
+              f"switches/yr: {stability['switches_per_year']:.1f}")
         if stability["avg_duration"] < 15:
             print("  WARNING: average episode under 15 days. These labels are flickering, not")
-            print("           describing regimes. Raise the confirmation window or use fewer regimes.")
+            print("           describing regimes. Raise the confirmation window or use "
+                  "fewer regimes.")
         if not regimes.causal:
             print("  WARNING: labels are not causal (the model saw the days it is labelling).")
             print("           Fine for describing history; invalid for the numbers below.")
@@ -128,7 +140,8 @@ def main():
             described = describe_choices(df, regimes=regimes)
             print(f"\n  Auto-selection learned on data up to {described['learn_end'].date()}:")
             for regime_id, choice in sorted(described["choices"].items()):
-                print(f"    {regimes.names.get(regime_id, regime_id):28s} -> {choice or 'no clear evidence'}")
+                name = regimes.names.get(regime_id, regime_id)
+                print(f"    {name:28s} -> {choice or 'no clear evidence'}")
 
     # ---- Validation ----
     if args.walk_forward:
@@ -162,7 +175,8 @@ def main():
 
     if args.model_report:
         if args.strategy not in ("ml_direction", "ml_regime_conditional"):
-            print("\n--model-report only applies to --strategy ml_direction or ml_regime_conditional")
+            print("\n--model-report only applies to --strategy ml_direction or "
+                  "ml_regime_conditional")
         else:
             from qbt.ml import model_report
 
@@ -175,15 +189,22 @@ def main():
             print(f"  Test accuracy:  {report['test_accuracy']:.2%}")
             print(f"  Base rate:      {report['test_base_rate']:.2%}  "
                   f"<- the bar to clear; below it the model added nothing")
-            print(f"  Test confusion matrix [[TN, FP], [FN, TP]]: {report['test_confusion_matrix']}")
+            print(
+                f"  Test confusion matrix [[TN, FP], [FN, TP]]: {report['test_confusion_matrix']}"
+            )
             print("  Top features by importance:")
-            top_features = sorted(report["feature_importance"].items(), key=lambda kv: -abs(kv[1]))[:5]
+            top_features = sorted(
+                report["feature_importance"].items(), key=lambda kv: -abs(kv[1])
+            )[:5]
             for name, value in top_features:
                 print(f"    {name:20s} {value:+.4f}")
             if report.get("by_regime"):
                 print("\n  Test accuracy by regime:")
                 for row in report["by_regime"]:
-                    name = regimes.names.get(row["regime"], row["regime"]) if regimes else row["regime"]
+                    name = (
+                        regimes.names.get(row["regime"], row["regime"])
+                        if regimes else row["regime"]
+                    )
                     edge = row["test_accuracy"] - row["base_rate"]
                     print(f"    {str(name):28s} acc={row['test_accuracy']:.1%}  "
                           f"base={row['base_rate']:.1%}  edge={edge:+.1%}  days={row['test_days']}")
