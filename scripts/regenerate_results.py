@@ -38,6 +38,7 @@ from qbt.backtest import run_backtest
 from qbt.data import fetch_ohlcv
 from qbt.stats import EULER_MASCHERONI, deflated_sharpe_ratio, stationary_bootstrap_sharpe
 from qbt.strategies import STRATEGIES
+from qbt.walk_forward import rolling_walk_forward
 
 TICKER = "SPY"
 START, END = "2008-01-01", "2025-01-01"
@@ -48,6 +49,8 @@ MEAN_BLOCK = 20
 MEAN_BLOCK_SWEEP = (10, 20, 40)
 SENSITIVITY_STRATEGIES = ("sma_crossover", "adaptive_ensemble")
 PASSIVE_EQUIVALENT_STRATEGY = "volatility_targeted"
+ROLLING_TRAIN_DAYS = 756
+ROLLING_TEST_DAYS = 126
 
 RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
 RESULTS_PATH = RESULTS_DIR / "summary.md"
@@ -286,6 +289,48 @@ def render_passive_equivalent(df):
     return "\n".join(lines)
 
 
+def render_rolling_comparison(df):
+    """
+    Mean out-of-sample FOLD Sharpe under genuine per-fold refitting versus
+    the old fixed-model approach (one fit on the whole series, reused
+    across every fold) -- a separate question from the main table above.
+    The main table's numbers (Net Sharpe, its 90% CI, the paired
+    difference against buy_and_hold, DSR) all come from a single
+    full-period backtest and never touch rolling_walk_forward(), so none
+    of them move because of this section; this section exists precisely
+    because a fold-averaged Sharpe is a different statistic, only
+    computable by sliding a train/test window through history, which the
+    main table doesn't do.
+    """
+    lines = [
+        "## Rolling walk-forward: refit-per-fold vs fixed-model",
+        "",
+        f"train_days={ROLLING_TRAIN_DAYS}, test_days={ROLLING_TEST_DAYS}, "
+        f"cost_bps={COST_BPS:.0f}. Mean Sharpe across out-of-sample folds -- not the "
+        "full-period Sharpe in the table above, and not affected by it either way. "
+        "'Fixed-model' reuses one fit across every fold (the old default); 'refit "
+        "per fold' refits fresh on each fold's own training window, which is honest "
+        "but n_folds times more expensive.",
+        "",
+        "| Strategy | Fixed-model mean fold Sharpe | Refit-per-fold mean fold Sharpe | Change |",
+        "|---|---|---|---|",
+    ]
+    rows = []
+    for name, fn in {**STRATEGIES, **ADAPTIVE_STRATEGIES}.items():
+        result = rolling_walk_forward(
+            df, fn, train_days=ROLLING_TRAIN_DAYS, test_days=ROLLING_TEST_DAYS,
+            cost_bps=COST_BPS, refit_per_fold=True,
+        )
+        rows.append((name, result["mean_sharpe_fixed_model"], result["mean_sharpe"]))
+
+    # Most overstated by the fixed-model approach (largest drop) first.
+    rows.sort(key=lambda r: r[2] - r[1])
+    for name, fixed, refit in rows:
+        lines.append(f"| {name} | {fixed:.2f} | {refit:.2f} | {refit - fixed:+.2f} |")
+
+    return "\n".join(lines), rows
+
+
 def main():
     df = fetch_ohlcv(TICKER, START, END)
 
@@ -313,14 +358,21 @@ def main():
     table = render_markdown_table(rows)
     sensitivity = render_mean_block_sensitivity(df, bench_returns)
     passive_equivalent = render_passive_equivalent(df)
+    rolling_comparison, rolling_rows = render_rolling_comparison(df)
 
-    document = f"{header}\n{table}\n\n{sensitivity}\n\n{passive_equivalent}\n"
+    document = (
+        f"{header}\n{table}\n\n{sensitivity}\n\n{passive_equivalent}\n\n{rolling_comparison}\n"
+    )
 
     print(document)
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_PATH.write_text(document, encoding="utf-8")
     print(f"\nWrote {RESULTS_PATH}")
+
+    print("\nMost overstated by the fixed-model approach (largest drop first):")
+    for name, fixed, refit in rolling_rows[:3]:
+        print(f"  {name}: {fixed:.2f} -> {refit:.2f} ({refit - fixed:+.2f})")
 
 
 if __name__ == "__main__":

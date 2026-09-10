@@ -238,32 +238,42 @@ understated.
 The rolling walk-forward previously generated each strategy's signal once on
 the full series and sliced it into folds, so a fitted strategy's model had seen
 every fold's data before being evaluated on any of it. Refitting on each fold's
-own training window lowers mean fold Sharpe for 5 of 7 adaptive wrappers:
-regime_switch 1.353 to 0.859, adaptive_ensemble 1.263 to 0.787, regime_filtered
-1.081 to 0.661, ml_regime_conditional 1.191 to 0.993, and ml_direction 1.366 to
-1.181.
+own training window changes mean fold Sharpe in a pattern that tracks how much
+selection each strategy performs.
+
+Strategies whose behaviour depends on a learn_frac-based, Sharpe-selected
+choice lose the most: regime_switch 1.35 to 0.86, adaptive_ensemble 1.26 to
+0.79, regime_filtered 1.08 to 0.66. Under the fixed-model approach that
+selection was made once on the whole 17-year series, so even early folds were
+judged on a choice informed by later data.
+
+Fitted classifiers lose less: ml_regime_conditional 1.19 to 0.99, ml_direction
+1.37 to 1.18.
+
+Strategies with no fit step — sma_crossover, momentum, mean_reversion,
+volatility_targeted — are unchanged to two decimals, which is the control that
+confirms the mechanism. regime_sized and regime_parameters rise slightly
+(+0.04, +0.06); neither has a Sharpe-driven selection step, so their only
+per-fold variation is estimation noise in the unsupervised clustering.
 
 adaptive_ensemble, the best performer in the main results table, loses 0.48 of
 its mean fold Sharpe. A meaningful share of its apparent edge was a fitting
 artifact.
 
-regime_parameters and regime_sized rise slightly under refitting. Neither has a
-Sharpe-based auto-selection step, so their only per-fold variation is
-estimation noise in the unsupervised clustering, which moves in both directions
-rather than removing a one-directional look-ahead advantage.
-volatility_targeted is unchanged past the fourth decimal, as expected for a
-strategy with no fit step — a useful sanity check that the mechanism does what
-it claims.
-
 Passing a precomputed regime object into a per-fold refit is incompatible by
-construction: an early fold's "refit" would be judged against a regime model
-fitted on the entire series. The function now raises rather than silently
-producing a number that looks honest and is not.
+construction: an early fold's refit would be judged against a regime model
+fitted on the entire series. The function raises rather than silently producing
+a number that looks honest and is not.
 
-Warm-up is not an issue at the default train_days of 756, since the longest
+Warm-up costs nothing at the default train_days of 756, since the longest
 lookback in the codebase (sma_crossover's 200 days) sits entirely inside each
 fold's training slice. It would cost max(0, warmup_days - train_days) test days
 per fold if train_days were reduced below a strategy's own lookback.
+
+These deltas apply to the walk-forward numbers only. The main results table's
+Sharpe ratios, confidence intervals, paired differences, and deflated Sharpes
+come from full-period backtests and a single split, which never call
+rolling_walk_forward and did not move.
 
 ## Limitations
 

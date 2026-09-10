@@ -34,3 +34,21 @@ volatility_targeted's average exposure is 71.7%. Comparing it against a constant
 |---|---|---|---|
 | volatility_targeted (actual) | 0.832 | 11.0% | -18.7% |
 | Passive @ 71.7% exposure | 0.607 | 14.3% | -39.7% |
+
+## Rolling walk-forward: refit-per-fold vs fixed-model
+
+train_days=756, test_days=126, cost_bps=5. Mean Sharpe across out-of-sample folds -- not the full-period Sharpe in the table above, and not affected by it either way. 'Fixed-model' reuses one fit across every fold (the old default); 'refit per fold' refits fresh on each fold's own training window, which is honest but n_folds times more expensive.
+
+| Strategy | Fixed-model mean fold Sharpe | Refit-per-fold mean fold Sharpe | Change |
+|---|---|---|---|
+| regime_switch | 1.35 | 0.86 | -0.49 |
+| adaptive_ensemble | 1.26 | 0.79 | -0.48 |
+| regime_filtered | 1.08 | 0.66 | -0.42 |
+| ml_regime_conditional | 1.19 | 0.99 | -0.20 |
+| ml_direction | 1.37 | 1.18 | -0.19 |
+| volatility_targeted | 0.97 | 0.97 | -0.00 |
+| sma_crossover | 1.08 | 1.08 | +0.00 |
+| momentum | 0.85 | 0.85 | +0.00 |
+| mean_reversion | 1.35 | 1.35 | +0.00 |
+| regime_sized | 0.95 | 0.99 | +0.04 |
+| regime_parameters | 0.89 | 0.96 | +0.06 |
