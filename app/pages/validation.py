@@ -543,9 +543,11 @@ if tab_compare.open:
             )
 
         table_caption(
-            "Every strategy on identical data, dates, costs and split.",
-            "Read the whole table — picking the best out-of-sample row makes that number "
-            "in-sample.",
+            "Every strategy on identical data, dates, costs and split, sorted by deflated "
+            "Sharpe rather than raw OOS Sharpe.",
+            "Read the whole table anyway — even deflated Sharpe used this out-of-sample "
+            "data to rank the candidates, just with the multiple-testing penalty that "
+            "raw OOS Sharpe skips entirely.",
         )
         st.dataframe(
             table.drop(columns=["error"]), hide_index=True,

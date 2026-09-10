@@ -10,9 +10,12 @@ import inspect
 
 import numpy as np
 import pandas as pd
+from scipy.stats import kurtosis as _kurtosis
+from scipy.stats import skew as _skew
 
-from qbt.analytics import full_report, performance_by_regime
+from qbt.analytics import TRADING_DAYS_PER_YEAR, full_report, performance_by_regime
 from qbt.backtest import run_backtest
+from qbt.stats import deflated_sharpe_ratio
 
 
 def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.7,
@@ -291,44 +294,103 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
     }
 
 
+def _oos_split(df: pd.DataFrame, fn, params: dict, split_frac: float,
+               cost_bps: float, n_boot: int):
+    """Backtests one strategy and splits it in-sample/out-of-sample; returns
+    (in_stats, out_stats, out_of_sample strategy_return series)."""
+    signal = fn(df, **params)
+    result = run_backtest(df, signal, cost_bps=cost_bps)
+    split_date = result.index[int(len(result) * split_frac)]
+    out_result = result.loc[split_date:]
+    in_stats = full_report(result.loc[:split_date], n_boot=n_boot)
+    out_stats = full_report(out_result, n_boot=n_boot)
+    return in_stats, out_stats, out_result["strategy_return"].fillna(0)
+
+
 def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0.7,
                        cost_bps: float = 5.0, n_boot: int = 0) -> pd.DataFrame:
     """
     Runs several strategies over identical data, dates, costs and split,
     and returns one table of in-sample vs out-of-sample metrics.
     `strategies` maps a display name to either a callable or a
-    (callable, params_dict) tuple. Selecting the best out-of-sample
-    Sharpe from this table is itself an in-sample result, since the
-    out-of-sample data was used to choose it -- report the whole table.
+    (callable, params_dict) tuple.
+
+    Selecting the best out-of-sample Sharpe from this table is itself an
+    in-sample result, since the out-of-sample data was used to choose
+    it -- ranking by raw `oos_sharpe` picks a winner using the very data
+    that's supposed to be held out, which is exactly the selection bias
+    the deflated Sharpe ratio corrects for. This function ranks by
+    `deflated_sharpe` instead: report the whole table either way, but
+    treat `deflated_sharpe`, not `oos_sharpe`, as the honest answer to
+    "which one actually won."
+
+    Adds a `buy_and_hold` row (a constant long position, same data, costs
+    and split as everything else) as the fixed reference point for
+    `deflated_sharpe`, whether or not `strategies` already names one.
+    `n_trials` is `len(strategies)` -- the number of CANDIDATES being
+    compared and selected among; the benchmark isn't itself a candidate
+    up for selection, so it isn't counted. `deflated_sharpe` is
+    qbt.stats.deflated_sharpe_ratio(), using each strategy's own
+    out-of-sample skew/kurtosis and per-period Sharpe, with
+    `sharpe_benchmark` set to buy-and-hold's own out-of-sample per-period
+    Sharpe over the SAME window: P(true Sharpe beats the benchmark),
+    corrected for having picked the best of `n_trials` candidates and for
+    non-normal returns. The benchmark's own `deflated_sharpe` cell is
+    left as NaN -- comparing it to itself collapses the formula's
+    numerator to `-sr0`, and applying a multiple-testing penalty to a
+    fixed reference point is a category error (see FINDINGS.md #2 and
+    scripts/regenerate_results.py, where this was first worked out).
+
     `n_boot` is forwarded to full_report() for every strategy; it
     defaults to 0 (no Sharpe CI), since this function calls full_report
     twice per strategy.
     """
-    rows = []
+    n_trials = len(strategies)
+
+    bench_in, bench_out, bench_returns = _oos_split(
+        df, lambda d: pd.Series(1.0, index=d.index), {}, split_frac, cost_bps, n_boot
+    )
+    bench_sharpe_pp = bench_out["sharpe_ratio"] / np.sqrt(TRADING_DAYS_PER_YEAR)
+
+    def make_row(name: str, in_stats: dict, out_stats: dict,
+                out_returns: pd.Series, is_benchmark: bool) -> dict:
+        if is_benchmark:
+            deflated = np.nan
+        else:
+            sharpe_pp = out_stats["sharpe_ratio"] / np.sqrt(TRADING_DAYS_PER_YEAR)
+            deflated = deflated_sharpe_ratio(
+                sharpe=sharpe_pp, n_trials=n_trials, skew=float(_skew(out_returns)),
+                kurtosis=float(_kurtosis(out_returns, fisher=False)),
+                n_obs=len(out_returns), sharpe_benchmark=bench_sharpe_pp,
+            )
+        return {
+            "strategy": name,
+            "is_sharpe": in_stats["sharpe_ratio"],
+            "oos_sharpe": out_stats["sharpe_ratio"],
+            "sharpe_decay": in_stats["sharpe_ratio"] - out_stats["sharpe_ratio"],
+            "oos_return": out_stats["total_return"],
+            "oos_max_dd": out_stats["max_drawdown"],
+            "oos_exposure": out_stats["exposure"],
+            "turnover": out_stats["turnover"],
+            "n_trials": n_trials,
+            "deflated_sharpe": deflated,
+            "error": None,
+        }
+
+    rows = [make_row("buy_and_hold", bench_in, bench_out, bench_returns, is_benchmark=True)]
     for name, entry in strategies.items():
         fn, params = entry if isinstance(entry, tuple) else (entry, {})
         try:
-            signal = fn(df, **params)
-            result = run_backtest(df, signal, cost_bps=cost_bps)
-            split_date = result.index[int(len(result) * split_frac)]
-            in_stats = full_report(result.loc[:split_date], n_boot=n_boot)
-            out_stats = full_report(result.loc[split_date:], n_boot=n_boot)
-            rows.append({
-                "strategy": name,
-                "is_sharpe": in_stats["sharpe_ratio"],
-                "oos_sharpe": out_stats["sharpe_ratio"],
-                "sharpe_decay": in_stats["sharpe_ratio"] - out_stats["sharpe_ratio"],
-                "oos_return": out_stats["total_return"],
-                "oos_max_dd": out_stats["max_drawdown"],
-                "oos_exposure": out_stats["exposure"],
-                "turnover": out_stats["turnover"],
-                "error": None,
-            })
+            in_stats, out_stats, out_returns = _oos_split(
+                df, fn, params, split_frac, cost_bps, n_boot
+            )
+            rows.append(make_row(name, in_stats, out_stats, out_returns, is_benchmark=False))
         except Exception as exc:  # keep one broken strategy from killing the table
             rows.append({
                 "strategy": name, "is_sharpe": np.nan, "oos_sharpe": np.nan,
                 "sharpe_decay": np.nan, "oos_return": np.nan, "oos_max_dd": np.nan,
-                "oos_exposure": np.nan, "turnover": np.nan, "error": f"{type(exc).__name__}: {exc}",
+                "oos_exposure": np.nan, "turnover": np.nan, "n_trials": n_trials,
+                "deflated_sharpe": np.nan, "error": f"{type(exc).__name__}: {exc}",
             })
 
-    return pd.DataFrame(rows).sort_values("oos_sharpe", ascending=False, na_position="last")
+    return pd.DataFrame(rows).sort_values("deflated_sharpe", ascending=False, na_position="last")

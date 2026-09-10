@@ -53,4 +53,15 @@ METRIC_DOCS = {
         "In-sample Sharpe minus out-of-sample Sharpe. Large positive values mean the in-sample "
         "number was substantially fitted to that period."
     ),
+    "n_trials": (
+        "How many candidates were compared in this run. The deflated Sharpe's multiple-testing "
+        "penalty grows with this — more candidates means a higher bar to clear before a result "
+        "counts as a real edge rather than the best of a big pile of noise."
+    ),
+    "deflated_sharpe": (
+        "P(true Sharpe beats buy-and-hold), corrected for picking the best of n_trials "
+        "candidates and for non-normal returns. The honest ranking metric — a high "
+        "out-of-sample Sharpe that used the out-of-sample data to get picked is not the same "
+        "as a high deflated Sharpe."
+    ),
 }

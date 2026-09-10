@@ -395,7 +395,10 @@ def test_compare_strategies_no_errors(strategy_comparison):
 
 
 def test_compare_strategies_covers_every_strategy(strategy_comparison):
-    assert len(strategy_comparison) == len(ALL_STRATEGIES)
+    # +1: compare_strategies() always adds its own buy_and_hold row as the
+    # deflated-Sharpe reference point, on top of every strategy passed in.
+    assert len(strategy_comparison) == len(ALL_STRATEGIES) + 1
+    assert "buy_and_hold" in set(strategy_comparison["strategy"])
 
 
 @pytest.mark.parametrize("name", ALL_STRATEGIES)

@@ -35,13 +35,13 @@ def iid_bootstrap_sharpe(returns: pd.Series, n_boot: int = 2000, seed: int = 0):
     return point, lo, hi
 
 
-def deflated_sharpe_ratio(sharpe: float, n_trials: int, skew: float,
-                          kurtosis: float, n_obs: int) -> float:
+def deflated_sharpe_ratio(sharpe: float, n_trials: int, skew: float, kurtosis: float,
+                          n_obs: int, sharpe_benchmark: float = 0.0) -> float:
     """
-    P(true Sharpe > 0), after correcting for selection bias from testing
-    `n_trials` independent strategies and for non-normal returns. Bailey,
-    D.H. and Lopez de Prado, M. (2014), "The Deflated Sharpe Ratio:
-    Correcting for Selection Bias, Backtest Overfitting, and
+    P(true Sharpe > sharpe_benchmark), after correcting for selection bias
+    from testing `n_trials` independent strategies and for non-normal
+    returns. Bailey, D.H. and Lopez de Prado, M. (2014), "The Deflated
+    Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting, and
     Non-Normality," Journal of Portfolio Management, 40(5), 94-107.
 
     `sharpe` must be the per-period (non-annualized) Sharpe ratio,
@@ -49,7 +49,19 @@ def deflated_sharpe_ratio(sharpe: float, n_trials: int, skew: float,
     annualizing one without the other breaks the formula. `kurtosis` is
     on the Pearson scale (3.0 for a normal distribution, not excess).
     At `n_trials <= 1` there is no multiple-testing correction to apply,
-    so this reduces to the plain probabilistic Sharpe ratio versus zero.
+    so this reduces to the plain probabilistic Sharpe ratio versus
+    `sharpe_benchmark`.
+
+    `sharpe_benchmark` defaults to 0.0 -- "beats doing nothing." Pass a
+    benchmark's own per-period Sharpe (same units, same period) to ask
+    the harder "beats holding the benchmark" question instead; only the
+    final threshold shifts; the selection-bias correction (`sr0`) is
+    still computed from the STRATEGY's own moments, per Bailey & Lopez de
+    Prado's derivation, not the benchmark's. Do not call this with the
+    benchmark's own Sharpe as `sharpe` and itself as `sharpe_benchmark` --
+    the numerator collapses to `-sr0`, which is a category error (a fixed
+    reference point isn't a hypothesis that multiple-testing correction
+    applies to); leave that cell unset instead.
     """
     sr_std = np.sqrt((1 - skew * sharpe + (kurtosis - 1) / 4 * sharpe ** 2) / (n_obs - 1))
 
@@ -61,7 +73,7 @@ def deflated_sharpe_ratio(sharpe: float, n_trials: int, skew: float,
             + EULER_MASCHERONI * norm.ppf(1 - 1.0 / (n_trials * np.e))
         )
 
-    return float(norm.cdf((sharpe - sr0) / sr_std))
+    return float(norm.cdf((sharpe - sharpe_benchmark - sr0) / sr_std))
 
 
 def newey_west_se(returns: pd.Series, lags: int | None = None) -> float:

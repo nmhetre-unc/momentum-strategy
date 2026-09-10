@@ -628,6 +628,10 @@ COMPARISON_CONFIG = {
     "turnover": st.column_config.NumberColumn(
         "Turnover", format="%.1f", help=METRIC_DOCS["turnover"]
     ),
+    "n_trials": st.column_config.NumberColumn("N trials", help=METRIC_DOCS["n_trials"]),
+    "deflated_sharpe": st.column_config.NumberColumn(
+        "Deflated Sharpe", format="%.3f", help=METRIC_DOCS["deflated_sharpe"]
+    ),
 }
 
 
