@@ -1,6 +1,9 @@
 # momentum-strategy
 
-![CI](https://github.com/nmhetre-unc/momentum-strategy/actions/workflows/ci.yml/badge.svg?branch=restructure)
+https://momentum-strategy-hbht78g3wpzyfyhjggwhjt.streamlit.app/
+
+
+![CI](https://github.com/nmhetre-unc/momentum-strategy/actions/workflows/ci.yml/badge.svg?branch=main)
 
 A backtesting engine for single-asset and cross-sectional equity strategies,
 built to test one question: does any of them beat buy-and-hold? None of them
