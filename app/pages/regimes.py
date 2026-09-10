@@ -15,6 +15,7 @@ import streamlit as st
 from components import (
     PERFORMANCE_CONFIG,
     REGIME_SUMMARY_CONFIG,
+    causal_badge,
     caveat,
     chart_caption,
     duration_histogram,
@@ -671,7 +672,8 @@ if st.button(
 
     leaky_column, honest_column = st.columns(2)
     with leaky_column:
-        st.markdown("**Full-sample fit** — not tradeable")
+        st.markdown("**Full-sample fit**")
+        causal_badge(leaky)
         st.altair_chart(regime_ribbon_chart(df, leaky, height=240))
         chart_caption(
             "Regimes from a model fitted on the entire history.",
@@ -681,7 +683,8 @@ if st.button(
         )
     if honest is not None:
         with honest_column:
-            st.markdown("**Expanding-window refit** — tradeable")
+            st.markdown("**Expanding-window refit**")
+            causal_badge(honest)
             st.altair_chart(regime_ribbon_chart(df, honest, height=240))
             chart_caption(
                 "The same method, refitted on an expanding window and labelling only forward.",

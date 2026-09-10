@@ -284,4 +284,11 @@ proxy with no market impact, borrow, or financing. Regime labels come from a
 available but the reported numbers use the fixed fit. Walk-forward folds are sliced from a full-length backtest, so each fold
 inherits the position going into it rather than starting flat. Fold-level
 costs therefore exclude the entry cost of initiating a position at the fold's
-start.
+start. Headline metrics for fitted strategies come from full-period backtests in
+which the model predicts across its own training period — 70% of the equity
+curve for ml_direction and the learn_frac-based adaptive wrappers. The
+rolling walk-forward results in results/summary.md refit each fold and are
+the honest read for these strategies; the gap is 0.19 to 0.49 Sharpe
+depending on how much selection the strategy performs. Since every paired
+difference against buy-and-hold already contains zero, correcting this would
+strengthen rather than change the conclusion.

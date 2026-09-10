@@ -26,6 +26,7 @@ from components import (
     fold_chart,
     how_to_read,
     require_regimes,
+    sharpe_with_ci,
     table_caption,
 )
 
@@ -239,7 +240,7 @@ if tab_rolling.open:
             "rerun on every widget change, at the cost of a noisier interval."
         )
 
-        summary = st.columns(4)
+        summary = st.columns(5)
         summary[0].metric("Folds", rolling["n_folds"])
         summary[1].metric(
             "Folds positive", f"{rolling['pct_folds_positive']:.0%}",
@@ -249,6 +250,17 @@ if tab_rolling.open:
         summary[2].metric("Median fold Sharpe", f"{rolling['median_sharpe']:.2f}")
         summary[3].metric("Worst fold", f"{rolling['worst_fold_sharpe']:.2f}",
                           help="The fold you would actually have had to live through.")
+        oos_report = rolling["oos_report"]
+        summary[4].metric(
+            "Stitched OOS Sharpe",
+            sharpe_with_ci(
+                oos_report["sharpe_ratio"],
+                oos_report["sharpe_ci_low"],
+                oos_report["sharpe_ci_high"],
+            ),
+            help="Sharpe of the stitched out-of-sample record, with its 90% bootstrap CI — "
+                 "one number across every fold, not an average of per-fold numbers.",
+        )
 
         chart = fold_chart(rolling["folds"])
         if chart is not None:
@@ -383,20 +395,24 @@ if tab_decay.open:
 
         evaluation = evaluate_with_regimes(
             df, ALL_STRATEGIES[decay_strategy], regimes, cost_bps=5.0,
-            strategy_params=decay_params,
+            n_boot=200, strategy_params=decay_params,
         )
 
+        is_report, oos_report = evaluation["in_sample"], evaluation["out_sample"]
         headline = st.columns(3)
-        headline[0].metric("In-sample Sharpe", f"{evaluation['in_sample']['sharpe_ratio']:.2f}")
-        headline[1].metric(
-            "Out-of-sample Sharpe", f"{evaluation['out_sample']['sharpe_ratio']:.2f}"
+        headline[0].metric(
+            "In-sample Sharpe",
+            sharpe_with_ci(is_report["sharpe_ratio"], is_report["sharpe_ci_low"],
+                          is_report["sharpe_ci_high"]),
         )
-        is_sharpe = evaluation["in_sample"]["sharpe_ratio"]
-        oos_sharpe = evaluation["out_sample"]["sharpe_ratio"]
-        headline[2].metric("Decay", f"{is_sharpe - oos_sharpe:+.2f}")
-
-        is_stats, oos_stats = evaluation["in_sample"], evaluation["out_sample"]
+        headline[1].metric(
+            "Out-of-sample Sharpe",
+            sharpe_with_ci(oos_report["sharpe_ratio"], oos_report["sharpe_ci_low"],
+                          oos_report["sharpe_ci_high"]),
+        )
+        is_stats, oos_stats = is_report, oos_report
         decay = is_stats["sharpe_ratio"] - oos_stats["sharpe_ratio"]
+        headline[2].metric("Decay", f"{decay:+.2f}")
 
         if decay > 0.5:
             caveat(
@@ -543,11 +559,10 @@ if tab_compare.open:
             )
 
         table_caption(
-            "Every strategy on identical data, dates, costs and split, sorted by deflated "
-            "Sharpe rather than raw OOS Sharpe.",
-            "Read the whole table anyway — even deflated Sharpe used this out-of-sample "
-            "data to rank the candidates, just with the multiple-testing penalty that "
-            "raw OOS Sharpe skips entirely.",
+            "Every strategy on identical data, dates, costs and split.",
+            "Sorted by deflated Sharpe — P(true Sharpe beats buy-and-hold) — not raw OOS "
+            "Sharpe. Raw OOS Sharpe picks a winner using the very data being held out; "
+            "deflated Sharpe corrects for that selection bias.",
         )
         st.dataframe(
             table.drop(columns=["error"]), hide_index=True,

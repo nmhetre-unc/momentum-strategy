@@ -214,7 +214,8 @@ stats = full_report(result)
 
 # Same strategy with costs switched off, so the cost question in the
 # guided interpretation below is answered with a number rather than a guess.
-free_stats = full_report(run_backtest(df, signal, cost_bps=0.0))
+free_result = run_backtest(df, signal, cost_bps=0.0)
+free_stats = full_report(free_result)
 
 benchmark = result.copy()
 benchmark["strategy_return"] = result["daily_return"]
@@ -344,12 +345,14 @@ if caveats_fired == 0:
     )
 
 # ---------- Charts ----------
-st.altair_chart(equity_chart(result, log_scale=log_scale))
+st.altair_chart(
+    equity_chart(result, log_scale=log_scale, gross_equity=free_result["equity_curve"])
+)
 chart_caption(
-    "Growth of $1 in the strategy against buy-and-hold.",
-    "Both start at 1.0, so the vertical gap is the strategy's contribution.",
-    "the shape and the flat stretches, not the endpoint — and whether the dashed "
-    "benchmark line is above you.",
+    "Growth of $1: strategy net of costs, gross (no costs), and buy-and-hold.",
+    "All three start at 1.0; the gap between net and gross is cost drag.",
+    "how far net trails gross — that gap is the 5bps-per-trade toll — and whether "
+    "net still clears the dashed benchmark line.",
 )
 st.altair_chart(drawdown_chart(result))
 chart_caption(

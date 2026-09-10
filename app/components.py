@@ -205,20 +205,47 @@ def caveat(message: str, level: str = "warning"):
     getattr(st, level)(message, icon=":material/info:")
 
 
+def sharpe_with_ci(sharpe: float, ci_low: float = None, ci_high: float = None) -> str:
+    """
+    '0.42 [-0.31, 1.18]', or just '0.42' if no bootstrap CI was computed
+    (ci_low/ci_high are None, e.g. n_boot=0). One formatter so every
+    Sharpe-with-CI display on the dashboard reads the same way.
+    """
+    if ci_low is None or ci_high is None:
+        return f"{sharpe:.2f}"
+    return f"{sharpe:.2f} [{ci_low:.2f}, {ci_high:.2f}]"
+
+
 # --------------------------------------------------------------------------
 # Core charts
 # --------------------------------------------------------------------------
 def equity_chart(
-    result: pd.DataFrame, log_scale: bool = False, height: int = CHART_TALL
+    result: pd.DataFrame, log_scale: bool = False, height: int = CHART_TALL,
+    gross_equity: pd.Series = None,
 ) -> alt.Chart:
-    """Strategy equity against buy-and-hold, both normalized to $1."""
+    """
+    Strategy equity against buy-and-hold, both normalized to $1.
+    `gross_equity` is optional: pass the same strategy's equity curve at
+    cost_bps=0 to add a third "Gross (no costs)" line, making the cost
+    drag between it and the net "Strategy" line visible directly on the
+    chart instead of only in a metric.
+    """
     ink = _ink()
+    names = ["Strategy", "Buy & hold"]
+    series = [result["equity_curve"], result["benchmark_curve"]]
+    colors = [ink["strategy"], ink["benchmark"]]
+    dashes = [[1, 0], [5, 3]]
+
+    if gross_equity is not None:
+        names.append("Gross (no costs)")
+        series.append(gross_equity)
+        colors.append(ink["muted"])
+        dashes.append([2, 2])
+
     data = pd.DataFrame({
-        "Date": np.repeat(result.index, 2),
-        "Series": ["Strategy", "Buy & hold"] * len(result),
-        "Growth of $1": np.column_stack(
-            [result["equity_curve"], result["benchmark_curve"]]
-        ).ravel(),
+        "Date": np.repeat(result.index, len(names)),
+        "Series": names * len(result),
+        "Growth of $1": np.column_stack(series).ravel(),
     }).dropna()
 
     scale = alt.Scale(type="log") if log_scale else alt.Scale(zero=False)
@@ -230,13 +257,12 @@ def equity_chart(
             y=alt.Y("Growth of $1:Q", title="Growth of $1", scale=scale),
             color=alt.Color(
                 "Series:N",
-                scale=alt.Scale(domain=["Strategy", "Buy & hold"],
-                                range=[ink["strategy"], ink["benchmark"]]),
+                scale=alt.Scale(domain=names, range=colors),
                 legend=alt.Legend(title=None, orient="top"),
             ),
             strokeDash=alt.StrokeDash(
                 "Series:N",
-                scale=alt.Scale(domain=["Strategy", "Buy & hold"], range=[[1, 0], [5, 3]]),
+                scale=alt.Scale(domain=names, range=dashes),
                 legend=None,
             ),
             tooltip=["Date:T", "Series:N", alt.Tooltip("Growth of $1:Q", format=".3f")],
@@ -635,13 +661,28 @@ COMPARISON_CONFIG = {
 }
 
 
+def causal_badge(regime_result):
+    """
+    'Causal' or 'Non-causal (full-sample fit)', rendered as a coloured badge
+    rather than left to a tooltip -- whether a backtest can trust these
+    labels is not something to bury.
+    """
+    if regime_result.causal:
+        st.badge("Causal", icon=":material/check_circle:", color="green")
+    else:
+        st.badge("Non-causal (full-sample fit)", icon=":material/warning:", color="orange")
+
+
 def show_regime_health(regime_result, stability: dict):
     """
     The three questions to ask of any regime labelling, answered up front
     so nobody builds a strategy on labels that were never regimes.
     """
     with st.container(border=True):
-        st.markdown("**Are these actually regimes?**")
+        header, badge = st.columns([3, 1])
+        header.markdown("**Are these actually regimes?**")
+        with badge:
+            causal_badge(regime_result)
         cols = st.columns(4)
         cols[0].metric(
             "Episodes", stability["n_episodes"],
