@@ -307,8 +307,10 @@ A no to any of them means there is nothing there to condition on.
 ## Notes and limitations
 
 - The ML strategy trains once on the first `train_frac` — it does not retrain incrementally
-- `rolling_walk_forward()` evaluates in rolling folds but does **not** refit fitted strategies
-  per fold; the returned `fitted_note` says so
+- `rolling_walk_forward()` refits fitted strategies on each fold's own training window by
+  default (`refit_per_fold=True`); pass `refit_per_fold=False` for the faster but optimistic
+  single-fit variant, reused across every fold. The returned `fitted_note` says which ran,
+  and `mean_sharpe_fixed_model` reports what the single-fit variant would have scored either way
 - Transaction costs are modeled as a constant basis-point charge on position change; real
   costs grow with size and vary with liquidity
 - Regime labels are estimates, and their uncertainty is largest exactly at transitions — which

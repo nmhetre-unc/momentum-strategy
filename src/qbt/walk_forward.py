@@ -221,18 +221,22 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
                                False, fold_override, strategy_params)
         mean_sharpe_fixed_model = fixed["mean_sharpe"]
         fitted_note = (
-            "Each fold refits on its own train_days-length window and predicts only its "
-            "own test window. mean_sharpe_fixed_model shows what the old single-fit "
-            "behavior (refit_per_fold=False) would have reported instead."
+            "Each fold refit the strategy fresh on just its own training window and "
+            "predicted only its own test window -- the honest walk-forward result. For "
+            "comparison, reusing a single whole-series fit across every fold instead "
+            "(faster, but optimistic for any strategy with a learned choice) would have "
+            "produced a different average fold Sharpe here."
         )
     else:
         primary = _rolling_folds(df, strategy_fn, train_days, test_days, cost_bps, n_boot,
                                  False, fold_override, strategy_params)
         mean_sharpe_fixed_model = primary["mean_sharpe"]
         fitted_note = (
-            "Signal generated once on the full series, then evaluated in rolling "
-            "out-of-sample folds. Fitted strategies are not refit per fold -- pass "
-            "refit_per_fold=True to see the honest (usually lower) walk-forward number."
+            "One fit on the whole series was reused across every fold's test window here, "
+            "rather than refitting per fold. That's optimistic for any strategy with a "
+            "learned choice -- a fitted model, or an adaptive wrapper that auto-selects -- "
+            "since later folds are judged on a model that could not have existed yet at "
+            "that fold's own training cutoff."
         )
 
     return {

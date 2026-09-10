@@ -233,14 +233,45 @@ underperformers a short leg would have profited from, so the survivorship bias
 runs in the strategy's favor and this negative result is if anything
 understated.
 
+## 14. Refitting per fold removes a measurable share of apparent edge
+
+The rolling walk-forward previously generated each strategy's signal once on
+the full series and sliced it into folds, so a fitted strategy's model had seen
+every fold's data before being evaluated on any of it. Refitting on each fold's
+own training window lowers mean fold Sharpe for 5 of 7 adaptive wrappers:
+regime_switch 1.353 to 0.859, adaptive_ensemble 1.263 to 0.787, regime_filtered
+1.081 to 0.661, ml_regime_conditional 1.191 to 0.993, and ml_direction 1.366 to
+1.181.
+
+adaptive_ensemble, the best performer in the main results table, loses 0.48 of
+its mean fold Sharpe. A meaningful share of its apparent edge was a fitting
+artifact.
+
+regime_parameters and regime_sized rise slightly under refitting. Neither has a
+Sharpe-based auto-selection step, so their only per-fold variation is
+estimation noise in the unsupervised clustering, which moves in both directions
+rather than removing a one-directional look-ahead advantage.
+volatility_targeted is unchanged past the fourth decimal, as expected for a
+strategy with no fit step — a useful sanity check that the mechanism does what
+it claims.
+
+Passing a precomputed regime object into a per-fold refit is incompatible by
+construction: an early fold's "refit" would be judged against a regime model
+fitted on the entire series. The function now raises rather than silently
+producing a number that looks honest and is not.
+
+Warm-up is not an issue at the default train_days of 756, since the longest
+lookback in the codebase (sma_crossover's 200 days) sits entirely inside each
+fold's training slice. It would cost max(0, warmup_days - train_days) test days
+per fold if train_days were reduced below a strategy's own lookback.
+
 ## Limitations
 
 Single asset, single 17-year window, long/flat positions only. No shorting, no
 leverage, no cross-sectional universe. Costs are a flat 5bps one-way spread
 proxy with no market impact, borrow, or financing. Regime labels come from a
 3-state HMM fit on the first 70% of history; the walk-forward variant is
-available but the reported numbers use the fixed fit. Fitted strategies are not
-refit per fold in the rolling walk-forward. Walk-forward folds are sliced from a full-length backtest, so each fold
+available but the reported numbers use the fixed fit. Walk-forward folds are sliced from a full-length backtest, so each fold
 inherits the position going into it rather than starting flat. Fold-level
 costs therefore exclude the entry cost of initiating a position at the fold's
 start.
