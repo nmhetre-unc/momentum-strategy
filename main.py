@@ -155,7 +155,19 @@ def main():
             print("        finding, not the level of either number.")
 
     if args.rolling:
-        rolling = rolling_walk_forward(df, strategy_fn, cost_bps=args.cost_bps, **strategy_params)
+        # refit_per_fold=True re-runs strategy_fn on each fold's own window,
+        # so a `regimes` object precomputed once on the whole series (as
+        # `strategy_params` carries for adaptive strategies above) can't be
+        # reused -- its labels wouldn't match a fold's shorter slice, and
+        # even if they did, an early fold would be judged on a regime model
+        # that saw the entire future. Pass the method/count instead, so
+        # each fold detects its own regimes fresh from only its own data.
+        rolling_params = dict(strategy_params)
+        if "regimes" in rolling_params:
+            del rolling_params["regimes"]
+            rolling_params["regime_method"] = args.regime_method
+            rolling_params["n_regimes"] = args.n_regimes
+        rolling = rolling_walk_forward(df, strategy_fn, cost_bps=args.cost_bps, **rolling_params)
         print(f"\n--- Rolling walk-forward: {rolling['n_folds']} out-of-sample windows ---")
         print(f"  Folds positive:   {rolling['pct_folds_positive']:.0%}")
         print(f"  Median Sharpe:    {rolling['median_sharpe']:.2f}")

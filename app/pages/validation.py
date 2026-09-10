@@ -191,14 +191,43 @@ if tab_rolling.open:
                 "Cost (bps)", 0.0, 50.0, 5.0, step=1.0, key="v_cost"
             )
 
-        # The adaptive wrappers take the sidebar's regime model; the base
-        # strategies take no regime argument at all.
-        params = {"regimes": regimes} if strategy_name in ADAPTIVE_STRATEGIES else {}
+        refit_per_fold = st.checkbox("Refit per fold", value=True, key="v_refit_per_fold")
+        st.caption(
+            "On (default): each fold refits the strategy on just its own training "
+            "window -- the honest number. Off: one fit on the whole series is reused "
+            "across every fold's test window instead, which overstates results for any "
+            "strategy with a learned choice (ml_direction, or an adaptive wrapper that "
+            "auto-selects)."
+        )
+
+        # An adaptive wrapper takes the sidebar's regime model when the whole
+        # series is fit once (refit_per_fold=False, matching that single fit's
+        # own index) -- but refit_per_fold=True re-runs the strategy on each
+        # fold's own shorter window, so that precomputed model can't be reused
+        # (its labels wouldn't match a fold's slice, and even if they did, an
+        # early fold would be judged on a regime model that saw the entire
+        # future). Pass the method/settings instead, so each fold detects its
+        # own regimes fresh from only its own data.
+        if strategy_name not in ADAPTIVE_STRATEGIES:
+            params = {}
+        elif refit_per_fold:
+            settings = st.session_state["regime_settings"]
+            params = {
+                "regime_method": settings["method"],
+                "n_regimes": settings["n_regimes"],
+                "regime_fit_frac": settings["fit_frac"],
+                "regime_smooth": settings["smooth"],
+                "min_duration": settings["min_duration"],
+                "regime_walk_forward": settings["walk_forward"],
+            }
+        else:
+            params = {"regimes": regimes}
 
         try:
             rolling = rolling_walk_forward(
                 df, ALL_STRATEGIES[strategy_name], train_days=int(train_days),
-                test_days=int(test_days), cost_bps=cost_bps, n_boot=200, **params,
+                test_days=int(test_days), cost_bps=cost_bps, n_boot=200,
+                refit_per_fold=refit_per_fold, **params,
             )
         except ValueError as exc:
             st.warning(str(exc), icon=":material/warning:")

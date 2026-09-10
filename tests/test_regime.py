@@ -415,7 +415,13 @@ def test_validation_entry_points_for_every_strategy(df, hmm_result, name):
                                "out_sample_by_regime", "regime_mix"}
     assert not evaluation["regime_mix"].empty, f"{name}: empty regime mix"
 
-    fold_result = rolling_walk_forward(df, fn, cost_bps=5, **strategy_params)
+    # refit_per_fold=False: this test checks structural survival across
+    # every entry point, not refit semantics, and a precomputed `regimes`
+    # result (fit on the whole series) can't be sliced to a fold's own
+    # window -- refit_per_fold=True raises specifically to catch that.
+    fold_result = rolling_walk_forward(
+        df, fn, cost_bps=5, refit_per_fold=False, **strategy_params
+    )
     assert fold_result["n_folds"] >= 5, f"{name}: too few folds"
 
 
