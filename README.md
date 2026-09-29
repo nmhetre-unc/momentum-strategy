@@ -1,9 +1,8 @@
 # momentum-strategy
 
-https://momentum-strategy-hbht78g3wpzyfyhjggwhjt.streamlit.app/
+[![CI](https://github.com/nmhetre-unc/momentum-strategy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nmhetre-unc/momentum-strategy/actions/workflows/ci.yml)
 
-
-![CI](https://github.com/nmhetre-unc/momentum-strategy/actions/workflows/ci.yml/badge.svg?branch=main)
+**[Live demo: Streamlit dashboard](https://momentum-strategy-hbht78g3wpzyfyhjggwhjt.streamlit.app/)**
 
 A backtesting engine for single-asset and cross-sectional equity strategies,
 built to test one question: does any of them beat buy-and-hold? None of them
@@ -12,6 +11,16 @@ do by a detectable margin. The findings below are the point of the project.
 All results use SPY or the S&P 100 over 2008-2025, 5bps one-way costs,
 90% confidence intervals from a stationary block bootstrap, and deflated
 Sharpe ratios following Bailey & López de Prado (2014).
+
+## At a glance
+
+- 11 timing strategies tested on SPY (4,278 trading days, 2008-2025): none beats
+  buy-and-hold at 90% confidence.
+- The best of them, `adaptive_ensemble`, has a deflated Sharpe against the
+  benchmark of 0.906 at one trial, 0.549 at five, and 0.380 at eleven.
+- 12-1 momentum on the S&P 100: long-leg Sharpe 1.071 [0.727, 1.441], short leg
+  -0.882; 88.7% of the loss traces to a -0.214 net beta mismatch, not the signal.
+- 90 tests at 81% line coverage, with CI on every push and a 75% coverage gate.
 
 ## Findings
 
@@ -61,9 +70,23 @@ to 0.49 for strategies whose behaviour depends on a Sharpe-selected choice,
 by about 0.20 for fitted classifiers, and not at all for strategies with no
 fit step.
 
-Full detail, including the regime analysis and the numeric bugs the test
-suite surfaced, is in [FINDINGS.md](FINDINGS.md). Generated tables are in
-[results/summary.md](results/summary.md).
+Full detail, including the regime analysis, is in [FINDINGS.md](FINDINGS.md).
+Generated tables are in [results/summary.md](results/summary.md).
+
+## What property-based testing found
+
+Two numeric bugs in the metrics code surfaced through the Hypothesis property
+tests in `tests/test_properties.py`, and both are fixed in `src/qbt/analytics.py`:
+
+- **A floating-point guard that missed zero.** A constant return series should
+  have zero standard deviation, but mean-then-subtract arithmetic leaves about
+  1e-17, so an exact `== 0` check let the Sharpe and Sortino ratios blow up.
+  The guard is now `np.isclose(std, 0.0, atol=1e-12)`.
+- **A float64 overflow in annualization.** Compounding a short or volatile
+  window to a year (for example a 300x move over two days) overflowed
+  `(1 + r) ** 252` to infinity. Annualized return is now computed in log space
+  with the exponent clipped to +/-700, in `cagr()` and in the per-regime
+  annualization.
 
 ## What's in the engine
 
@@ -124,7 +147,7 @@ Run the CLI:
 python main.py --ticker SPY --strategy momentum --rolling
 ```
 
-Run the tests:
+Run the tests (90 tests, 81% line coverage):
 
 ```bash
 pytest --cov=src/qbt
