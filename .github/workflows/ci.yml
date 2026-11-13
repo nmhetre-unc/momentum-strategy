@@ -38,5 +38,5 @@ jobs:
       - name: Bootstrap equivalence (python / numpy / cpp, bit-identical)
         run: pytest tests/test_bootstrap.py -q
 
-      - name: Test (pytest, coverage >= 75%)
-        run: pytest --cov=src/qbt --cov-fail-under=75
+      - name: Test (pytest, coverage >= 82%)
+        run: pytest --cov=src/qbt --cov-fail-under=82

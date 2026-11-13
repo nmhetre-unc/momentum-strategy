@@ -23,5 +23,6 @@ streamlit>=1.62
 # runs pip from the repo root, so "." resolves to the directory containing
 # pyproject.toml regardless of which entrypoint file triggered the build.
 # Must be kept in sync with pyproject.toml's [project.dependencies] above --
-# both currently list the same packages at the same version floors.
+# both currently list the same packages at the same constraints (floors,
+# except numpy, which is pinned exactly to match the C++ extension's build).
 -e .
