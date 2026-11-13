@@ -5,5 +5,6 @@
 import numpy as np
 
 NUMPY_BUILD_VERSION: str
+COMPILER: str
 
 def fill_stationary_indices(rng: np.random.Generator, out: np.ndarray, p: float) -> None: ...

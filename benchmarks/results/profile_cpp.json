@@ -1,0 +1,446 @@
+{
+  "benchmark": "py-spy --nonblocking profile of one full run, impl=cpp",
+  "py_spy": "py-spy 0.4.3",
+  "rate_hz": 100,
+  "samples_reported": 1788,
+  "sample_errors": 511,
+  "run": {
+    "impl": "cpp",
+    "main_s": 20.55114502700053,
+    "import_s": 0.903553058999023,
+    "bootstrap_s": 2.1039492979998613,
+    "bootstrap_share_of_main": 0.10237625666285981,
+    "bootstrap_calls": 18,
+    "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63"
+  },
+  "machine": {
+    "cpu_model": "Intel(R) Core(TM) 7 150U",
+    "cpu_count_logical": 12,
+    "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "python": "3.12.16",
+    "numpy": "2.5.4",
+    "extension_available": true,
+    "extension_numpy_build_version": "2.5.4",
+    "extension_compiler": "GNU 15.2.0",
+    "loadavg_1_5_15_at_start": [
+      2.98486328125,
+      2.3369140625,
+      1.91650390625
+    ],
+    "power": {
+      "AC1.online": "1",
+      "BAT1.status": "Charging",
+      "BAT1.capacity": "39"
+    },
+    "git_commit": "0d44cfc+dirty"
+  },
+  "total_samples": 1788,
+  "inclusive_project": [
+    {
+      "function": "main (regenerate_results.py)",
+      "share": 0.8383668903803132
+    },
+    {
+      "function": "render_rolling_comparison (regenerate_results.py)",
+      "share": 0.668903803131991
+    },
+    {
+      "function": "rolling_walk_forward (qbt/walk_forward.py)",
+      "share": 0.668903803131991
+    },
+    {
+      "function": "_rolling_folds (qbt/walk_forward.py)",
+      "share": 0.6683445190156599
+    },
+    {
+      "function": "detect_regimes (qbt/regime.py)",
+      "share": 0.6331096196868009
+    },
+    {
+      "function": "_resolve_regimes (qbt/adaptive.py)",
+      "share": 0.6331096196868009
+    },
+    {
+      "function": "_fit_predict (qbt/regime.py)",
+      "share": 0.5659955257270693
+    },
+    {
+      "function": "GaussianHMM.fit (qbt/regime.py)",
+      "share": 0.5329977628635347
+    },
+    {
+      "function": "ml_regime_conditional (qbt/adaptive.py)",
+      "share": 0.24105145413870246
+    },
+    {
+      "function": "GaussianHMM._forward (qbt/regime.py)",
+      "share": 0.1739373601789709
+    },
+    {
+      "function": "regime_switch (qbt/adaptive.py)",
+      "share": 0.10514541387024609
+    },
+    {
+      "function": "adaptive_ensemble (qbt/adaptive.py)",
+      "share": 0.09787472035794184
+    },
+    {
+      "function": "regime_filtered (qbt/adaptive.py)",
+      "share": 0.09619686800894854
+    },
+    {
+      "function": "regime_parameters (qbt/adaptive.py)",
+      "share": 0.08892617449664429
+    },
+    {
+      "function": "GaussianHMM._backward (qbt/regime.py)",
+      "share": 0.0883668903803132
+    },
+    {
+      "function": "regime_sized (qbt/adaptive.py)",
+      "share": 0.08053691275167785
+    },
+    {
+      "function": "ml_direction_signal (qbt/ml.py)",
+      "share": 0.07494407158836688
+    },
+    {
+      "function": "build_row (regenerate_results.py)",
+      "share": 0.0447427293064877
+    },
+    {
+      "function": "paired_stationary_bootstrap (regenerate_results.py)",
+      "share": 0.04138702460850112
+    },
+    {
+      "function": "<module> (regenerate_results.py)",
+      "share": 0.03970917225950783
+    },
+    {
+      "function": "build_regime_features (qbt/regime_features.py)",
+      "share": 0.03859060402684564
+    },
+    {
+      "function": "sharpe_ratio (qbt/analytics.py)",
+      "share": 0.03803131991051454
+    },
+    {
+      "function": "train_regime_conditional_models (qbt/ml.py)",
+      "share": 0.03467561521252797
+    },
+    {
+      "function": "GaussianHMM.filter (qbt/regime.py)",
+      "share": 0.03076062639821029
+    },
+    {
+      "function": "render_mean_block_sensitivity (regenerate_results.py)",
+      "share": 0.030201342281879196
+    },
+    {
+      "function": "train_ml_model (qbt/ml.py)",
+      "share": 0.024608501118568233
+    },
+    {
+      "function": "run_backtest (qbt/backtest.py)",
+      "share": 0.02237136465324385
+    },
+    {
+      "function": "stationary_bootstrap_sharpe (qbt/stats.py)",
+      "share": 0.018456375838926176
+    },
+    {
+      "function": "_regime_sharpe_table (qbt/adaptive.py)",
+      "share": 0.017897091722595078
+    },
+    {
+      "function": "_prepare_data (qbt/ml.py)",
+      "share": 0.017337807606263984
+    },
+    {
+      "function": "_replicates_cpp (qbt/bootstrap.py)",
+      "share": 0.01621923937360179
+    },
+    {
+      "function": "full_report (qbt/analytics.py)",
+      "share": 0.015659955257270694
+    },
+    {
+      "function": "build_features (qbt/features.py)",
+      "share": 0.012863534675615212
+    },
+    {
+      "function": "_order_and_name (qbt/regime.py)",
+      "share": 0.011185682326621925
+    },
+    {
+      "function": "standardize_features (qbt/regime_features.py)",
+      "share": 0.010626398210290829
+    },
+    {
+      "function": "_base_signal (qbt/adaptive.py)",
+      "share": 0.010626398210290829
+    },
+    {
+      "function": "GaussianHMM._log_emission (qbt/regime.py)",
+      "share": 0.010626398210290829
+    },
+    {
+      "function": "<module> (qbt/adaptive.py)",
+      "share": 0.008389261744966443
+    },
+    {
+      "function": "<module> (qbt/ml.py)",
+      "share": 0.007829977628635347
+    },
+    {
+      "function": "mean_reversion_rsi (qbt/strategies.py)",
+      "share": 0.006711409395973154
+    },
+    {
+      "function": "_conditional_predict (qbt/ml.py)",
+      "share": 0.006711409395973154
+    },
+    {
+      "function": "_apply_by_regime (qbt/adaptive.py)",
+      "share": 0.0050335570469798654
+    },
+    {
+      "function": "sma_crossover (qbt/strategies.py)",
+      "share": 0.0044742729306487695
+    },
+    {
+      "function": "realized_volatility (qbt/regime_features.py)",
+      "share": 0.0039149888143176735
+    },
+    {
+      "function": "exposure (qbt/analytics.py)",
+      "share": 0.003355704697986577
+    },
+    {
+      "function": "_best_per_regime (qbt/adaptive.py)",
+      "share": 0.003355704697986577
+    },
+    {
+      "function": "efficiency_ratio (qbt/regime_features.py)",
+      "share": 0.002796420581655481
+    },
+    {
+      "function": "smooth_labels (qbt/regime.py)",
+      "share": 0.0022371364653243847
+    },
+    {
+      "function": "<module> (qbt/data.py)",
+      "share": 0.0022371364653243847
+    },
+    {
+      "function": "GaussianHMM._scaled_emission (qbt/regime.py)",
+      "share": 0.0016778523489932886
+    },
+    {
+      "function": "rolling_autocorrelation (qbt/regime_features.py)",
+      "share": 0.0016778523489932886
+    },
+    {
+      "function": "sortino_ratio (qbt/analytics.py)",
+      "share": 0.0016778523489932886
+    },
+    {
+      "function": "momentum (qbt/strategies.py)",
+      "share": 0.0016778523489932886
+    },
+    {
+      "function": "max_drawdown (qbt/analytics.py)",
+      "share": 0.0016778523489932886
+    },
+    {
+      "function": "turnover (qbt/analytics.py)",
+      "share": 0.0011185682326621924
+    },
+    {
+      "function": "drawdown_series (qbt/analytics.py)",
+      "share": 0.0011185682326621924
+    },
+    {
+      "function": "annualized_volatility (qbt/analytics.py)",
+      "share": 0.0005592841163310962
+    },
+    {
+      "function": "build_labels (qbt/features.py)",
+      "share": 0.0005592841163310962
+    },
+    {
+      "function": "parkinson_volatility (qbt/regime_features.py)",
+      "share": 0.0005592841163310962
+    },
+    {
+      "function": "<module> (qbt/regime.py)",
+      "share": 0.0005592841163310962
+    },
+    {
+      "function": "cagr (qbt/analytics.py)",
+      "share": 0.0005592841163310962
+    }
+  ],
+  "self_top": [
+    {
+      "function": "GaussianHMM._forward (qbt/regime.py)",
+      "share": 0.17058165548098433
+    },
+    {
+      "function": "_kmeans_single_lloyd (sklearn/cluster/_kmeans.py)",
+      "share": 0.15436241610738255
+    },
+    {
+      "function": "GaussianHMM._backward (qbt/regime.py)",
+      "share": 0.0883668903803132
+    },
+    {
+      "function": "",
+      "share": 0.08445190156599552
+    },
+    {
+      "function": "_wrapreduction (numpy/_core/fromnumeric.py)",
+      "share": 0.026286353467561523
+    },
+    {
+      "function": "sharpe_ratio (qbt/analytics.py)",
+      "share": 0.01901565995525727
+    },
+    {
+      "function": "_var (numpy/_core/_methods.py)",
+      "share": 0.016778523489932886
+    },
+    {
+      "function": "_replicates_cpp (qbt/bootstrap.py)",
+      "share": 0.01621923937360179
+    },
+    {
+      "function": "_minimize_lbfgsb (scipy/optimize/_lbfgsb_py.py)",
+      "share": 0.015659955257270694
+    },
+    {
+      "function": "GaussianHMM.fit (qbt/regime.py)",
+      "share": 0.015100671140939598
+    },
+    {
+      "function": "_logsumexp (sklearn/utils/_array_api.py)",
+      "share": 0.015100671140939598
+    },
+    {
+      "function": "_estimate_log_gaussian_prob (sklearn/mixture/_gaussian_mixture.py)",
+      "share": 0.012304250559284116
+    },
+    {
+      "function": "_estimate_gaussian_parameters (sklearn/mixture/_gaussian_mixture.py)",
+      "share": 0.010626398210290829
+    },
+    {
+      "function": "GaussianHMM._log_emission (qbt/regime.py)",
+      "share": 0.010626398210290829
+    },
+    {
+      "function": "_estimate_gaussian_covariances_diag (sklearn/mixture/_gaussian_mixture.py)",
+      "share": 0.009507829977628635
+    },
+    {
+      "function": "BaseWindow._apply.<locals>.homogeneous_func.<locals>.calc (pandas/core/window/rolling.py)",
+      "share": 0.008948545861297539
+    },
+    {
+      "function": "paired_stationary_bootstrap (regenerate_results.py)",
+      "share": 0.008389261744966443
+    },
+    {
+      "function": "ArrowStringArray._from_sequence (pandas/core/arrays/string_arrow.py)",
+      "share": 0.007829977628635347
+    },
+    {
+      "function": "_sum (numpy/_core/_methods.py)",
+      "share": 0.007829977628635347
+    },
+    {
+      "function": "_call_with_frames_removed (<frozen importlib._bootstrap>)",
+      "share": 0.00727069351230425
+    },
+    {
+      "function": "_kmeans_plusplus (sklearn/cluster/_kmeans.py)",
+      "share": 0.00727069351230425
+    },
+    {
+      "function": "BaseBlockManager.apply (pandas/core/internals/managers.py)",
+      "share": 0.006711409395973154
+    },
+    {
+      "function": "stationary_bootstrap_sharpe (qbt/stats.py)",
+      "share": 0.005592841163310962
+    },
+    {
+      "function": "GaussianMixture._m_step (sklearn/mixture/_gaussian_mixture.py)",
+      "share": 0.0050335570469798654
+    },
+    {
+      "function": "_compile_bytecode (<frozen importlib._bootstrap_external>)",
+      "share": 0.0044742729306487695
+    },
+    {
+      "function": "namedtuple (collections/__init__.py)",
+      "share": 0.0044742729306487695
+    },
+    {
+      "function": "Series._construct_result (pandas/core/series.py)",
+      "share": 0.0039149888143176735
+    },
+    {
+      "function": "isclose (numpy/_core/numeric.py)",
+      "share": 0.0039149888143176735
+    },
+    {
+      "function": "NDFrame.__finalize__ (pandas/core/generic.py)",
+      "share": 0.0039149888143176735
+    },
+    {
+      "function": "sanitize_array (pandas/core/construction.py)",
+      "share": 0.0039149888143176735
+    },
+    {
+      "function": "IndexOpsMixin._arith_method (pandas/core/base.py)",
+      "share": 0.003355704697986577
+    },
+    {
+      "function": "NDFrame.__setattr__ (pandas/core/generic.py)",
+      "share": 0.003355704697986577
+    },
+    {
+      "function": "_na_arithmetic_op (pandas/core/ops/array_ops.py)",
+      "share": 0.002796420581655481
+    },
+    {
+      "function": "_mean (numpy/_core/_methods.py)",
+      "share": 0.002796420581655481
+    },
+    {
+      "function": "_compute_precision_cholesky (sklearn/mixture/_gaussian_mixture.py)",
+      "share": 0.002796420581655481
+    },
+    {
+      "function": "np_can_hold_element (pandas/core/dtypes/cast.py)",
+      "share": 0.002796420581655481
+    },
+    {
+      "function": "Flags.__init__ (pandas/core/flags.py)",
+      "share": 0.002796420581655481
+    },
+    {
+      "function": "BaseLoss.loss_gradient (sklearn/_loss/loss.py)",
+      "share": 0.002796420581655481
+    },
+    {
+      "function": "Index._engine (pandas/core/indexes/base.py)",
+      "share": 0.002796420581655481
+    },
+    {
+      "function": "Block.replace_list (pandas/core/internals/blocks.py)",
+      "share": 0.0022371364653243847
+    }
+  ]
+}

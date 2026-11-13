@@ -41,6 +41,9 @@ extern "C" {
 #ifndef QBT_NUMPY_BUILD_VERSION
 #error "QBT_NUMPY_BUILD_VERSION must be defined by the build (the numpy version compiled against)"
 #endif
+#ifndef QBT_COMPILER
+#define QBT_COMPILER "unknown"
+#endif
 
 namespace py = pybind11;
 
@@ -126,6 +129,7 @@ void fill_stationary_indices(const py::object &rng,
 PYBIND11_MODULE(_bootstrap_ext, m) {
     m.doc() = "C++ stationary-bootstrap index generator; see qbt.bootstrap.";
     m.attr("NUMPY_BUILD_VERSION") = QBT_NUMPY_BUILD_VERSION;
+    m.attr("COMPILER") = QBT_COMPILER;  // recorded for benchmark provenance
     m.def("fill_stationary_indices", &fill_stationary_indices, py::arg("rng"),
           py::arg("out").noconvert(), py::arg("p"),
           "Fill every row of `out` (C-contiguous (rows, n) int64) with one stationary-"

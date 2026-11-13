@@ -56,7 +56,8 @@ if(NOT WIN32)
   target_link_libraries(_bootstrap_ext PRIVATE m)
 endif()
 target_compile_definitions(_bootstrap_ext PRIVATE
-  QBT_NUMPY_BUILD_VERSION="${QBT_NUMPY_VERSION}")
+  QBT_NUMPY_BUILD_VERSION="${QBT_NUMPY_VERSION}"
+  QBT_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 if(MSVC)
   target_compile_options(_bootstrap_ext PRIVATE /W4 /WX)
 else()

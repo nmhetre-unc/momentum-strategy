@@ -36,6 +36,7 @@ dev = [
     "mypy==1.10.0",
     "pandas-stubs==3.0.5.260730",
     "hypothesis",
+    "pytest-benchmark",  # benchmarks/ only; never collected by the normal run
 ]
 
 [tool.scikit-build]
@@ -45,6 +46,8 @@ cmake.build-type = "Release"
 
 [tool.pytest.ini_options]
 filterwarnings = ["error"]
+# benchmarks/ is run explicitly (see benchmarks/README.md), not by a bare `pytest`.
+testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.12"
