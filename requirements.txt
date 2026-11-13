@@ -11,7 +11,7 @@
 # fine and then crash at render time -- better to fail at install.
 yfinance>=0.2.40
 pandas>=2.2
-numpy>=1.26
+numpy==2.5.4  # exact: must match pyproject.toml's [build-system] pin
 matplotlib>=3.8
 altair>=5.4
 scikit-learn>=1.4
@@ -23,5 +23,6 @@ streamlit>=1.62
 # runs pip from the repo root, so "." resolves to the directory containing
 # pyproject.toml regardless of which entrypoint file triggered the build.
 # Must be kept in sync with pyproject.toml's [project.dependencies] above --
-# both currently list the same packages at the same version floors.
+# both currently list the same packages at the same constraints (floors,
+# except numpy, which is pinned exactly to match the C++ extension's build).
 -e .

@@ -35,6 +35,7 @@ from scipy.stats import skew as _skew
 from qbt.adaptive import ADAPTIVE_STRATEGIES
 from qbt.analytics import TRADING_DAYS_PER_YEAR, full_report, sharpe_ratio
 from qbt.backtest import run_backtest
+from qbt.bootstrap import stationary_bootstrap_indices
 from qbt.data import fetch_ohlcv
 from qbt.stats import EULER_MASCHERONI, deflated_sharpe_ratio, stationary_bootstrap_sharpe
 from qbt.strategies import STRATEGIES
@@ -99,34 +100,28 @@ def dsr_vs_benchmark(sharpe: float, sr_benchmark: float, n_trials: int,
 
 
 def paired_stationary_bootstrap(strat_returns, bench_returns, n_boot=N_BOOT,
-                                mean_block=MEAN_BLOCK, seed=0):
+                                mean_block=MEAN_BLOCK, seed=0, impl="auto"):
     """
     Draws one shared set of geometric-block, wraparound-resampled indices
     per replicate (Politis-Romano stationary bootstrap) and applies it to
     both series, so the strategy's own Sharpe CI and its paired
     difference against the benchmark come from identical resamples
     rather than two independently-resampled distributions. Returns
-    (strat_lo, strat_hi, diff_point, diff_lo, diff_hi).
+    (strat_lo, strat_hi, diff_point, diff_lo, diff_hi). `impl` selects the
+    qbt.bootstrap index-generator implementation; all are bit-identical.
     """
     strat_values = np.asarray(strat_returns)
     bench_values = np.asarray(bench_returns)
     n = len(strat_values)
     assert len(bench_values) == n, "series must be paired/aligned"
-    p = 1.0 / mean_block
-    rng = np.random.default_rng(seed)
+    indices = stationary_bootstrap_indices(
+        n, n_boot, mean_block, np.random.default_rng(seed), impl=impl
+    )
 
     diff_point = sharpe_ratio(strat_returns) - sharpe_ratio(bench_returns)
     strat_sharpes = np.empty(n_boot)
     diffs = np.empty(n_boot)
-    for i in range(n_boot):
-        pieces = []
-        total = 0
-        while total < n:
-            start = rng.integers(0, n)
-            length = rng.geometric(p)
-            pieces.append((start + np.arange(length)) % n)
-            total += length
-        idx = np.concatenate(pieces)[:n]
+    for i, idx in enumerate(indices):
         s_sharpe = sharpe_ratio(strat_values[idx])
         b_sharpe = sharpe_ratio(bench_values[idx])
         strat_sharpes[i] = s_sharpe

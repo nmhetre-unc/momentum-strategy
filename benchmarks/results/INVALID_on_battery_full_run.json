@@ -1,0 +1,151 @@
+{
+  "benchmark": "scripts/regenerate_results.py full run, impl forced",
+  "machine": {
+    "cpu_model": "Intel(R) Core(TM) 7 150U",
+    "cpu_count_logical": 12,
+    "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "python": "3.12.16",
+    "numpy": "2.5.4",
+    "extension_available": true,
+    "extension_numpy_build_version": "2.5.4",
+    "extension_compiler": "GNU 15.2.0",
+    "loadavg_1_5_15_at_start": [
+      1.55517578125,
+      2.208984375,
+      1.72607421875
+    ],
+    "git_commit": "0d44cfc+dirty"
+  },
+  "loadavg_1_5_15_at_end": [
+    3.7841796875,
+    2.841796875,
+    2.16259765625
+  ],
+  "runs_per_impl": 3,
+  "order": "interleaved python, numpy, cpp per run; fresh subprocess each",
+  "all_summaries_identical": true,
+  "summary_sha256": [
+    "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63"
+  ],
+  "summary": {
+    "python": {
+      "main_s_median": 61.39239270000144,
+      "main_s_min": 42.286265722999815,
+      "main_s_max": 75.27343917899998,
+      "process_s_median": 63.20956467799988
+    },
+    "numpy": {
+      "main_s_median": 49.50244190400008,
+      "main_s_min": 40.445175887000005,
+      "main_s_max": 50.95887914099876,
+      "process_s_median": 50.82176828499905
+    },
+    "cpp": {
+      "main_s_median": 27.368636708999475,
+      "main_s_min": 22.144760074999795,
+      "main_s_max": 36.412068654000905,
+      "process_s_median": 29.192945449000035
+    }
+  },
+  "records": [
+    {
+      "impl": "python",
+      "main_s": 61.39239270000144,
+      "import_s": 1.5170870309993916,
+      "bootstrap_calls": 18,
+      "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63",
+      "run": 1,
+      "process_s": 63.20956467799988,
+      "child_cpu_s": 138.668236,
+      "other_processes_avg_cpus": 0.1974663812918793
+    },
+    {
+      "impl": "numpy",
+      "main_s": 40.445175887000005,
+      "import_s": 1.4678699470005085,
+      "bootstrap_calls": 18,
+      "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63",
+      "run": 1,
+      "process_s": 42.216755346000355,
+      "child_cpu_s": 115.58200300000001,
+      "other_processes_avg_cpus": 0.2162173981678515
+    },
+    {
+      "impl": "cpp",
+      "main_s": 27.368636708999475,
+      "import_s": 1.4061425769996276,
+      "bootstrap_calls": 18,
+      "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63",
+      "run": 1,
+      "process_s": 29.192945449000035,
+      "child_cpu_s": 106.43007799999998,
+      "other_processes_avg_cpus": 0.5357431995795906
+    },
+    {
+      "impl": "python",
+      "main_s": 75.27343917899998,
+      "import_s": 3.2051068380005745,
+      "bootstrap_calls": 18,
+      "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63",
+      "run": 2,
+      "process_s": 78.98422764600036,
+      "child_cpu_s": 161.998,
+      "other_processes_avg_cpus": 0.29729986226166083
+    },
+    {
+      "impl": "numpy",
+      "main_s": 50.95887914099876,
+      "import_s": 2.9654462690014043,
+      "bootstrap_calls": 18,
+      "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63",
+      "run": 2,
+      "process_s": 54.36457949400028,
+      "child_cpu_s": 135.52060100000006,
+      "other_processes_avg_cpus": 0.15560497439206888
+    },
+    {
+      "impl": "cpp",
+      "main_s": 22.144760074999795,
+      "import_s": 1.6850659730007465,
+      "bootstrap_calls": 18,
+      "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63",
+      "run": 2,
+      "process_s": 24.11134415200104,
+      "child_cpu_s": 102.24034699999993,
+      "other_processes_avg_cpus": 0.1555140591234381
+    },
+    {
+      "impl": "python",
+      "main_s": 42.286265722999815,
+      "import_s": 0.9382354720000876,
+      "bootstrap_calls": 18,
+      "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63",
+      "run": 3,
+      "process_s": 43.418301923999024,
+      "child_cpu_s": 100.516884,
+      "other_processes_avg_cpus": 0.09519294437710596
+    },
+    {
+      "impl": "numpy",
+      "main_s": 49.50244190400008,
+      "import_s": 0.9680399450007826,
+      "bootstrap_calls": 18,
+      "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63",
+      "run": 3,
+      "process_s": 50.82176828499905,
+      "child_cpu_s": 137.52004999999997,
+      "other_processes_avg_cpus": 0.15367332274243245
+    },
+    {
+      "impl": "cpp",
+      "main_s": 36.412068654000905,
+      "import_s": 1.7073954830011644,
+      "bootstrap_calls": 18,
+      "summary_sha256": "b03b0191ece85242914ddbca87d9d8f39abc7fd3701a3bca65dacdfe42259b63",
+      "run": 3,
+      "process_s": 38.657527071000004,
+      "child_cpu_s": 136.35625400000004,
+      "other_processes_avg_cpus": 0.20937050590777745
+    }
+  ]
+}

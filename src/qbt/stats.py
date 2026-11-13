@@ -8,6 +8,7 @@ import pandas as pd
 from scipy.stats import norm
 
 from qbt.analytics import sharpe_ratio
+from qbt.bootstrap import stationary_bootstrap_indices
 
 # Euler-Mascheroni constant, used in the expected-maximum-Sharpe term below.
 EULER_MASCHERONI = 0.5772156649015329
@@ -99,32 +100,27 @@ def newey_west_se(returns: pd.Series, lags: int | None = None) -> float:
 
 
 def stationary_bootstrap_sharpe(returns: pd.Series, n_boot: int = 2000,
-                                mean_block: int = 20, seed: int = 0):
+                                mean_block: int = 20, seed: int = 0, impl: str = "auto"):
     """
     Politis-Romano stationary bootstrap: resamples `returns` in blocks of
     geometrically-distributed length (mean `mean_block`), wrapping around
     to the start of the series when a block runs past the end, so runs of
     consecutive observations -- and the autocorrelation they carry -- are
     preserved rather than reshuffled. Same return signature as
-    iid_bootstrap_sharpe.
+    iid_bootstrap_sharpe. Raises ValueError unless
+    1 <= mean_block <= len(returns). `impl` selects the index-generator
+    implementation, all bit-identical; see qbt.bootstrap.
     """
     values: np.ndarray = np.asarray(returns, dtype=float)
     n = len(values)
-    p = 1.0 / mean_block
-    rng = np.random.default_rng(seed)
+    indices = stationary_bootstrap_indices(
+        n, n_boot, mean_block, np.random.default_rng(seed), impl=impl
+    )
 
     point = sharpe_ratio(returns)
     boot_sharpes: np.ndarray = np.empty(n_boot)
-    for i in range(n_boot):
-        pieces: list[np.ndarray] = []
-        total = 0
-        while total < n:
-            start = rng.integers(0, n)
-            length = rng.geometric(p)
-            pieces.append(values[(start + np.arange(length)) % n])
-            total += length
-        block: np.ndarray = np.concatenate(pieces)
-        boot_sharpes[i] = sharpe_ratio(block[:n])
+    for i, idx in enumerate(indices):
+        boot_sharpes[i] = sharpe_ratio(values[idx])
 
     lo, hi = np.percentile(boot_sharpes, [5, 95])
     return point, lo, hi
