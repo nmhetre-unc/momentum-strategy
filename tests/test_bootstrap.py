@@ -15,6 +15,9 @@ that's the cause, not this code.
 
 import hashlib
 import importlib.util
+import os
+import sys
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -22,8 +25,20 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+import qbt
+import qbt.bootstrap as qb
 from qbt.bootstrap import IMPLEMENTATIONS, stationary_bootstrap_indices, validate_mean_block
 from qbt.stats import stationary_bootstrap_sharpe
+
+# CI sets QBT_REQUIRE_CPP=1, so a missing extension fails there instead of
+# silently skipping every "cpp" case.
+REQUIRE_CPP = os.environ.get("QBT_REQUIRE_CPP") == "1"
+_skip_cpp = pytest.mark.skipif(
+    not qb.cpp_available() and not REQUIRE_CPP,
+    reason=f"C++ extension unavailable: {qb._EXT_UNAVAILABLE}",
+)
+IMPLS = [pytest.param(i, marks=_skip_cpp) if i == "cpp" else i for i in IMPLEMENTATIONS]
+FAST_IMPLS = [i for i in IMPLS if i != "python"]
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "regenerate_results.py"
 
@@ -73,7 +88,7 @@ INDEX_PINS = [
 ]
 
 
-@pytest.mark.parametrize("impl", IMPLEMENTATIONS)
+@pytest.mark.parametrize("impl", IMPLS)
 @pytest.mark.parametrize(("args", "expected"), SINGLE_PINS)
 def test_stationary_bootstrap_sharpe_pinned(args, expected, impl):
     n, mean_block, n_boot, seed = args
@@ -83,7 +98,7 @@ def test_stationary_bootstrap_sharpe_pinned(args, expected, impl):
     assert tuple(float(x) for x in result) == expected
 
 
-@pytest.mark.parametrize("impl", IMPLEMENTATIONS)
+@pytest.mark.parametrize("impl", IMPLS)
 @pytest.mark.parametrize(("args", "expected"), PAIRED_PINS)
 def test_paired_stationary_bootstrap_pinned(regenerate_results, args, expected, impl):
     n, mean_block, n_boot, seed = args
@@ -94,7 +109,7 @@ def test_paired_stationary_bootstrap_pinned(regenerate_results, args, expected, 
     assert tuple(float(x) for x in result) == expected
 
 
-@pytest.mark.parametrize("impl", IMPLEMENTATIONS)
+@pytest.mark.parametrize("impl", IMPLS)
 @pytest.mark.parametrize(("args", "expected"), INDEX_PINS)
 def test_index_stream_pinned(args, expected, impl):
     n, mean_block, n_boot, seed = args
@@ -123,7 +138,7 @@ def test_indices_are_wrapping_runs():
     assert (steps == 1).mean() > 0.95
 
 
-@pytest.mark.parametrize("impl", IMPLEMENTATIONS)
+@pytest.mark.parametrize("impl", IMPLS)
 def test_generator_draws_lazily(impl):
     # Consuming k replicates must leave the Generator exactly where the
     # original inline loop would after k iterations, not n_boot.
@@ -191,21 +206,21 @@ def _assert_matches_reference(n, mean_block, seed, n_boot, impl):
     assert rng.bit_generator.state == ref_rng.bit_generator.state
 
 
-@pytest.mark.parametrize("impl", [i for i in IMPLEMENTATIONS if i != "python"])
+@pytest.mark.parametrize("impl", FAST_IMPLS)
 @settings(max_examples=300, deadline=None)
 @given(case=bootstrap_case(max_n=300))
 def test_impl_matches_reference_small_n(impl, case):
     _assert_matches_reference(*case, impl=impl)
 
 
-@pytest.mark.parametrize("impl", [i for i in IMPLEMENTATIONS if i != "python"])
+@pytest.mark.parametrize("impl", FAST_IMPLS)
 @settings(max_examples=40, deadline=None)
 @given(case=bootstrap_case(max_n=5000))
 def test_impl_matches_reference_large_n(impl, case):
     _assert_matches_reference(*case, impl=impl)
 
 
-@pytest.mark.parametrize("impl", [i for i in IMPLEMENTATIONS if i != "python"])
+@pytest.mark.parametrize("impl", FAST_IMPLS)
 @settings(max_examples=60, deadline=None)
 @given(case=bootstrap_case(max_n=400), data_seed=st.integers(0, 2**32 - 1))
 def test_sharpe_interval_matches_reference(impl, case, data_seed):
@@ -217,3 +232,172 @@ def test_sharpe_interval_matches_reference(impl, case, data_seed):
                                       mean_block=mean_block, seed=seed, impl=impl)
     # == on floats, NaN-aware: a constant or length-1 series is legitimate input.
     np.testing.assert_array_equal(np.asarray(got), np.asarray(expected))
+
+
+# --------------------------------------------------------------------------
+# impl selection: "auto", the C++ extension's availability, and the
+# numpy-version guard. Mismatches are simulated, not built.
+# --------------------------------------------------------------------------
+@pytest.fixture
+def extension_unavailable(monkeypatch):
+    """Puts qbt.bootstrap in the state it loads into when the extension is unusable."""
+    reason = "simulated: extension unusable"
+    monkeypatch.setattr(qb, "_EXT", None)
+    monkeypatch.setattr(qb, "_EXT_UNAVAILABLE", reason)
+    return reason
+
+
+def _reference_rows(n=200, n_boot=5, mean_block=10, seed=0):
+    return list(stationary_bootstrap_indices(n, n_boot, mean_block,
+                                             np.random.default_rng(seed), impl="python"))
+
+
+def test_extension_present_when_required():
+    if not REQUIRE_CPP:
+        pytest.skip("QBT_REQUIRE_CPP not set")
+    assert qb.cpp_available(), qb._EXT_UNAVAILABLE
+
+
+@_skip_cpp
+def test_auto_uses_cpp_when_available():
+    assert qb.resolve_impl("auto") == "cpp"
+    assert qb.resolve_impl("cpp") == "cpp"
+
+
+@pytest.mark.parametrize("impl", ["python", "numpy"])
+def test_explicit_pure_impls_resolve_to_themselves(impl):
+    assert qb.resolve_impl(impl) == impl
+
+
+def test_auto_falls_back_to_numpy_with_warning(extension_unavailable):
+    with pytest.warns(qb.BootstrapFallbackWarning, match=extension_unavailable):
+        assert qb.resolve_impl("auto") == "numpy"
+    with pytest.warns(qb.BootstrapFallbackWarning):
+        rows = list(stationary_bootstrap_indices(200, 5, 10, np.random.default_rng(0)))
+    assert all(np.array_equal(a, b) for a, b in zip(rows, _reference_rows(), strict=True))
+    with pytest.warns(qb.BootstrapFallbackWarning):
+        got = stationary_bootstrap_sharpe(_series(300, 1), n_boot=50)
+    assert got == stationary_bootstrap_sharpe(_series(300, 1), n_boot=50, impl="python")
+
+
+def test_explicit_cpp_raises_when_unavailable(extension_unavailable):
+    with pytest.raises(RuntimeError, match=extension_unavailable):
+        qb.resolve_impl("cpp")
+    with pytest.raises(RuntimeError, match=extension_unavailable):
+        stationary_bootstrap_indices(200, 5, 10, np.random.default_rng(0), impl="cpp")
+
+
+def test_load_extension_rejects_numpy_version_mismatch(monkeypatch):
+    if not qb.cpp_available():
+        pytest.skip("needs a built extension to compare versions against")
+    monkeypatch.setattr(np, "__version__", "0.0.0-simulated")
+    ext, reason = qb._load_extension()
+    assert ext is None
+    assert reason is not None
+    assert "built against numpy" in reason and "0.0.0-simulated" in reason
+
+
+def test_load_extension_reports_missing_module(monkeypatch):
+    # A None entry in sys.modules makes the import raise ImportError.
+    monkeypatch.delattr(qbt, "_bootstrap_ext", raising=False)
+    monkeypatch.setitem(sys.modules, "qbt._bootstrap_ext", None)
+    ext, reason = qb._load_extension()
+    assert ext is None
+    assert reason is not None and "not available" in reason
+
+
+def test_load_extension_accepts_matching_build():
+    if not qb.cpp_available():
+        pytest.skip("extension not built")
+    ext, reason = qb._load_extension()
+    assert ext is not None and reason is None
+    assert np.__version__ == ext.NUMPY_BUILD_VERSION
+
+
+# --------------------------------------------------------------------------
+# The extension's own guards: it writes into a caller buffer, so it must
+# reject anything it would otherwise silently copy or overrun.
+# --------------------------------------------------------------------------
+@pytest.fixture
+def ext():
+    if not qb.cpp_available():
+        if REQUIRE_CPP:
+            pytest.fail(f"QBT_REQUIRE_CPP=1 but {qb._EXT_UNAVAILABLE}")
+        pytest.skip(f"C++ extension unavailable: {qb._EXT_UNAVAILABLE}")
+    return qb._EXT
+
+
+def test_ext_fills_several_rows_like_the_reference(ext):
+    # The multi-row path (one call, one lock hold, n_boot rows) matches the
+    # reference row for row and leaves the Generator in the same state.
+    rng, ref_rng = np.random.default_rng(5), np.random.default_rng(5)
+    out = np.empty((7, 300), dtype=np.int64)
+    ext.fill_stationary_indices(rng, out, 1 / 12)
+    expected = list(stationary_bootstrap_indices(300, 7, 12, ref_rng, impl="python"))
+    assert np.array_equal(out, np.stack(expected))
+    assert rng.bit_generator.state == ref_rng.bit_generator.state
+
+
+@pytest.mark.parametrize("bad", [
+    np.empty((2, 10), dtype=np.int32),          # wrong dtype: would be a converted copy
+    np.empty((2, 10), dtype=np.float64),
+    np.empty((10, 2), dtype=np.int64).T,        # not C-contiguous
+])
+def test_ext_rejects_buffers_it_would_copy(ext, bad):
+    with pytest.raises(TypeError):
+        ext.fill_stationary_indices(np.random.default_rng(0), bad, 0.1)
+
+
+def test_ext_rejects_read_only_buffer(ext):
+    out = np.zeros((2, 10), dtype=np.int64)
+    out.flags.writeable = False
+    with pytest.raises(ValueError):
+        ext.fill_stationary_indices(np.random.default_rng(0), out, 0.1)
+    assert not out.any()
+
+
+@pytest.mark.parametrize("shape", [(10,), (1, 0), (2, 3, 4)])
+def test_ext_rejects_bad_shapes(ext, shape):
+    with pytest.raises(ValueError):
+        ext.fill_stationary_indices(np.random.default_rng(0), np.empty(shape, np.int64), 0.1)
+
+
+@pytest.mark.parametrize("p", [0.0, -0.1, 1.0000001, float("nan"), float("inf")])
+def test_ext_rejects_bad_p(ext, p):
+    rng = np.random.default_rng(0)
+    before = rng.bit_generator.state
+    with pytest.raises(ValueError):
+        ext.fill_stationary_indices(rng, np.empty((1, 10), np.int64), p)
+    assert rng.bit_generator.state == before
+
+
+def test_ext_rejects_non_generator(ext):
+    with pytest.raises(AttributeError):
+        ext.fill_stationary_indices(object(), np.empty((1, 10), np.int64), 0.1)
+
+
+def test_ext_zero_rows_draws_nothing(ext):
+    rng = np.random.default_rng(0)
+    before = rng.bit_generator.state
+    ext.fill_stationary_indices(rng, np.empty((0, 10), np.int64), 0.1)
+    assert rng.bit_generator.state == before
+
+
+def test_ext_holds_and_releases_bit_generator_lock(ext):
+    rng = np.random.default_rng(0)
+    lock = rng.bit_generator.lock
+    out = np.zeros((50, 2000), dtype=np.int64)
+    done = threading.Event()
+
+    def fill():
+        ext.fill_stationary_indices(rng, out, 0.05)
+        done.set()
+
+    with lock:  # held by this thread: the fill must wait for it
+        worker = threading.Thread(target=fill)
+        worker.start()
+        assert not done.wait(0.3), "fill ran without acquiring bit_generator.lock"
+    worker.join(10)
+    assert done.is_set()
+    assert lock.acquire(blocking=False), "fill did not release bit_generator.lock"
+    lock.release()

@@ -1,6 +1,11 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+# numpy is pinned to exactly the runtime version below: the C++ extension
+# links this numpy's libnpyrandom and records its version, and
+# qbt.bootstrap refuses to use the extension under any other numpy (the
+# random stream is only guaranteed identical within one numpy release).
+# Bump both pins together.
+requires = ["scikit-build-core>=0.10", "pybind11==2.13.6", "numpy==2.5.4"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "qbt"
@@ -9,7 +14,7 @@ requires-python = ">=3.12"
 dependencies = [
     "yfinance>=0.2.40",
     "pandas>=2.2",
-    "numpy>=1.26",
+    "numpy==2.5.4",  # must equal the [build-system] pin; see there
     "matplotlib>=3.8",
     "altair>=5.4",
     "scikit-learn>=1.4",
@@ -33,8 +38,10 @@ dev = [
     "hypothesis",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+wheel.packages = ["src/qbt"]
+cmake.build-type = "Release"
 
 [tool.pytest.ini_options]
 filterwarnings = ["error"]

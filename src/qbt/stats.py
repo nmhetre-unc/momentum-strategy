@@ -100,7 +100,7 @@ def newey_west_se(returns: pd.Series, lags: int | None = None) -> float:
 
 
 def stationary_bootstrap_sharpe(returns: pd.Series, n_boot: int = 2000,
-                                mean_block: int = 20, seed: int = 0, impl: str = "python"):
+                                mean_block: int = 20, seed: int = 0, impl: str = "auto"):
     """
     Politis-Romano stationary bootstrap: resamples `returns` in blocks of
     geometrically-distributed length (mean `mean_block`), wrapping around

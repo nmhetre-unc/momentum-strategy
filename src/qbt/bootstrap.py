@@ -8,11 +8,74 @@ The pure-Python implementation (impl="python") is the reference: every
 faster implementation must reproduce its output bit-for-bit for the same
 Generator state, and leave the Generator in the same state afterwards,
 not merely match it statistically.
+
+The C++ implementation (impl="cpp", the qbt._bootstrap_ext extension)
+draws through numpy's own C distribution routines, linked from the numpy
+it was built against. numpy doesn't promise an identical stream across
+releases, so the extension is only used when the installed numpy is that
+same version: impl="auto" falls back to "numpy" with a
+BootstrapFallbackWarning otherwise, and an explicit impl="cpp" raises.
 """
 
+import warnings
 from collections.abc import Iterator
+from types import ModuleType
 
 import numpy as np
+
+IMPLEMENTATIONS = ("python", "numpy", "cpp")
+
+
+class BootstrapFallbackWarning(RuntimeWarning):
+    """impl="auto" couldn't use the C++ extension and fell back to NumPy."""
+
+
+def _load_extension() -> tuple[ModuleType | None, str | None]:
+    """(module, None) if the C++ extension is usable, else (None, reason)."""
+    try:
+        from qbt import _bootstrap_ext
+    except (ImportError, OSError) as exc:  # OSError: a DLL blocked or unloadable
+        return None, f"the C++ extension qbt._bootstrap_ext is not available ({exc})"
+    built = _bootstrap_ext.NUMPY_BUILD_VERSION
+    if built != np.__version__:
+        return None, (
+            f"qbt._bootstrap_ext was built against numpy {built}, but numpy "
+            f"{np.__version__} is installed, and the random stream is only guaranteed "
+            "identical within one numpy release; rebuild the extension "
+            "(pip install -e .) against the installed numpy"
+        )
+    return _bootstrap_ext, None
+
+
+_EXT, _EXT_UNAVAILABLE = _load_extension()
+
+
+def cpp_available() -> bool:
+    """True if impl="cpp" (and therefore impl="auto" -> "cpp") is usable."""
+    return _EXT is not None
+
+
+def resolve_impl(impl: str) -> str:
+    """
+    Maps `impl` to a concrete implementation name. "auto" is "cpp" when
+    the extension is usable, else "numpy" plus a BootstrapFallbackWarning
+    saying why. An explicit "cpp" that isn't usable raises RuntimeError
+    rather than silently running something else.
+    """
+    if impl == "auto":
+        if _EXT is not None:
+            return "cpp"
+        warnings.warn(
+            f"stationary bootstrap impl='auto' is using the NumPy implementation: "
+            f"{_EXT_UNAVAILABLE}.",
+            BootstrapFallbackWarning, stacklevel=3,
+        )
+        return "numpy"
+    if impl == "cpp" and _EXT is None:
+        raise RuntimeError(f"impl='cpp' was requested, but {_EXT_UNAVAILABLE}.")
+    if impl not in IMPLEMENTATIONS:
+        raise ValueError(f"Unknown impl {impl!r}; choose from {IMPLEMENTATIONS + ('auto',)}.")
+    return impl
 
 
 def validate_mean_block(n: int, mean_block: float) -> None:
@@ -32,12 +95,9 @@ def validate_mean_block(n: int, mean_block: float) -> None:
         )
 
 
-IMPLEMENTATIONS = ("python", "numpy")
-
-
 def stationary_bootstrap_indices(n: int, n_boot: int, mean_block: float,
                                  rng: np.random.Generator,
-                                 impl: str = "python") -> Iterator[np.ndarray]:
+                                 impl: str = "auto") -> Iterator[np.ndarray]:
     """
     Yields `n_boot` int64 index arrays of length `n`, one per bootstrap
     replicate, for resampling a length-`n` series. Each replicate is built
@@ -53,18 +113,38 @@ def stationary_bootstrap_indices(n: int, n_boot: int, mean_block: float,
                   replicate's indices in one vectorized step. The scalar
                   draws themselves can't be batched without reordering
                   the stream, so they remain a Python loop.
+      "cpp"    -- the whole replicate (every draw and every index) in one
+                  C++ call; see src/cpp/bootstrap_ext.cpp.
+      "auto"   -- (default) "cpp" if usable, else "numpy"; see resolve_impl.
 
-    Validates eagerly: a bad `mean_block` or `impl` raises here, before
-    the first replicate is requested. Draws lazily: replicate i is drawn
+    Validates eagerly: a bad `mean_block` or `impl` raises here (and
+    "auto" warns here), before the first replicate is requested. Draws lazily: replicate i is drawn
     only when it's requested, so callers sharing `rng` with other work see
     the same stream position as the original inline loop.
     """
     validate_mean_block(n, mean_block)
-    if impl == "python":
-        return _replicates_python(n, n_boot, 1.0 / mean_block, rng)
-    if impl == "numpy":
-        return _replicates_numpy(n, n_boot, 1.0 / mean_block, rng)
-    raise ValueError(f"Unknown impl {impl!r}; choose from {IMPLEMENTATIONS}.")
+    resolved = resolve_impl(impl)
+    p = 1.0 / mean_block
+    if resolved == "cpp":
+        return _replicates_cpp(n, n_boot, p, rng)
+    if resolved == "numpy":
+        return _replicates_numpy(n, n_boot, p, rng)
+    return _replicates_python(n, n_boot, p, rng)
+
+
+def _replicates_cpp(n: int, n_boot: int, p: float,
+                    rng: np.random.Generator) -> Iterator[np.ndarray]:
+    # One C++ call per replicate, not one for all n_boot: drawing ahead
+    # would leave `rng` past where the reference leaves it whenever a
+    # caller stops early, breaking the lazy-draw guarantee. Each call
+    # holds bit_generator.lock across that replicate's whole block loop
+    # and writes into the row allocated for it here.
+    assert _EXT is not None  # guaranteed by resolve_impl
+    fill = _EXT.fill_stationary_indices
+    for _ in range(n_boot):
+        out = np.empty((1, n), dtype=np.int64)
+        fill(rng, out, p)
+        yield out[0]
 
 
 def _replicates_numpy(n: int, n_boot: int, p: float,

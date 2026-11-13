@@ -7,6 +7,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # Fail the install if the C++ extension can't be built (the default
+      # is to skip it and fall back to NumPy), and fail -- rather than
+      # skip -- every impl="cpp" test if it isn't importable.
+      QBT_REQUIRE_EXTENSION: "1"
+      QBT_REQUIRE_CPP: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -14,14 +20,23 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install
-        run: pip install -e ".[dev]"
+      - name: Install (builds the C++ extension via scikit-build-core)
+        run: pip install -v -e ".[dev]"
+
+      - name: Check the extension loaded against the installed numpy
+        run: |
+          python -c "import numpy, qbt.bootstrap as b; \
+          assert b.cpp_available(), b._EXT_UNAVAILABLE; \
+          print('qbt._bootstrap_ext OK, numpy', numpy.__version__)"
 
       - name: Lint (ruff)
         run: ruff check
 
       - name: Type check (mypy)
         run: mypy src/
+
+      - name: Bootstrap equivalence (python / numpy / cpp, bit-identical)
+        run: pytest tests/test_bootstrap.py -q
 
       - name: Test (pytest, coverage >= 75%)
         run: pytest --cov=src/qbt --cov-fail-under=75

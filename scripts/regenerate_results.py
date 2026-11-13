@@ -100,7 +100,7 @@ def dsr_vs_benchmark(sharpe: float, sr_benchmark: float, n_trials: int,
 
 
 def paired_stationary_bootstrap(strat_returns, bench_returns, n_boot=N_BOOT,
-                                mean_block=MEAN_BLOCK, seed=0, impl="python"):
+                                mean_block=MEAN_BLOCK, seed=0, impl="auto"):
     """
     Draws one shared set of geometric-block, wraparound-resampled indices
     per replicate (Politis-Romano stationary bootstrap) and applies it to

@@ -11,7 +11,7 @@
 # fine and then crash at render time -- better to fail at install.
 yfinance>=0.2.40
 pandas>=2.2
-numpy>=1.26
+numpy==2.5.4  # exact: must match pyproject.toml's [build-system] pin
 matplotlib>=3.8
 altair>=5.4
 scikit-learn>=1.4
