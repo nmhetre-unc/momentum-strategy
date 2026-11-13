@@ -19,8 +19,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
-from qbt.bootstrap import stationary_bootstrap_indices, validate_mean_block
+from qbt.bootstrap import IMPLEMENTATIONS, stationary_bootstrap_indices, validate_mean_block
 from qbt.stats import stationary_bootstrap_sharpe
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "regenerate_results.py"
@@ -71,35 +73,45 @@ INDEX_PINS = [
 ]
 
 
+@pytest.mark.parametrize("impl", IMPLEMENTATIONS)
 @pytest.mark.parametrize(("args", "expected"), SINGLE_PINS)
-def test_stationary_bootstrap_sharpe_pinned(args, expected):
+def test_stationary_bootstrap_sharpe_pinned(args, expected, impl):
     n, mean_block, n_boot, seed = args
     result = stationary_bootstrap_sharpe(
-        _series(n, 100 + seed), n_boot=n_boot, mean_block=mean_block, seed=seed
+        _series(n, 100 + seed), n_boot=n_boot, mean_block=mean_block, seed=seed, impl=impl
     )
     assert tuple(float(x) for x in result) == expected
 
 
+@pytest.mark.parametrize("impl", IMPLEMENTATIONS)
 @pytest.mark.parametrize(("args", "expected"), PAIRED_PINS)
-def test_paired_stationary_bootstrap_pinned(regenerate_results, args, expected):
+def test_paired_stationary_bootstrap_pinned(regenerate_results, args, expected, impl):
     n, mean_block, n_boot, seed = args
     result = regenerate_results.paired_stationary_bootstrap(
         _series(n, 200 + seed), _series(n, 300 + seed),
-        n_boot=n_boot, mean_block=mean_block, seed=seed,
+        n_boot=n_boot, mean_block=mean_block, seed=seed, impl=impl,
     )
     assert tuple(float(x) for x in result) == expected
 
 
+@pytest.mark.parametrize("impl", IMPLEMENTATIONS)
 @pytest.mark.parametrize(("args", "expected"), INDEX_PINS)
-def test_index_stream_pinned(args, expected):
+def test_index_stream_pinned(args, expected, impl):
     n, mean_block, n_boot, seed = args
     digest = hashlib.sha256()
-    rows = stationary_bootstrap_indices(n, n_boot, mean_block, np.random.default_rng(seed))
+    rows = stationary_bootstrap_indices(
+        n, n_boot, mean_block, np.random.default_rng(seed), impl=impl
+    )
     for row in rows:
         assert row.dtype == np.int64 and row.shape == (n,)
         assert row.min() >= 0 and row.max() < n
         digest.update(row.tobytes())
     assert digest.hexdigest() == expected
+
+
+def test_unknown_impl_raises():
+    with pytest.raises(ValueError, match="Unknown impl"):
+        stationary_bootstrap_indices(10, 1, 2, np.random.default_rng(0), impl="fortran")
 
 
 def test_indices_are_wrapping_runs():
@@ -111,11 +123,12 @@ def test_indices_are_wrapping_runs():
     assert (steps == 1).mean() > 0.95
 
 
-def test_generator_draws_lazily():
+@pytest.mark.parametrize("impl", IMPLEMENTATIONS)
+def test_generator_draws_lazily(impl):
     # Consuming k replicates must leave the Generator exactly where the
     # original inline loop would after k iterations, not n_boot.
     a, b = np.random.default_rng(3), np.random.default_rng(3)
-    rows = stationary_bootstrap_indices(100, 1000, 10, a)
+    rows = stationary_bootstrap_indices(100, 1000, 10, a, impl=impl)
     first = [next(rows) for _ in range(3)]
     expected = list(stationary_bootstrap_indices(100, 3, 10, b))
     assert all(np.array_equal(x, y) for x, y in zip(first, expected, strict=True))
@@ -147,3 +160,60 @@ def test_empty_series_raises():
 def test_boundary_mean_block_accepted(n, mean_block):
     rows = list(stationary_bootstrap_indices(n, 5, mean_block, np.random.default_rng(0)))
     assert len(rows) == 5 and all(r.shape == (n,) for r in rows)
+
+
+# --------------------------------------------------------------------------
+# Equivalence: every implementation against the reference, over n,
+# mean_block and seed. Bit-identical rows, and the same Generator state
+# afterwards (so a caller sharing the Generator can't tell them apart).
+# --------------------------------------------------------------------------
+@st.composite
+def bootstrap_case(draw, max_n: int):
+    n = draw(st.integers(1, max_n))
+    mean_block = draw(st.one_of(
+        st.integers(1, n),
+        st.floats(1.0, float(n), allow_nan=False, allow_infinity=False),
+        st.sampled_from([1, n]),
+    ))
+    seed = draw(st.integers(0, 2**63 - 1))
+    n_boot = draw(st.integers(0, 8))
+    return n, mean_block, seed, n_boot
+
+
+def _assert_matches_reference(n, mean_block, seed, n_boot, impl):
+    ref_rng, rng = np.random.default_rng(seed), np.random.default_rng(seed)
+    expected = list(stationary_bootstrap_indices(n, n_boot, mean_block, ref_rng, impl="python"))
+    got = list(stationary_bootstrap_indices(n, n_boot, mean_block, rng, impl=impl))
+    assert len(got) == len(expected)
+    for g, e in zip(got, expected, strict=True):
+        assert g.dtype == e.dtype == np.int64
+        assert np.array_equal(g, e)
+    assert rng.bit_generator.state == ref_rng.bit_generator.state
+
+
+@pytest.mark.parametrize("impl", [i for i in IMPLEMENTATIONS if i != "python"])
+@settings(max_examples=300, deadline=None)
+@given(case=bootstrap_case(max_n=300))
+def test_impl_matches_reference_small_n(impl, case):
+    _assert_matches_reference(*case, impl=impl)
+
+
+@pytest.mark.parametrize("impl", [i for i in IMPLEMENTATIONS if i != "python"])
+@settings(max_examples=40, deadline=None)
+@given(case=bootstrap_case(max_n=5000))
+def test_impl_matches_reference_large_n(impl, case):
+    _assert_matches_reference(*case, impl=impl)
+
+
+@pytest.mark.parametrize("impl", [i for i in IMPLEMENTATIONS if i != "python"])
+@settings(max_examples=60, deadline=None)
+@given(case=bootstrap_case(max_n=400), data_seed=st.integers(0, 2**32 - 1))
+def test_sharpe_interval_matches_reference(impl, case, data_seed):
+    n, mean_block, seed, n_boot = case
+    returns = _series(n, data_seed)
+    expected = stationary_bootstrap_sharpe(returns, n_boot=max(n_boot, 1),
+                                           mean_block=mean_block, seed=seed, impl="python")
+    got = stationary_bootstrap_sharpe(returns, n_boot=max(n_boot, 1),
+                                      mean_block=mean_block, seed=seed, impl=impl)
+    # == on floats, NaN-aware: a constant or length-1 series is legitimate input.
+    np.testing.assert_array_equal(np.asarray(got), np.asarray(expected))

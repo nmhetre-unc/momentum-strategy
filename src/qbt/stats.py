@@ -100,7 +100,7 @@ def newey_west_se(returns: pd.Series, lags: int | None = None) -> float:
 
 
 def stationary_bootstrap_sharpe(returns: pd.Series, n_boot: int = 2000,
-                                mean_block: int = 20, seed: int = 0):
+                                mean_block: int = 20, seed: int = 0, impl: str = "python"):
     """
     Politis-Romano stationary bootstrap: resamples `returns` in blocks of
     geometrically-distributed length (mean `mean_block`), wrapping around
@@ -108,11 +108,14 @@ def stationary_bootstrap_sharpe(returns: pd.Series, n_boot: int = 2000,
     consecutive observations -- and the autocorrelation they carry -- are
     preserved rather than reshuffled. Same return signature as
     iid_bootstrap_sharpe. Raises ValueError unless
-    1 <= mean_block <= len(returns); see qbt.bootstrap.
+    1 <= mean_block <= len(returns). `impl` selects the index-generator
+    implementation, all bit-identical; see qbt.bootstrap.
     """
     values: np.ndarray = np.asarray(returns, dtype=float)
     n = len(values)
-    indices = stationary_bootstrap_indices(n, n_boot, mean_block, np.random.default_rng(seed))
+    indices = stationary_bootstrap_indices(
+        n, n_boot, mean_block, np.random.default_rng(seed), impl=impl
+    )
 
     point = sharpe_ratio(returns)
     boot_sharpes: np.ndarray = np.empty(n_boot)

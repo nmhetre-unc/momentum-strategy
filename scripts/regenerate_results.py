@@ -100,20 +100,23 @@ def dsr_vs_benchmark(sharpe: float, sr_benchmark: float, n_trials: int,
 
 
 def paired_stationary_bootstrap(strat_returns, bench_returns, n_boot=N_BOOT,
-                                mean_block=MEAN_BLOCK, seed=0):
+                                mean_block=MEAN_BLOCK, seed=0, impl="python"):
     """
     Draws one shared set of geometric-block, wraparound-resampled indices
     per replicate (Politis-Romano stationary bootstrap) and applies it to
     both series, so the strategy's own Sharpe CI and its paired
     difference against the benchmark come from identical resamples
     rather than two independently-resampled distributions. Returns
-    (strat_lo, strat_hi, diff_point, diff_lo, diff_hi).
+    (strat_lo, strat_hi, diff_point, diff_lo, diff_hi). `impl` selects the
+    qbt.bootstrap index-generator implementation; all are bit-identical.
     """
     strat_values = np.asarray(strat_returns)
     bench_values = np.asarray(bench_returns)
     n = len(strat_values)
     assert len(bench_values) == n, "series must be paired/aligned"
-    indices = stationary_bootstrap_indices(n, n_boot, mean_block, np.random.default_rng(seed))
+    indices = stationary_bootstrap_indices(
+        n, n_boot, mean_block, np.random.default_rng(seed), impl=impl
+    )
 
     diff_point = sharpe_ratio(strat_returns) - sharpe_ratio(bench_returns)
     strat_sharpes = np.empty(n_boot)
