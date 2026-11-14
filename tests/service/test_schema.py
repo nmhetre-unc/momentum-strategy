@@ -30,7 +30,8 @@ def sha(value: str) -> bytes:
 
 def add_series(conn, **overrides) -> int:
     values = {
-        "ticker": "SPY", "first_date": date(2020, 1, 1), "last_date": date(2020, 12, 31),
+        "ticker": "SPY", "fetch_start": date(2020, 1, 1), "fetch_end": date(2021, 1, 1),
+        "first_date": date(2020, 1, 1), "last_date": date(2020, 12, 31),
         "n_bars": 252, "content_sha256": sha(str(uuid.uuid4())),
     } | overrides
     return conn.execute(
@@ -66,8 +67,14 @@ def add_result(conn, job_id, n: int = 3, **overrides) -> None:
 
 
 def rejected(conn, statement_fn, match: str, exc: type[Exception] = IntegrityError):
-    """Asserts the statement fails, inside a savepoint so the test can continue."""
-    with pytest.raises(exc, match=match), conn.begin_nested():
+    """
+    Asserts the statement fails. For an IntegrityError, `match` is a
+    constraint name, matched with Postgres's quotes so a misnamed
+    constraint can't pass; otherwise it's a regex. Runs inside a savepoint
+    so the test can continue.
+    """
+    pattern = f'"{match}"' if exc is IntegrityError else match
+    with pytest.raises(exc, match=pattern), conn.begin_nested():
         statement_fn()
 
 
@@ -116,7 +123,8 @@ def test_attempts_bounded_by_max_attempts(conn):
 
 
 def test_unknown_status_is_rejected(conn):
-    rejected(conn, lambda: add_job(conn, status="cancelled"), "job_status", exc=DataError)
+    rejected(conn, lambda: add_job(conn, status="cancelled"), "enum job_status",
+             exc=DataError)
 
 
 def test_hash_lengths_are_sha256(conn):
@@ -145,8 +153,16 @@ def test_idempotency_key_length(conn):
 
 def test_price_series_checks(conn):
     rejected(conn, lambda: add_series(conn, n_bars=0), "ck_price_series_n_bars_positive")
-    rejected(conn, lambda: add_series(conn, first_date=date(2021, 1, 1)),
+    rejected(conn, lambda: add_series(conn, first_date=date(2020, 12, 31),
+                                      last_date=date(2020, 6, 1)),
              "ck_price_series_date_order")
+    # fetch_end is exclusive: a bar on it is outside the range. (The
+    # fetch_range_order check is implied by this one plus date_order, so no
+    # row can violate it alone; it stays as documentation.)
+    rejected(conn, lambda: add_series(conn, last_date=date(2021, 1, 1)),
+             "ck_price_series_bars_within_fetch_range")
+    rejected(conn, lambda: add_series(conn, first_date=date(2019, 12, 31)),
+             "ck_price_series_bars_within_fetch_range")
 
 
 def test_identical_snapshot_is_not_stored_twice(conn):

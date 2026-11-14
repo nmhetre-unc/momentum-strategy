@@ -31,7 +31,7 @@ def _diff(engine, target: MetaData) -> list:
 
 
 def test_single_head():
-    assert ScriptDirectory.from_config(alembic_config()).get_heads() == ["0001"]
+    assert ScriptDirectory.from_config(alembic_config()).get_heads() == ["0002"]
 
 
 def test_upgrade_downgrade_upgrade(empty_engine):
@@ -51,6 +51,29 @@ def test_upgrade_downgrade_upgrade(empty_engine):
 
 def test_migrations_match_metadata(migrated_engine):
     assert _diff(migrated_engine, metadata) == []
+
+
+def _schema_objects(engine) -> dict[str, set]:
+    """Every constraint and index on the service's tables, with its full definition."""
+    names = tuple(metadata.tables)
+    with engine.connect() as conn:
+        constraints = conn.execute(text(
+            "SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid) "
+            "FROM pg_constraint WHERE conrelid::regclass::text = ANY(:t)"
+        ), {"t": list(names)}).tuples().all()
+        indexes = conn.execute(text(
+            "SELECT tablename, indexname, indexdef FROM pg_indexes "
+            "WHERE schemaname = 'public' AND tablename = ANY(:t)"
+        ), {"t": list(names)}).tuples().all()
+    return {"constraints": set(constraints), "indexes": set(indexes)}
+
+
+def test_migrated_schema_equals_metadata_schema(migrated_engine, empty_engine):
+    # alembic check can't see CHECK constraints, their names, or partial-index
+    # predicates. Building the same schema straight from qbt_service.db and
+    # comparing Postgres's own definitions covers all of them.
+    metadata.create_all(empty_engine)
+    assert _schema_objects(migrated_engine) == _schema_objects(empty_engine)
 
 
 def test_drift_would_be_detected(migrated_engine):

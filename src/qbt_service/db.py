@@ -26,6 +26,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Double,
+    Engine,
     Enum,
     ForeignKey,
     Identity,
@@ -38,6 +39,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    create_engine,
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
@@ -65,15 +67,26 @@ price_series = Table(
     Column("ticker", Text, nullable=False),
     Column("source", Text, nullable=False, server_default=text("'yfinance'")),
     Column("adjusted", Boolean, nullable=False, server_default=text("true")),
+    # The range that was requested, [fetch_start, fetch_end) like yfinance's
+    # own start/end. A snapshot covers a backtest's [start, end) when this
+    # range does; first_date/last_date alone can't say that, because the
+    # first bar falls on the first trading day on or after fetch_start.
+    Column("fetch_start", Date, nullable=False),
+    Column("fetch_end", Date, nullable=False),
     Column("first_date", Date, nullable=False),
     Column("last_date", Date, nullable=False),
     Column("n_bars", Integer, nullable=False),
+    # Over the fetch range and every bar (see qbt_service.prices.content_hash).
     Column("content_sha256", LargeBinary, nullable=False),
     Column("fetched_at", DateTime(timezone=True), nullable=False, server_default=NOW),
     CheckConstraint("n_bars > 0", name="n_bars_positive"),
     CheckConstraint("first_date <= last_date", name="date_order"),
     CheckConstraint("octet_length(content_sha256) = 32", name="sha256_length"),
-    # Re-ingesting unchanged data finds the existing series instead of adding one.
+    CheckConstraint("fetch_start < fetch_end", name="fetch_range_order"),
+    CheckConstraint("first_date >= fetch_start AND last_date < fetch_end",
+                    name="bars_within_fetch_range"),
+    # Re-ingesting unchanged data for the same range finds the existing
+    # series instead of adding one.
     UniqueConstraint("ticker", "source", "content_sha256"),
 )
 # "Newest snapshot of this ticker that covers [start, end]", at submit time.
@@ -189,3 +202,8 @@ metrics = Table(
     Column("value", Double),                # NaN allowed; a metric not computed has no row
     PrimaryKeyConstraint("job_id", "name"),
 )
+
+
+def make_engine(url: str) -> Engine:
+    """The service's engine. pool_pre_ping: survive a database restart."""
+    return create_engine(url, pool_pre_ping=True)

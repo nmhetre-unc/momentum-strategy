@@ -26,6 +26,18 @@ def fetch_ohlcv(ticker: str, start: str, end: str, use_cache: bool = True) -> pd
         df = pd.read_csv(cache_path, index_col=0, parse_dates=True)
         return df
 
+    df = download_ohlcv(ticker, start, end)
+    df.to_csv(cache_path)
+    return df
+
+
+def download_ohlcv(ticker: str, start: str, end: str) -> pd.DataFrame:
+    """
+    Downloads daily split- and dividend-adjusted OHLCV from Yahoo Finance,
+    `end` exclusive, with no caching. fetch_ohlcv() and the service's
+    price ingestion (qbt_service.ingest) both go through here, so they
+    store exactly the same numbers.
+    """
     df = yf.download(ticker, start=start, end=end, auto_adjust=True, progress=False)
 
     # yfinance sometimes returns a MultiIndex column header for a single ticker
@@ -34,6 +46,4 @@ def fetch_ohlcv(ticker: str, start: str, end: str, use_cache: bool = True) -> pd
 
     if df.empty:
         raise ValueError(f"No data returned for {ticker} between {start} and {end}")
-
-    df.to_csv(cache_path)
     return df
