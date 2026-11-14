@@ -65,6 +65,9 @@ cmake.build-type = "Release"
 filterwarnings = ["error"]
 # benchmarks/ is run explicitly (see benchmarks/README.md), not by a bare `pytest`.
 testpaths = ["tests"]
+markers = [
+    "db: needs PostgreSQL via DATABASE_URL (skipped without it unless QBT_REQUIRE_DB=1)",
+]
 
 [tool.mypy]
 python_version = "3.12"

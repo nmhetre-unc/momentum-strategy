@@ -13,6 +13,24 @@ jobs:
       # skip -- every impl="cpp" test if it isn't importable.
       QBT_REQUIRE_EXTENSION: "1"
       QBT_REQUIRE_CPP: "1"
+      # Same idea for the service's database tests: fail, don't skip, if
+      # Postgres isn't reachable.
+      QBT_REQUIRE_DB: "1"
+      DATABASE_URL: postgresql+psycopg://qbt:qbt@localhost:5432/qbt
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: qbt
+          POSTGRES_PASSWORD: qbt
+          POSTGRES_DB: qbt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qbt -d qbt"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v4
 
@@ -21,7 +39,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install (builds the C++ extension via scikit-build-core)
-        run: pip install -v -e ".[dev]"
+        run: pip install -v -e ".[dev,api]"
 
       - name: Check the extension loaded against the installed numpy
         run: |
@@ -38,5 +56,17 @@ jobs:
       - name: Bootstrap equivalence (python / numpy / cpp, bit-identical)
         run: pytest tests/test_bootstrap.py -q
 
-      - name: Test (pytest, coverage >= 82%)
-        run: pytest --cov=src/qbt --cov-fail-under=82
+      - name: Migrations (upgrade, drift check, downgrade round trip)
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Test (pytest)
+        run: pytest --cov=src/qbt --cov=src/qbt_service --cov-report=
+
+      - name: Coverage (qbt >= 82%, qbt_service >= 90%)
+        run: |
+          coverage report --include='src/qbt/*' --fail-under=82
+          coverage report --include='src/qbt_service/*' --fail-under=90
