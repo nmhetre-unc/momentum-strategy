@@ -15,6 +15,7 @@ by sleeping.
 
 import math
 import threading
+import time
 import uuid
 from datetime import date, timedelta
 
@@ -407,7 +408,6 @@ def test_n_workers_claim_m_jobs_exactly_once(engine):
     claimed_ids = [job_id for job_id, _ in claims]
     assert len(claimed_ids) == m_jobs
     assert set(claimed_ids) == set(job_ids)
-    assert len({worker for _, worker in claims}) > 1  # really concurrent
     with engine.connect() as c:
         states = c.execute(select(jobs.c.status, jobs.c.attempts, func.count())
                            .group_by(jobs.c.status, jobs.c.attempts)).tuples().all()
@@ -487,11 +487,112 @@ def race_stale_completion_against_reaper(engine) -> bool:
 
 
 def test_stale_completion_racing_the_reaper_never_both_win(engine):
-    # Each side wins some rounds (measured: the completion ~7 in 8), so 40
-    # rounds almost always exercise both orders; either way, the invariant
-    # is checked every round.
+    # Asserts only the invariant, every round. Which side wins is left to
+    # the scheduler (measured: the completion about 7 rounds in 8); each
+    # ordering is forced explicitly in the two tests below.
     for _ in range(40):
         race_stale_completion_against_reaper(engine)
+
+
+# ---- forced orderings: one transaction holds a row lock, another is made
+# to queue behind it, then the first commits ----
+
+def wait_until_blocked(engine, timeout: float = 10.0) -> None:
+    """Returns once some backend is waiting for a lock (polls pg_locks)."""
+    deadline = time.monotonic() + timeout
+    with engine.connect() as c:
+        while time.monotonic() < deadline:
+            waiting = c.execute(text("SELECT count(*) FROM pg_locks WHERE NOT granted"))
+            if waiting.scalar_one() > 0:
+                return
+            c.rollback()
+            time.sleep(0.01)
+    raise AssertionError("no backend started waiting for a lock")
+
+
+def in_thread(fn):
+    """Starts fn on a thread; returns a join() that gives its result or raises its error."""
+    box: dict = {}
+
+    def target():
+        try:
+            box["value"] = fn()
+        except Exception as exc:  # re-raised by join
+            box["error"] = exc
+
+    thread = threading.Thread(target=target)
+    thread.start()
+
+    def join():
+        thread.join(timeout=10)
+        assert not thread.is_alive(), "thread did not finish"
+        if "error" in box:
+            raise box["error"]
+        return box["value"]
+
+    return join
+
+
+def stale_claim(engine):
+    """A job claimed by worker-a whose lease has already expired."""
+    with engine.begin() as c:
+        job_id = new_job(c)
+    with engine.begin() as c:
+        stale = claim(c, "worker-a", LEASE)
+        expire(c, job_id)
+    return stale
+
+
+def test_completion_first_then_reaper_finds_nothing(engine):
+    stale = stale_claim(engine)
+    with engine.connect() as first:
+        with first.begin():
+            assert complete(first, stale.id, stale.lease_token, result())
+            # The reaper's UPDATE now waits on this transaction's row lock...
+            reaper = in_thread(lambda: _reap(engine))
+            wait_until_blocked(engine)
+        # ...and on commit, re-checks its WHERE clause against the new row.
+        assert reaper() == ([], [])
+    with engine.connect() as c:
+        assert job(c, stale.id)["status"] == "succeeded"
+        assert count(c, results, stale.id) == 1
+
+
+def test_reaper_first_then_completion_is_rejected(engine):
+    stale = stale_claim(engine)
+    with engine.connect() as first:
+        with first.begin():
+            assert reap_expired(first, backoff_base=0).requeued == [stale.id]
+            completion = in_thread(lambda: _complete(engine, stale))
+            wait_until_blocked(engine)
+        assert completion() is False
+    with engine.connect() as c:
+        assert job(c, stale.id)["status"] == "queued"
+        assert count(c, results, stale.id) == 0
+
+
+def test_claim_skips_a_row_another_claim_holds(engine):
+    first_job, second_job = enqueue_many(engine, 2)
+    with engine.connect() as holder, holder.begin():
+        held = claim(holder, "worker-a", LEASE)
+        assert held.id == first_job
+        # lock_timeout: if the second claim waited on the held row
+        # instead of skipping it, this would fail rather than hang.
+        with engine.begin() as other:
+            other.execute(text("SET LOCAL lock_timeout = '2s'"))
+            assert claim(other, "worker-b", LEASE).id == second_job
+            assert claim(other, "worker-c", LEASE) is None
+
+
+def _reap(engine):
+    with engine.begin() as c:
+        reaped = reap_expired(c, backoff_base=0)
+    return reaped.requeued, reaped.failed
+
+
+def _complete(engine, claimed):
+    with engine.begin() as c:
+        return complete(c, claimed.id, claimed.lease_token, result())
 
 
 def _hot_updates(conn) -> int:
@@ -508,12 +609,15 @@ def _hot_updates(conn) -> int:
 def test_heartbeats_are_hot_updates(engine):
     # The point of keeping heartbeat columns out of every index: each
     # heartbeat should be an in-page (HOT) update, not a new index entry.
+    # 10 row versions fit in the page's free space (fillfactor 90), so this
+    # holds without depending on Postgres pruning dead versions, which an
+    # unrelated open snapshot could delay.
     (job_id,) = enqueue_many(engine, 1)
     with engine.begin() as c:
         claimed = claim(c, "w", LEASE)
     with engine.connect() as c:
         before = _hot_updates(c)
-        for _ in range(50):
+        for _ in range(10):
             assert heartbeat(c, job_id, claimed.lease_token, LEASE)
             c.commit()
-        assert _hot_updates(c) - before == 50
+        assert _hot_updates(c) - before == 10

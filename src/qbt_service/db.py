@@ -204,6 +204,14 @@ metrics = Table(
 )
 
 
-def make_engine(url: str) -> Engine:
-    """The service's engine. pool_pre_ping: survive a database restart."""
-    return create_engine(url, pool_pre_ping=True)
+def make_engine(url: str, statement_timeout_seconds: float | None = None) -> Engine:
+    """
+    The service's engine. pool_pre_ping: survive a database restart.
+    statement_timeout_seconds, if given, makes the server cancel any query
+    that runs longer.
+    """
+    connect_args = {}
+    if statement_timeout_seconds is not None:
+        milliseconds = max(1, round(statement_timeout_seconds * 1000))
+        connect_args["options"] = f"-c statement_timeout={milliseconds}"
+    return create_engine(url, pool_pre_ping=True, connect_args=connect_args)

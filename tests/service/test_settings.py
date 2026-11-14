@@ -40,6 +40,22 @@ def test_overrides():
     assert s.allow_numpy_fallback is True
 
 
+def test_worker_settings():
+    s = Settings.from_env({"DATABASE_URL": URL})
+    assert (s.retry_backoff_seconds, s.retry_backoff_max_seconds) == (5.0, 300.0)
+    assert (s.job_timeout_seconds, s.shutdown_grace_seconds) == (600.0, 8.0)
+    assert (s.statement_timeout_seconds, s.test_compute_delay_seconds) == (60.0, 0.0)
+    s = Settings.from_env({
+        "DATABASE_URL": URL, "QBT_RETRY_BACKOFF_SECONDS": "0",
+        "QBT_RETRY_BACKOFF_MAX_SECONDS": "60", "QBT_JOB_TIMEOUT_SECONDS": "30",
+        "QBT_SHUTDOWN_GRACE_SECONDS": "0", "QBT_STATEMENT_TIMEOUT_SECONDS": "5",
+        "QBT_TEST_COMPUTE_DELAY_SECONDS": "2.5",
+    })
+    assert (s.retry_backoff_seconds, s.retry_backoff_max_seconds) == (0.0, 60.0)
+    assert (s.job_timeout_seconds, s.shutdown_grace_seconds) == (30.0, 0.0)
+    assert (s.statement_timeout_seconds, s.test_compute_delay_seconds) == (5.0, 2.5)
+
+
 def test_empty_worker_id_falls_back_to_default():
     assert Settings.from_env({"DATABASE_URL": URL, "QBT_WORKER_ID": ""}).worker_id
 
@@ -63,6 +79,10 @@ def test_lease_must_outlive_two_missed_heartbeats():
         ("QBT_MAX_ATTEMPTS", "2.5", "must be an integer"),
         ("QBT_MAX_ATTEMPTS", "-1", "must be > 0"),
         ("QBT_ALLOW_NUMPY_FALLBACK", "maybe", "must be one of"),
+        ("QBT_SHUTDOWN_GRACE_SECONDS", "-1", "must be >= 0"),
+        ("QBT_RETRY_BACKOFF_SECONDS", "nan", "must be >= 0"),
+        ("QBT_TEST_COMPUTE_DELAY_SECONDS", "later", "must be a number"),
+        ("QBT_JOB_TIMEOUT_SECONDS", "0", "must be > 0"),
     ],
 )
 def test_bad_values(name, raw, message):

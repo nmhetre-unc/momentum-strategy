@@ -10,6 +10,16 @@ files, so the same image runs in Compose, CI and tests unchanged).
     QBT_MAX_ATTEMPTS              claims before a job is failed (default 3)
     QBT_WORKER_ID                 default "<hostname>:<pid>"
     QBT_ALLOW_NUMPY_FALLBACK      let a worker start without the C++ extension (default 0)
+    QBT_RETRY_BACKOFF_SECONDS     first retry delay, doubling per attempt (default 5)
+    QBT_RETRY_BACKOFF_MAX_SECONDS cap on the retry delay (default 300)
+    QBT_JOB_TIMEOUT_SECONDS       a backtest running longer fails, not retried (default 600)
+    QBT_SHUTDOWN_GRACE_SECONDS    on SIGTERM, time to finish the current job before
+                                  releasing it (default 8: inside Docker's 10 s stop timeout)
+    QBT_STATEMENT_TIMEOUT_SECONDS worker's per-query limit, so a stuck query can't hold a
+                                  job forever while heartbeats keep its lease alive (default 60)
+    QBT_TEST_COMPUTE_DELAY_SECONDS
+                                  testing only: the compute process sleeps this long before
+                                  each backtest, so tests can interrupt a job mid-run (default 0)
 """
 
 import os
@@ -45,6 +55,16 @@ def _parse_positive(name: str, raw: str, kind: type[int] | type[float]) -> float
     return value
 
 
+def _parse_nonnegative(name: str, raw: str) -> float:
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be a number, got {raw!r}") from None
+    if not value >= 0:  # also rejects NaN
+        raise ValueError(f"{name} must be >= 0, got {raw!r}")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -55,6 +75,12 @@ class Settings:
     max_attempts: int = 3
     worker_id: str = field(default_factory=_default_worker_id)
     allow_numpy_fallback: bool = False
+    retry_backoff_seconds: float = 5.0
+    retry_backoff_max_seconds: float = 300.0
+    job_timeout_seconds: float = 600.0
+    shutdown_grace_seconds: float = 8.0
+    statement_timeout_seconds: float = 60.0
+    test_compute_delay_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.database_url:
@@ -77,10 +103,21 @@ class Settings:
             "heartbeat_seconds": "QBT_HEARTBEAT_SECONDS",
             "reaper_seconds": "QBT_REAPER_SECONDS",
             "poll_seconds": "QBT_POLL_SECONDS",
+            "retry_backoff_max_seconds": "QBT_RETRY_BACKOFF_MAX_SECONDS",
+            "job_timeout_seconds": "QBT_JOB_TIMEOUT_SECONDS",
+            "statement_timeout_seconds": "QBT_STATEMENT_TIMEOUT_SECONDS",
         }
         for attr, name in floats.items():
             if name in env:
                 kwargs[attr] = _parse_positive(name, env[name], float)
+        zero_ok = {
+            "retry_backoff_seconds": "QBT_RETRY_BACKOFF_SECONDS",
+            "shutdown_grace_seconds": "QBT_SHUTDOWN_GRACE_SECONDS",
+            "test_compute_delay_seconds": "QBT_TEST_COMPUTE_DELAY_SECONDS",
+        }
+        for attr, name in zero_ok.items():
+            if name in env:
+                kwargs[attr] = _parse_nonnegative(name, env[name])
         if "QBT_MAX_ATTEMPTS" in env:
             kwargs["max_attempts"] = int(
                 _parse_positive("QBT_MAX_ATTEMPTS", env["QBT_MAX_ATTEMPTS"], int)

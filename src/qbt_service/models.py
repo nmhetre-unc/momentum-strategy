@@ -103,6 +103,9 @@ PARAMS_MODELS: dict[str, type[StrategyParams]] = {
 class BacktestRequestBase(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    # Narrowed by each generated subclass to Literal[name] and its params model.
+    strategy: str
+    params: StrategyParams
     ticker: str = Field(min_length=1, max_length=20,
                         description="Yahoo Finance symbol, e.g. SPY or BRK-B; upper-cased.")
     start: date = Field(description="First date of the backtest (inclusive).")
