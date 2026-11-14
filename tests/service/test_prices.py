@@ -27,8 +27,6 @@ from qbt_service.prices import (
     store_snapshot,
 )
 
-from .conftest import migrate
-
 pytestmark = pytest.mark.db
 
 START, END = date(2019, 1, 1), date(2021, 1, 1)
@@ -243,15 +241,7 @@ def test_store_rejects_bad_ranges(conn, fake_yahoo):
 
 # ---- the ingest command, end to end ----
 
-@pytest.fixture
-def ingest_db(empty_engine, monkeypatch):
-    """A migrated database of its own: the command commits."""
-    migrate(empty_engine)
-    monkeypatch.setenv("DATABASE_URL", empty_engine.url.render_as_string(hide_password=False))
-    return empty_engine
-
-
-def test_ingest_command(ingest_db, fake_yahoo, capsys):
+def test_ingest_command(committed_engine, fake_yahoo, capsys):
     argv = ["spy", "QQQ", "--start", "2019-01-01", "--end", "2021-01-01"]
     assert ingest.main(argv) == 0
     out = capsys.readouterr().out
@@ -260,14 +250,14 @@ def test_ingest_command(ingest_db, fake_yahoo, capsys):
     assert ingest.main(argv) == 0
     assert capsys.readouterr().out.count("unchanged, already stored") == 2
 
-    with ingest_db.connect() as conn:
+    with committed_engine.connect() as conn:
         assert _count(conn, price_series) == 2
         series_id = find_series(conn, "SPY", START, END)
         pd.testing.assert_frame_equal(load_frame(conn, series_id), cached_frame(),
                                       check_exact=True)
 
 
-def test_ingest_reports_failures(ingest_db, monkeypatch, capsys):
+def test_ingest_reports_failures(committed_engine, monkeypatch, capsys):
     def empty(*args, **kwargs):
         return pd.DataFrame()
 

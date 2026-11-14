@@ -78,6 +78,17 @@ def empty_engine() -> Iterator[Engine]:
 
 
 @pytest.fixture
+def committed_engine(empty_engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Engine:
+    """
+    A migrated database of this test's own, for code that commits (the
+    ingest command, the API). DATABASE_URL points at it for the test.
+    """
+    migrate(empty_engine)
+    monkeypatch.setenv("DATABASE_URL", empty_engine.url.render_as_string(hide_password=False))
+    return empty_engine
+
+
+@pytest.fixture
 def conn(migrated_engine: Engine) -> Iterator[Connection]:
     """A connection inside a transaction that is rolled back after the test."""
     with migrated_engine.connect() as connection:
