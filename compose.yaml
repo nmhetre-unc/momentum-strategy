@@ -1,0 +1,27 @@
+# Local development stack for the backtest service. Step 1 has only the
+# database; api, worker and migrate services are added in later steps.
+#
+#   docker compose up -d db
+#   export DATABASE_URL=postgresql+psycopg://qbt:qbt@localhost:5432/qbt
+#
+# The credentials are for local development only. The port is bound to
+# 127.0.0.1 so the database isn't reachable from the network.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: qbt
+      POSTGRES_PASSWORD: qbt
+      POSTGRES_DB: qbt
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - qbt-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qbt -d qbt"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  qbt-pgdata:

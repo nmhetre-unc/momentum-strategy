@@ -38,10 +38,27 @@ dev = [
     "hypothesis",
     "pytest-benchmark",  # benchmarks/ only; never collected by the normal run
 ]
+# The backtest service (src/qbt_service). Kept out of [project.dependencies]
+# so the library, CLI and Streamlit deploy (requirements.txt) don't pull in
+# a web framework and a database driver they never use.
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    # <2.1: SQLAlchemy 2.1's modules carry an inline mypy setting
+    # (disable_error_code="untyped-decorator") that the pinned mypy==1.10.0
+    # rejects as invalid. pandas-stubs imports sqlalchemy, so this breaks
+    # `mypy src/` even before any service code uses it. Lift the cap
+    # together with the mypy pin.
+    "sqlalchemy>=2.0.30,<2.1",
+    "psycopg[binary,pool]>=3.2",
+    "alembic>=1.13",
+    "httpx>=0.27",  # FastAPI's TestClient and the bench/ load generator
+]
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
-wheel.packages = ["src/qbt"]
+wheel.packages = ["src/qbt", "src/qbt_service"]
 cmake.build-type = "Release"
 
 [tool.pytest.ini_options]
