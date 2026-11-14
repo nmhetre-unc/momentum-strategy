@@ -72,6 +72,15 @@ markers = [
     "db: needs PostgreSQL via DATABASE_URL (skipped without it unless QBT_REQUIRE_DB=1)",
 ]
 
+[tool.coverage.run]
+# Measure the worker's own processes too: `python -m qbt_service.worker`
+# started by the process tests (patch = subprocess) and the compute child
+# it spawns (concurrency = multiprocessing). sigterm: save data when a
+# process is stopped with SIGTERM; a SIGKILLed one records nothing.
+patch = ["subprocess"]
+concurrency = ["thread", "multiprocessing"]
+sigterm = true
+
 [tool.mypy]
 python_version = "3.12"
 

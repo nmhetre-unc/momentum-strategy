@@ -484,3 +484,254 @@ def test_unreachable_database_means_no_claim_not_a_crash(caplog):
     assert w.run_once() is None
     assert "claim failed" in caplog.text
     w.engine.dispose()
+
+
+# ---- database faults at each write the worker makes ----
+#
+# Real faults, not mocks: the test takes a lock the worker's next
+# statement needs, waits until pg_stat_activity shows the worker's backend
+# blocked on exactly that statement, and kills that backend with
+# pg_terminate_backend. The worker sees a genuine OperationalError in the
+# middle of the operation. (Killing an idle pooled connection wouldn't do:
+# pool_pre_ping quietly replaces it.) Each test then checks the documented
+# recovery: nothing written twice, the job not lost, and, where the
+# worker can't record what happened, the reaper requeuing it once its
+# lease expires.
+
+def blocked_backend(db, pattern: str) -> int | None:
+    with db.connect() as conn:
+        return conn.execute(text(
+            "SELECT pid FROM pg_stat_activity WHERE datname = current_database() "
+            "AND wait_event_type = 'Lock' AND query ILIKE :pattern AND pid <> pg_backend_pid()"
+        ), {"pattern": pattern}).scalars().first()
+
+
+def terminate_when_blocked(db, pattern: str, timeout: float = 30.0) -> int:
+    pid = wait_for(lambda: blocked_backend(db, pattern), timeout=timeout,
+                   what=f"a backend blocked on {pattern!r}")
+    with db.connect() as conn:
+        assert conn.execute(text("SELECT pg_terminate_backend(:pid)"), {"pid": pid}).scalar()
+    return pid
+
+
+def lock_job_row(holder, job_id) -> None:
+    holder.execute(select(jobs.c.id).where(jobs.c.id == job_id).with_for_update())
+
+
+def lease_expired(db, job_id) -> bool:
+    with db.connect() as conn:
+        return conn.execute(select(jobs.c.lease_expires_at < func.now())
+                            .where(jobs.c.id == job_id)).scalar_one()
+
+
+def result_count(db, job_id) -> int:
+    with db.connect() as conn:
+        return conn.execute(select(func.count()).select_from(results)
+                            .where(results.c.job_id == job_id)).scalar_one()
+
+
+def recover(db, worker, job_id):
+    """Another worker (the shared one) reaps the expired job and runs it."""
+    wait_for(lambda: lease_expired(db, job_id), timeout=15, what="the lease to expire")
+    return wait_for(lambda: worker.run_once(), timeout=30, interval=0.1,
+                    what="the job to be reaped and rerun")
+
+
+HEARTBEAT_SQL = "UPDATE jobs SET lease_expires_at=%"
+
+
+def run_reaper_in_thread(db):
+    from qbt_service.queue import reap_expired
+
+    box = {}
+
+    def reap():
+        with db.begin() as conn:
+            box["requeued"] = reap_expired(conn, backoff_base=0).requeued
+
+    thread = threading.Thread(target=reap)
+    thread.start()
+
+    def join():
+        thread.join(30)
+        assert not thread.is_alive()
+        return box["requeued"]
+
+    return join
+
+
+def test_heartbeat_outage_past_the_lease_is_recovered_by_the_reaper(db, worker, caplog):
+    w = Worker(settings(db, test_compute_delay_seconds=30.0))
+    w.start()
+    try:
+        job_id = submit(db)
+        join = run_in_thread(w)
+        wait_until_running(db, job_id)
+        with db.connect() as holder, holder.begin():
+            lock_job_row(holder, job_id)
+            # Kill every heartbeat until the lease has run out.
+            killed = 0
+            while not lease_expired(db, job_id):
+                terminate_when_blocked(db, HEARTBEAT_SQL)
+                killed += 1
+            assert killed >= 2
+            # A heartbeat already waiting would be first in line for the
+            # row and would renew the lease (its token still matches): kill it.
+            if blocked_backend(db, HEARTBEAT_SQL):
+                terminate_when_blocked(db, HEARTBEAT_SQL)
+            # Another worker's reaper, in a transaction of its own (now() is a
+            # transaction's start time, and this one began before the
+            # expiry), queues on the row lock. The next heartbeat is a second
+            # away, so the reaper is first in line when the lock is let go.
+            reaper = run_reaper_in_thread(db)
+            wait_for(lambda: blocked_backend(db, "UPDATE jobs SET status=CASE%"),
+                     what="the reaper to queue on the row lock")
+        assert reaper() == [job_id]
+        # The outage is over: the next heartbeat finds the lease gone.
+        assert join().label == "lease_lost"
+        assert f"heartbeat for job {job_id} failed" in caplog.text
+        assert result_count(db, job_id) == 0
+    finally:
+        w.stop()
+
+    assert wait_for(lambda: worker.run_once(), what="the requeued job").label == "succeeded"
+    assert job(db, job_id)["attempts"] == 2
+    assert result_count(db, job_id) == 1
+    assert_identical_to_reference(db, job_id, attempt=2)
+
+
+def test_brief_heartbeat_outage_is_tolerated(db, caplog):
+    w = Worker(settings(db, test_compute_delay_seconds=3.0))
+    w.start()
+    try:
+        job_id = submit(db)
+        join = run_in_thread(w)
+        wait_until_running(db, job_id)
+        with db.connect() as holder, holder.begin():
+            lock_job_row(holder, job_id)
+            terminate_when_blocked(db, HEARTBEAT_SQL)
+        assert join().label == "succeeded"
+        assert job(db, job_id)["attempts"] == 1
+        assert f"heartbeat for job {job_id} failed" in caplog.text
+    finally:
+        w.stop()
+
+
+def test_connection_lost_during_complete(db, worker):
+    w = Worker(settings(db, test_compute_delay_seconds=1.5))
+    w.start()
+    try:
+        job_id = submit(db)
+        join = run_in_thread(w)
+        wait_until_running(db, job_id, seconds_in=0)
+        with db.connect() as holder, holder.begin():
+            # complete() marks the job succeeded, then inserts the result:
+            # kill it between the two.
+            holder.execute(text("LOCK TABLE results IN ACCESS EXCLUSIVE MODE"))
+            terminate_when_blocked(db, "INSERT INTO results%")
+        outcome = join()
+        assert outcome.label == "db_error"
+        assert outcome.detail.startswith("could not store the result")
+        # The transaction died whole: not succeeded without a result.
+        row = job(db, job_id)
+        assert (row["status"], row["attempts"]) == ("running", 1)
+        assert result_count(db, job_id) == 0
+    finally:
+        w.stop()
+
+    assert recover(db, worker, job_id).label == "succeeded"
+    assert job(db, job_id)["attempts"] == 2
+    assert result_count(db, job_id) == 1
+    assert_identical_to_reference(db, job_id, attempt=2)
+
+
+def test_connection_lost_while_recording_a_failure(db, worker):
+    w = Worker(settings(db, test_compute_delay_seconds=1.5))
+    w.start()
+    try:
+        # Five bars are too few for the model: the backtest raises.
+        job_id = submit(db, strategy="ml_direction", start="2018-01-01", end="2018-01-06")
+        join = run_in_thread(w)
+        wait_until_running(db, job_id, seconds_in=0)
+        with db.connect() as holder, holder.begin():
+            lock_job_row(holder, job_id)
+            terminate_when_blocked(db, "%last_error=%")
+        outcome = join()
+        assert outcome.label == "db_error"
+        assert outcome.detail.startswith("could not record failure (backtest raised")
+        assert job(db, job_id)["status"] == "running"
+    finally:
+        w.stop()
+
+    # Recovered and rerun: it fails the same way, now recorded. Not lost.
+    assert recover(db, worker, job_id).label == "failed"
+    row = job(db, job_id)
+    assert (row["status"], row["attempts"]) == ("failed", 2)
+    assert row["last_error"].startswith("backtest raised:")
+    assert result_count(db, job_id) == 0
+
+
+def test_connection_lost_during_release(db, worker):
+    w = Worker(settings(db, test_compute_delay_seconds=30.0, shutdown_grace_seconds=0.0))
+    w.start()
+    try:
+        job_id = submit(db)
+        join = run_in_thread(w)
+        wait_until_running(db, job_id)
+        with db.connect() as holder, holder.begin():
+            lock_job_row(holder, job_id)
+            w.request_stop()
+            terminate_when_blocked(db, "%attempts=(jobs.attempts -%")
+        outcome = join()
+        assert (outcome.label, outcome.detail.split(":")[0]) == ("db_error", "could not release")
+        assert job(db, job_id)["status"] == "running"
+    finally:
+        w.stop()
+
+    assert recover(db, worker, job_id).label == "succeeded"
+    # The unreleased attempt counted: the reaper can't tell a crash from this.
+    assert job(db, job_id)["attempts"] == 2
+    assert result_count(db, job_id) == 1
+
+
+def test_connection_lost_loading_prices_is_retried(db, worker):
+    job_id = submit(db)
+    with db.connect() as holder, holder.begin():
+        # Locked before the worker starts, so its price query must wait.
+        holder.execute(text("LOCK TABLE price_bars IN ACCESS EXCLUSIVE MODE"))
+        join = run_in_thread(worker)
+        terminate_when_blocked(db, "SELECT price_bars.date%")
+    outcome = join()
+    assert outcome.label == "retrying"
+    assert outcome.detail.startswith("database error loading prices")
+    assert (job(db, job_id)["status"], job(db, job_id)["attempts"]) == ("queued", 1)
+
+    assert wait_for(lambda: worker.run_once(), what="the retry").label == "succeeded"
+    assert job(db, job_id)["attempts"] == 2
+    assert result_count(db, job_id) == 1
+
+
+@pytest.mark.parametrize(("fields", "detail"), [
+    ({}, "result discarded: the lease was lost"),
+    ({"strategy": "ml_direction", "start": "2018-01-01", "end": "2018-01-06"}, "backtest raised"),
+])
+def test_lease_taken_before_the_outcome_is_written(db, fields, detail):
+    # Heartbeats 10 s apart: none notices the lease moving during the 1.5 s
+    # backtest, so it's the fenced write itself that refuses.
+    w = Worker(settings(db, test_compute_delay_seconds=1.5, heartbeat_seconds=10.0,
+                        lease_seconds=30.0))
+    w.start()
+    try:
+        job_id = submit(db, **fields)
+        join = run_in_thread(w)
+        wait_until_running(db, job_id, seconds_in=0)
+        with db.begin() as conn:
+            conn.execute(update(jobs).where(jobs.c.id == job_id)
+                         .values(lease_token=func.gen_random_uuid(), lease_owner="other"))
+        outcome = join()
+        assert outcome.label == "lease_lost" and outcome.detail.startswith(detail)
+        row = job(db, job_id)
+        assert (row["status"], row["lease_owner"]) == ("running", "other")
+        assert result_count(db, job_id) == 0
+    finally:
+        w.stop()
