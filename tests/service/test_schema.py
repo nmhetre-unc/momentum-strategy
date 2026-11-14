@@ -6,7 +6,6 @@ job, cascades, exact float round trips, and the index and storage
 choices that keep heartbeats cheap (alembic check can't see any of these).
 """
 
-import hashlib
 import math
 import uuid
 from datetime import UTC, date, datetime
@@ -17,33 +16,13 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import DataError, IntegrityError
 
 from qbt.bootstrap import IMPLEMENTATIONS
-from qbt_service.db import jobs, metrics, price_bars, price_series, results, strategies
+from qbt_service.db import jobs, metrics, price_bars, price_series, results
+
+from .factories import add_series, add_strategy, sha
 
 pytestmark = pytest.mark.db
 
 NOW = datetime(2026, 1, 2, tzinfo=UTC)
-
-
-def sha(value: str) -> bytes:
-    return hashlib.sha256(value.encode()).digest()
-
-
-def add_series(conn, **overrides) -> int:
-    values = {
-        "ticker": "SPY", "fetch_start": date(2020, 1, 1), "fetch_end": date(2021, 1, 1),
-        "first_date": date(2020, 1, 1), "last_date": date(2020, 12, 31),
-        "n_bars": 252, "content_sha256": sha(str(uuid.uuid4())),
-    } | overrides
-    return conn.execute(
-        price_series.insert().values(values).returning(price_series.c.id)
-    ).scalar_one()
-
-
-def add_strategy(conn, name: str = "momentum", **overrides) -> int:
-    values = {
-        "name": name, "schema_hash": sha(str(uuid.uuid4())), "param_schema": {"type": "object"},
-    } | overrides
-    return conn.execute(strategies.insert().values(values).returning(strategies.c.id)).scalar_one()
 
 
 def add_job(conn, **overrides) -> uuid.UUID:
