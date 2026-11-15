@@ -15,9 +15,11 @@ Sharpe ratios following Bailey & López de Prado (2014).
 ## At a glance
 
 - 11 timing strategies tested on SPY (4,278 trading days, 2008-2025): none beats
-  buy-and-hold at 90% confidence.
-- The best of them, `adaptive_ensemble`, has a deflated Sharpe against the
-  benchmark of 0.906 at one trial, 0.549 at five, and 0.380 at eleven.
+  buy-and-hold at 90% confidence. The 7 that learn from history are scored only
+  out of sample, against buy-and-hold over the same window.
+- `adaptive_ensemble` looked best when it was scored on the days it had learned
+  from: a deflated Sharpe against the benchmark of 0.906 at one trial, 0.549 at
+  five, 0.380 at eleven. Out of sample it is 0.295, 0.042 and 0.015.
 - 12-1 momentum on the S&P 100: long-leg Sharpe 1.071 [0.727, 1.441], short leg
   -0.882; 88.7% of the loss traces to a -0.214 net beta mismatch, not the signal.
 - The stationary bootstrap, 62% of the full results run, now runs in C++ and
@@ -28,7 +30,7 @@ Sharpe ratios following Bailey & López de Prado (2014).
   leases and fencing, and Docker Compose. With 4 workers it runs 926
   backtests/min, a job starts 8 ms after it is submitted at 50% load, and a
   SIGKILLed worker loses no jobs. See [Running as a service](#running-as-a-service).
-- 498 tests at 91% line coverage (85% for the engine, 98% for the service).
+- 583 tests at 93% line coverage (89% for the engine, 98% for the service).
   CI runs on every push: it builds the C++ extension, runs the suite against
   Postgres with coverage gates, and runs an end-to-end test of the Compose
   stack.
@@ -142,7 +144,9 @@ snapshot, repeated runs of a request agree bit for bit.
 
 A strategy's behaviour is versioned the way the schema is migrated:
 `qbt.strategies.STRATEGY_VERSIONS` gives each strategy a version, and a
-published version never changes. If a code change alters what a strategy
+published version never changes. The adaptive strategies, which the service
+doesn't serve yet, are versioned the same way in
+`qbt.adaptive.ADAPTIVE_STRATEGY_VERSIONS`. If a code change alters what a strategy
 does, it gets a new version. `tests/test_strategy_versions.py` pins a
 fingerprint of every version's positions and fails until that happens. Each
 version is its own row in `strategies`, keyed by (name, version, parameter
@@ -401,22 +405,28 @@ Full details, scripts and raw JSON are in [benchmarks/](benchmarks/README.md).
 ## Findings
 
 **No timing strategy beats buy-and-hold detectably.** Eleven strategies were
-tested on SPY. Every one produces a 90% confidence interval on the Sharpe
-difference against buy-and-hold that contains zero. The closest are
-`adaptive_ensemble` at +0.324 [-0.045, +0.686] and `volatility_targeted` at
-+0.22 [-0.08, +0.54]. Buy-and-hold's own Sharpe over the period is 0.607.
-(`ml_direction` used to be second, at +0.10 [-0.01, +0.20]. That was an
-artifact of predicting its own training period, fixed in version 2. See
+tested on SPY, and none is scored on data it learned from. The four that learn
+nothing are scored over the full period. The seven that learn (a fitted model,
+a regime model, or a choice selected on past performance) are scored from
+their first out-of-sample day, 2019-11-22 or 2020-04-08, against buy-and-hold
+over the same window. Every one produces a 90% confidence interval on the
+Sharpe difference against buy-and-hold that contains zero. Over the full
+period the closest is `volatility_targeted` at +0.22 [-0.08, +0.54], against
+buy-and-hold's 0.607. Out of sample it is `regime_filtered` at +0.18 [-0.31,
++0.72], against buy-and-hold's 1.15. (`adaptive_ensemble` used to be closest,
+at +0.324 [-0.045, +0.686], and `ml_direction` second, at +0.10 [-0.01, +0.20].
+Both numbers counted days the strategies had learned from. See
 [FINDINGS.md](FINDINGS.md) section 1.)
 
 **The choice of benchmark inverts the conclusion.** Each strategy's own
-Sharpe interval excludes zero — `sma_crossover` [0.35, 1.17],
-`adaptive_ensemble` [0.59, 1.32] — and read alone both look like clear wins.
-But 0.607 falls inside both, so neither is distinguishable from holding the
-index. The same inversion appears in the deflated Sharpe: against zero both
-stay above 0.90 at any trial count, while against the benchmark
-`adaptive_ensemble` falls to 0.549 at five trials and `sma_crossover` to
-0.236. Reporting only the against-zero number is what a backtest implicitly
+Sharpe interval excludes zero — `sma_crossover` [0.35, 1.17] over the full
+period, `adaptive_ensemble` [0.19, 1.71] out of sample — and read alone both
+look like clear wins. But buy-and-hold's Sharpe over the same window (0.607,
+1.15) falls inside both, so neither is distinguishable from holding the
+index. The same inversion appears in the deflated Sharpe: against zero
+`sma_crossover` stays above 0.90 at any trial count, while against the
+benchmark it falls to 0.236 at five trials and `adaptive_ensemble` to 0.042.
+Reporting only the against-zero number is what a backtest implicitly
 does when it cites a Sharpe ratio and calls it significant.
 
 **Volatility targeting is the one mechanism that survives.** It cut maximum
@@ -491,15 +501,12 @@ between 2008 and 2025 are absent. Those are disproportionately the sustained
 underperformers a short leg would have profited from, so the bias runs in the
 strategy's favor and the negative result is if anything understated.
 
-Headline metrics for the learn_frac-based adaptive wrappers come from
-full-period backtests that apply choices learned on the first 60% of history
-across that same 60%. The walk-forward results in `results/summary.md` refit
-each fold and are the honest read for those strategies. The ML strategies
-(`ml_direction` from version 2, `ml_regime_conditional`) trade only out of
-sample and hold cash for the first 70%, so their full-period rows say little
-about the models either way. Since every paired difference against buy-and-hold already
-contains zero, correcting this would strengthen rather than change the
-conclusion.
+The seven learning strategies are scored out of sample only, over 1,191 to
+1,284 days to the end of 2024. That is under a third of the full period and a
+single, mostly rising market, so their intervals are wide. Their rows are
+compared with buy-and-hold over their own window and can't be ranked
+directly against the full-period rows. `results/ml/learning_strategies_audit.json`
+lists what each strategy learns and which rows that makes in-sample.
 
 With 17 years of daily data the standard error on a Sharpe estimate is
 roughly 0.26. Establishing a 0.32 improvement at 90% confidence would require
@@ -547,7 +554,7 @@ Run the CLI:
 python main.py --ticker SPY --strategy momentum --rolling
 ```
 
-Run the tests (498 tests, 91% line coverage). The service's tests need
+Run the tests (583 tests, 93% line coverage). The service's tests need
 Postgres, which Compose provides:
 
 ```bash

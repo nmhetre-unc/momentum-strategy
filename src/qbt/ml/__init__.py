@@ -49,7 +49,8 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from qbt.features import build_features, build_labels
-from qbt.timesplit import split_index
+from qbt.timesplit import OUT_OF_SAMPLE_ATTR, split_index
+from qbt.timesplit import split_date as first_oos_date
 
 MODEL_TYPES = {
     "logistic": lambda: make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000)),
@@ -233,7 +234,9 @@ def ml_direction_signal(df: pd.DataFrame, train_frac: float = 0.7, model_type: s
     metrics.
     """
     predictions = ml_direction_predictions(df, train_frac, model_type, regimes, regime_mode)
-    return predictions.fillna(0).astype(int)
+    signal = predictions.fillna(0).astype(int)
+    signal.attrs[OUT_OF_SAMPLE_ATTR] = first_oos_date(df.index, train_frac)
+    return signal
 
 
 def _feature_importance(model, feature_cols: list, model_type: str) -> dict:

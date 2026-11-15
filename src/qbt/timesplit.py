@@ -32,3 +32,41 @@ def split_index(n: int, frac: float) -> int:
 def split_date(index: pd.Index, frac: float) -> pd.Timestamp:
     """The first out-of-sample date: index[split_index(len(index), frac)]."""
     return pd.Timestamp(index[split_index(len(index), frac)])
+
+
+# A strategy that learns anything from history (a fitted model, a regime
+# model, a choice selected on past performance) holds no position until
+# every day it learned from is behind it, and records the first day it
+# may trade under this key in the returned signal's `attrs`. Evaluators
+# score it from that day on only, never on data it learned from.
+OUT_OF_SAMPLE_ATTR = "out_of_sample_from"
+
+
+def mark_out_of_sample(signal: pd.Series, start: pd.Timestamp) -> pd.Series:
+    """
+    `signal` flattened before `start`, with `start` recorded as its first
+    out-of-sample day. A position decided on `start` earns from the next
+    day (run_backtest shifts it), so the strategy's return on `start`
+    itself is zero.
+    """
+    out = signal.where(signal.index >= start, 0.0).astype(float)
+    out.attrs[OUT_OF_SAMPLE_ATTR] = pd.Timestamp(start)
+    return out
+
+
+def out_of_sample_start(signal: pd.Series) -> pd.Timestamp | None:
+    """The first day `signal` may hold a position, or None for a strategy
+    that learns nothing (every day is out of sample)."""
+    start = signal.attrs.get(OUT_OF_SAMPLE_ATTR)
+    return None if start is None else pd.Timestamp(start)
+
+
+def scoring_split(index: pd.Index, frac: float, signal: pd.Series) -> pd.Timestamp:
+    """
+    Where an evaluator's out-of-sample half starts: the shared split date,
+    or the strategy's own first out-of-sample day if that is later, so
+    the out-of-sample half never contains a day the strategy learned from.
+    """
+    shared = split_date(index, frac)
+    own = out_of_sample_start(signal)
+    return shared if own is None or own <= shared else own

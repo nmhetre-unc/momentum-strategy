@@ -174,6 +174,8 @@ def main():
             rolling_params["n_regimes"] = args.n_regimes
         rolling = rolling_walk_forward(df, strategy_fn, cost_bps=args.cost_bps, **rolling_params)
         print(f"\n--- Rolling walk-forward: {rolling['n_folds']} out-of-sample windows ---")
+        print(f"  Folds scored:     {rolling['n_folds_scored']} of {rolling['n_folds']} "
+              "(those where the strategy can hold a position)")
         print(f"  Folds positive:   {rolling['pct_folds_positive']:.0%}")
         print(f"  Median Sharpe:    {rolling['median_sharpe']:.2f}")
         print(f"  Sharpe std dev:   {rolling['sharpe_std']:.2f}")

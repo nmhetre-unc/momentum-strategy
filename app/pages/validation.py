@@ -240,8 +240,16 @@ if tab_rolling.open:
             "rerun on every widget change, at the cost of a noisier interval."
         )
 
+        # Folds where the strategy can hold a position on every test day; a
+        # learning strategy fitted once on the whole series is flat before its
+        # first out-of-sample day, and those folds say nothing about it.
+        folds = rolling["folds"][rolling["folds"]["can_hold_position"]]
         summary = st.columns(5)
-        summary[0].metric("Folds", rolling["n_folds"])
+        summary[0].metric(
+            "Folds", f"{rolling['n_folds_scored']} of {rolling['n_folds']}",
+            help="Folds scored: those where the strategy can hold a position on every "
+                 "test day.",
+        )
         summary[1].metric(
             "Folds positive", f"{rolling['pct_folds_positive']:.0%}",
             help="Consistency. More informative than the average — 10 of 12 positive "
@@ -262,7 +270,7 @@ if tab_rolling.open:
                  "one number across every fold, not an average of per-fold numbers.",
         )
 
-        chart = fold_chart(rolling["folds"])
+        chart = fold_chart(folds)
         if chart is not None:
             st.altair_chart(chart)
             chart_caption(
@@ -286,13 +294,13 @@ if tab_rolling.open:
                 level="info",
             )
 
-        folds = rolling["folds"]
         negative_folds = int((folds["sharpe_ratio"] <= 0).sum())
         fold_error = np.sqrt(252 / max(int(test_days), 1))
 
         if 0.5 <= rolling["pct_folds_positive"] < 0.65 and negative_folds >= 3:
             caveat(
-                f"**{negative_folds} of {rolling['n_folds']} folds were negative.** The strategy "
+                f"**{negative_folds} of {rolling['n_folds_scored']} folds were negative.** The "
+                f"strategy "
                 f"was above water in a bare majority of windows. Read that as a coin flip with a "
                 f"small tilt rather than as a working strategy — and note that a fold this long "
                 f"carries a Sharpe error bar of roughly ±{fold_error:.1f} on its own.",
@@ -301,7 +309,7 @@ if tab_rolling.open:
 
         # Is there a trend across the fold sequence? That's regime drift, and
         # it's invisible in the average. Correlate fold Sharpe against fold order.
-        if rolling["n_folds"] >= 6:
+        if rolling["n_folds_scored"] >= 6:
             order = np.arange(len(folds))
             trend = np.corrcoef(order, folds["sharpe_ratio"].to_numpy())[0, 1]
             if not np.isnan(trend) and trend < -0.5:

@@ -16,8 +16,7 @@ from scipy.stats import skew as _skew
 from qbt.analytics import TRADING_DAYS_PER_YEAR, full_report, performance_by_regime
 from qbt.backtest import run_backtest
 from qbt.stats import deflated_sharpe_ratio
-from qbt.timesplit import split_date as shared_split_date
-from qbt.timesplit import split_index
+from qbt.timesplit import out_of_sample_start, scoring_split, split_index
 
 
 def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.7,
@@ -28,13 +27,15 @@ def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.
     is in-sample, everything after is out-of-sample. Reports full metrics
     for each half separately. `n_boot` is forwarded to full_report(); it
     defaults to 0 (no Sharpe CI) since this runs in loops elsewhere.
+
+    The split is the date a fitted strategy's own train_frac split lands
+    on (qbt.timesplit), or the strategy's own first out-of-sample day if
+    that is later, so the out-of-sample half never holds a day the
+    strategy learned from.
     """
     signal = strategy_fn(df, **strategy_params)
     result = run_backtest(df, signal, cost_bps=cost_bps)
-
-    # The same date a fitted strategy's own train_frac split lands on
-    # (qbt.timesplit), so "out of sample" here is out of sample for it too.
-    split_date = shared_split_date(result.index, split_frac)
+    split_date = scoring_split(result.index, split_frac, signal)
 
     in_sample = result.loc[:split_date]
     out_sample = result.loc[split_date:]
@@ -69,10 +70,19 @@ def _rolling_folds(df: pd.DataFrame, strategy_fn, train_days: int, test_days: in
     train/test split. Only the resulting test-window slice of that
     fold-local backtest is kept; nothing from a fold's own train_days is
     ever reported.
+
+    A fold counts only if the strategy can hold a position on every day
+    of its test window, i.e. the signal's first out-of-sample day
+    (qbt.timesplit.out_of_sample_start) is on or before the first test
+    day. A learning strategy run once on the whole series is flat before
+    that day, and a fold of enforced zeros says nothing about it. Folds
+    that don't count stay in the table (`can_hold_position` False) but
+    are left out of every summary statistic.
     """
     if not refit_per_fold:
         signal = strategy_fn(df, **strategy_params)
         full_result = run_backtest(df, signal, cost_bps=cost_bps)
+        first_tradable = out_of_sample_start(signal)
     else:
         # A precomputed regime result (or anything else carrying a `.labels`
         # index aligned to the WHOLE series) can't be silently reused on a
@@ -103,8 +113,10 @@ def _rolling_folds(df: pd.DataFrame, strategy_fn, train_days: int, test_days: in
             fold_signal = strategy_fn(fold_df, **{**strategy_params, **fold_override})
             fold_result = run_backtest(fold_df, fold_signal, cost_bps=cost_bps)
             window = fold_result.iloc[train_days:train_days + test_days]
+            first_tradable = out_of_sample_start(fold_signal)
         else:
             window = full_result.iloc[start:start + test_days]
+        can_hold = first_tradable is None or first_tradable <= window.index[0]
 
         stats = full_report(window, n_boot=n_boot)
         folds.append({
@@ -117,17 +129,25 @@ def _rolling_folds(df: pd.DataFrame, strategy_fn, train_days: int, test_days: in
             "max_drawdown": stats["max_drawdown"],
             "exposure": stats["exposure"],
             "num_trades": stats["num_trades"],
+            "can_hold_position": can_hold,
         })
-        oos_windows.append(window)
+        if can_hold:
+            oos_windows.append(window)
         start += test_days
 
     fold_table = pd.DataFrame(folds)
+    if not oos_windows:
+        raise ValueError(
+            "No fold's test window lies after the strategy's first out-of-sample day, so "
+            "there is nothing to score. Use refit_per_fold=True or a longer history."
+        )
     stitched_result = pd.concat(oos_windows)
-    sharpes = fold_table["sharpe_ratio"]
+    sharpes = fold_table.loc[fold_table["can_hold_position"], "sharpe_ratio"]
 
     return {
         "folds": fold_table,
         "n_folds": len(fold_table),
+        "n_folds_scored": len(sharpes),
         "oos_equity": (1 + stitched_result["strategy_return"].fillna(0)).cumprod(),
         "oos_returns": stitched_result["strategy_return"].fillna(0),
         "oos_report": full_report(stitched_result, n_boot=n_boot),
@@ -174,6 +194,14 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
     without such a parameter (the plain rule-based ones) are unaffected:
     they have no fit step, so recomputing them on the fold's own window
     and reading off the test tail is already the correct causal behavior.
+
+    Every summary statistic (mean_sharpe and the rest, oos_report)
+    covers only the folds where the strategy can hold a position on
+    every test day; `n_folds_scored` says how many that is, and the fold
+    table's `can_hold_position` column which ones. For a learning
+    strategy run once on the whole series (refit_per_fold=False, or the
+    fixed-model comparison pass), folds before its first out-of-sample
+    day don't count.
 
     mean_sharpe reflects whichever mode refit_per_fold selects.
     mean_sharpe_fixed_model is always the single-fit variant's number:
@@ -230,6 +258,7 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
         fixed = _rolling_folds(df, strategy_fn, train_days, test_days, cost_bps, n_boot,
                                False, fold_override, strategy_params)
         mean_sharpe_fixed_model = fixed["mean_sharpe"]
+        fixed_model_folds = fixed["folds"]
         fitted_note = (
             "Each fold refit the strategy fresh on just its own training window and "
             "predicted only its own test window -- the honest walk-forward result. For "
@@ -241,6 +270,7 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
         primary = _rolling_folds(df, strategy_fn, train_days, test_days, cost_bps, n_boot,
                                  False, fold_override, strategy_params)
         mean_sharpe_fixed_model = primary["mean_sharpe"]
+        fixed_model_folds = primary["folds"]
         fitted_note = (
             "One fit on the whole series was reused across every fold's test window here, "
             "rather than refitting per fold. That's optimistic for any strategy with a "
@@ -252,6 +282,7 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
     return {
         **primary,
         "mean_sharpe_fixed_model": mean_sharpe_fixed_model,
+        "fixed_model_folds": fixed_model_folds,
         "refit_per_fold": refit_per_fold,
         "fitted_note": fitted_note,
     }
@@ -277,7 +308,7 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
     signal = strategy_fn(df, **(strategy_params or {}))
     result = run_backtest(df, signal, cost_bps=cost_bps, regimes=labels)
 
-    split_date = shared_split_date(result.index, split_frac)
+    split_date = scoring_split(result.index, split_frac, signal)
     in_sample, out_sample = result.loc[:split_date], result.loc[split_date:]
 
     def regime_mix(segment: pd.DataFrame) -> pd.Series:
@@ -302,15 +333,16 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
 
 def _oos_split(df: pd.DataFrame, fn, params: dict, split_frac: float,
                cost_bps: float, n_boot: int):
-    """Backtests one strategy and splits it in-sample/out-of-sample; returns
-    (in_stats, out_stats, out_of_sample strategy_return series)."""
+    """Backtests one strategy and splits it in-sample/out-of-sample (at
+    scoring_split); returns (in_stats, out_stats, out-of-sample
+    strategy_return series, split date)."""
     signal = fn(df, **params)
     result = run_backtest(df, signal, cost_bps=cost_bps)
-    split_date = shared_split_date(result.index, split_frac)
+    split_date = scoring_split(result.index, split_frac, signal)
     out_result = result.loc[split_date:]
     in_stats = full_report(result.loc[:split_date], n_boot=n_boot)
     out_stats = full_report(out_result, n_boot=n_boot)
-    return in_stats, out_stats, out_result["strategy_return"].fillna(0)
+    return in_stats, out_stats, out_result["strategy_return"].fillna(0), split_date
 
 
 def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0.7,
@@ -339,7 +371,9 @@ def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0
     qbt.stats.deflated_sharpe_ratio(), using each strategy's own
     out-of-sample skew/kurtosis and per-period Sharpe, with
     `sharpe_benchmark` set to buy-and-hold's own out-of-sample per-period
-    Sharpe over the SAME window: P(true Sharpe beats the benchmark),
+    Sharpe over the SAME window (each strategy's own, which starts later
+    than the shared split for a strategy that learns past it; see
+    qbt.timesplit.scoring_split): P(true Sharpe beats the benchmark),
     corrected for having picked the best of `n_trials` candidates and for
     non-normal returns. The benchmark's own `deflated_sharpe` cell is
     left as NaN -- comparing it to itself collapses the formula's
@@ -353,16 +387,20 @@ def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0
     """
     n_trials = len(strategies)
 
-    bench_in, bench_out, bench_returns = _oos_split(
+    bench_in, bench_out, bench_returns, _ = _oos_split(
         df, lambda d: pd.Series(1.0, index=d.index), {}, split_frac, cost_bps, n_boot
     )
-    bench_sharpe_pp = bench_out["sharpe_ratio"] / np.sqrt(TRADING_DAYS_PER_YEAR)
+    bench_result = run_backtest(df, pd.Series(1.0, index=df.index), cost_bps=cost_bps)
 
     def make_row(name: str, in_stats: dict, out_stats: dict,
-                out_returns: pd.Series, is_benchmark: bool) -> dict:
+                out_returns: pd.Series, is_benchmark: bool,
+                split_date: pd.Timestamp | None = None) -> dict:
         if is_benchmark:
             deflated = np.nan
         else:
+            bench_window = bench_result.loc[split_date:]
+            bench_sharpe_pp = (full_report(bench_window, n_boot=0)["sharpe_ratio"]
+                               / np.sqrt(TRADING_DAYS_PER_YEAR))
             sharpe_pp = out_stats["sharpe_ratio"] / np.sqrt(TRADING_DAYS_PER_YEAR)
             deflated = deflated_sharpe_ratio(
                 sharpe=sharpe_pp, n_trials=n_trials, skew=float(_skew(out_returns)),
@@ -387,10 +425,11 @@ def compare_strategies(df: pd.DataFrame, strategies: dict, split_frac: float = 0
     for name, entry in strategies.items():
         fn, params = entry if isinstance(entry, tuple) else (entry, {})
         try:
-            in_stats, out_stats, out_returns = _oos_split(
+            in_stats, out_stats, out_returns, split_date = _oos_split(
                 df, fn, params, split_frac, cost_bps, n_boot
             )
-            rows.append(make_row(name, in_stats, out_stats, out_returns, is_benchmark=False))
+            rows.append(make_row(name, in_stats, out_stats, out_returns, is_benchmark=False,
+                                 split_date=split_date))
         except Exception as exc:  # keep one broken strategy from killing the table
             rows.append({
                 "strategy": name, "is_sharpe": np.nan, "oos_sharpe": np.nan,

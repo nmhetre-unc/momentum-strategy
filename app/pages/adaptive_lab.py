@@ -570,17 +570,18 @@ else:
 # ---------- Honest evaluation ----------
 st.subheader("Out-of-sample", divider="gray")
 st.caption(
-    "The adaptive wrappers learn their rules from the first 60% of history; this split holds "
-    "out the last 30%, so the held-out period is genuinely unseen by the rule as well as by "
-    "the strategy."
+    "The adaptive wrappers learn their rules from the first 60% of history and their regime "
+    "model from about the first 70%, and hold no position until both are behind them. The "
+    "split below is that first out-of-sample day, so the held-out period is genuinely unseen "
+    "by the rule, the regime model and the strategy."
 )
 wf = evaluate_out_of_sample(df, ADAPTIVE_STRATEGIES[adaptive_name], **params)
 wf_left, wf_right = st.columns(2)
 with wf_left:
     st.markdown(f"**In-sample** (to {wf['split_date']})")
     show_metric_table(wf["in_sample"], key="ad_is", caption=(
-        "Metrics over the period the adaptive rule learned from.",
-        "The automatic choices were made here, so these numbers already know the answers.",
+        "The period the adaptive rule and its regime model learned from.",
+        "The wrapper holds no position here, so it can't be scored on what it learned from.",
     ))
 with wf_right:
     st.markdown(f"**Out-of-sample** (from {wf['split_date']})")
