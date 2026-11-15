@@ -30,7 +30,7 @@ Sharpe ratios following Bailey & López de Prado (2014).
   leases and fencing, and Docker Compose. With 4 workers it runs 926
   backtests/min, a job starts 8 ms after it is submitted at 50% load, and a
   SIGKILLed worker loses no jobs. See [Running as a service](#running-as-a-service).
-- 583 tests at 93% line coverage (89% for the engine, 98% for the service).
+- 617 tests at 93% line coverage (90% for the engine, 98% for the service).
   CI runs on every push: it builds the C++ extension, runs the suite against
   Postgres with coverage gates, and runs an end-to-end test of the Compose
   stack.
@@ -554,11 +554,11 @@ Run the CLI:
 python main.py --ticker SPY --strategy momentum --rolling
 ```
 
-Run the tests (583 tests, 93% line coverage). The service's tests need
+Run the tests (617 tests, 93% line coverage). The service's tests need
 Postgres, which Compose provides:
 
 ```bash
-pip install -e ".[dev,api,ui]"
+pip install -e ".[dev,api,ui,ml]"   # ml: LightGBM, for the C2 monthly models
 docker compose up -d db
 export DATABASE_URL=postgresql+psycopg://qbt:qbt@localhost:5432/qbt
 pytest --cov=src/qbt --cov=src/qbt_service

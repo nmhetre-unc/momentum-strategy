@@ -15,7 +15,18 @@ Regime features come from the existing models in qbt.regime, used only
 in their causal modes: `rules` fits nothing, and the HMM runs through
 detect_regimes_walk_forward(), which labels each day with a model
 fitted only on earlier days and decodes with the forward filter.
+
+The HMM run is by far the slowest feature (dozens of refits) and is the
+same for every target built from the same prices, so its output is
+cached in memory, keyed by a hash of the price frame and the HMM
+arguments: it is computed once per dataset however many targets,
+models or folds use it. Each daily value depends only on earlier days,
+so reusing it across folds leaks nothing. hmm_cache_info() reports hits
+and computations; clear_hmm_cache() empties it.
 """
+
+import hashlib
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -68,10 +79,46 @@ def _regime_rules(df: pd.DataFrame) -> pd.Series:
     return labels.where(labels != UNKNOWN).astype(float)
 
 
+HMM_CACHE_SIZE = 8
+_hmm_cache: OrderedDict[str, pd.DataFrame] = OrderedDict()
+_hmm_stats = {"hits": 0, "computed": 0}
+
+
+def _hmm_cache_key(df: pd.DataFrame, kwargs: dict) -> str:
+    digest = hashlib.sha256()
+    digest.update(pd.util.hash_pandas_object(df, index=True).to_numpy().tobytes())
+    digest.update(",".join(map(str, df.columns)).encode())
+    digest.update(repr(sorted(kwargs.items())).encode())
+    return digest.hexdigest()
+
+
+def hmm_cache_info() -> dict:
+    return {**_hmm_stats, "entries": len(_hmm_cache)}
+
+
+def clear_hmm_cache() -> None:
+    _hmm_cache.clear()
+    _hmm_stats.update(hits=0, computed=0)
+
+
 def _regime_hmm(df: pd.DataFrame, hmm_kwargs: dict | None) -> pd.DataFrame:
     kwargs = {"n_regimes": HMM_STATES, **(hmm_kwargs or {})}
     if kwargs["n_regimes"] != HMM_STATES:
         raise ValueError(f"hmm features are built for n_regimes={HMM_STATES}")
+    key = _hmm_cache_key(df, kwargs)
+    if key in _hmm_cache:
+        _hmm_cache.move_to_end(key)
+        _hmm_stats["hits"] += 1
+        return _hmm_cache[key].copy()
+    out = _compute_regime_hmm(df, kwargs)
+    _hmm_stats["computed"] += 1
+    _hmm_cache[key] = out.copy()
+    while len(_hmm_cache) > HMM_CACHE_SIZE:
+        _hmm_cache.popitem(last=False)
+    return out
+
+
+def _compute_regime_hmm(df: pd.DataFrame, kwargs: dict) -> pd.DataFrame:
     result = detect_regimes_walk_forward(df, method="hmm", **kwargs)
     out = pd.DataFrame(index=df.index)
     out["regime_hmm"] = result.labels.where(result.labels != UNKNOWN).astype(float)

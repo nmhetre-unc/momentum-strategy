@@ -29,6 +29,11 @@ ui = [
     "altair>=5.4",
     "streamlit>=1.62",
 ]
+# The C2 monthly models (qbt.ml.models imports it lazily). Not a base
+# dependency: the service and the Streamlit deploy never train it.
+ml = [
+    "lightgbm>=4.5",
+]
 dev = [
     "pytest",
     "pytest-cov",

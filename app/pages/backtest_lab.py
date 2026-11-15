@@ -24,6 +24,8 @@ from components import (
     metric_row,
     position_chart,
     require_data,
+    scored_window,
+    scored_window_note,
     show_metric_table,
     table_caption,
 )
@@ -210,19 +212,23 @@ explicitly, on risk-adjusted terms — not by leaving the benchmark off the char
 # ---------- Run ----------
 signal = STRATEGIES[strategy_name](df, **params)
 result = run_backtest(df, signal, cost_bps=cost_bps)
-stats = full_report(result)
+# A strategy that learns (ml_direction) is scored from its first
+# out-of-sample day only; every comparison below uses the same window.
+scored, scored_from = scored_window(signal, result)
+stats = full_report(scored)
 
 # Same strategy with costs switched off, so the cost question in the
 # guided interpretation below is answered with a number rather than a guess.
 free_result = run_backtest(df, signal, cost_bps=0.0)
-free_stats = full_report(free_result)
+free_stats = full_report(scored_window(signal, free_result)[0])
 
-benchmark = result.copy()
-benchmark["strategy_return"] = result["daily_return"]
+benchmark = scored.copy()
+benchmark["strategy_return"] = scored["daily_return"]
 benchmark["position"] = 1.0
 benchmark_stats = full_report(benchmark)
 
 st.subheader(f"{ticker} · {strategy_name}", divider="gray")
+scored_window_note(scored_from)
 metric_row(stats, ["total_return", "sharpe_ratio", "max_drawdown", "exposure"])
 
 # Every remaining metric, each with its tooltip from METRIC_DOCS. Hover any
@@ -308,7 +314,7 @@ if stats["sharpe_ratio"] < 0.5:
     caveat(
         f"**Sharpe of {stats['sharpe_ratio']:.2f}** is weak — below roughly 0.5 the return is hard "
         f"to distinguish from noise given how wide the error bar on a Sharpe ratio is "
-        f"(about ±{np.sqrt(252 / max(len(result), 1)):.2f} over this sample). Don't tune "
+        f"(about ±{np.sqrt(252 / max(len(scored), 1)):.2f} over this sample). Don't tune "
         f"parameters until it looks better; that is how overfitting starts.",
         level="info",
     )
@@ -660,6 +666,8 @@ if show_regimes and regimes is not None:
         f"Regime model: **{regimes.method}**, {fit_description} · configure it in the sidebar."
     )
     regime_result = run_backtest(df, signal, cost_bps=cost_bps, regimes=regimes.labels)
+    regime_result, _ = scored_window(signal, regime_result)
+    scored_window_note(scored_from, "The regime split covers")
     table = performance_by_regime(regime_result, regimes.labels, regimes.names)
 
     if table.empty:

@@ -29,6 +29,7 @@ from metric_docs import METRIC_DOCS
 
 from qbt.analytics import drawdown_series
 from qbt.regime import regime_episodes
+from qbt.timesplit import out_of_sample_start
 
 # --------------------------------------------------------------------------
 # Palette
@@ -786,3 +787,27 @@ def require_regimes():
     except ValueError as exc:
         st.warning(str(exc), icon=":material/warning:")
         st.stop()
+
+
+def scored_window(signal: pd.Series,
+                  result: pd.DataFrame) -> tuple[pd.DataFrame, pd.Timestamp | None]:
+    """
+    The part of a backtest a strategy may be scored on: all of it for a
+    rule that learns nothing, and from its first out-of-sample day on for
+    one that learns from history (qbt.timesplit.out_of_sample_start).
+    Before that day it holds no position, so scoring those days would
+    grade it on data it learned from. Returns (result slice, that day or
+    None).
+    """
+    start = out_of_sample_start(signal)
+    return (result if start is None else result.loc[start:]), start
+
+
+def scored_window_note(start: pd.Timestamp | None, what: str = "Metrics") -> None:
+    """One caption saying which window the numbers below cover."""
+    if start is not None:
+        st.caption(
+            f":material/schedule: {what} cover {start.date()} on, this strategy's out-of-sample "
+            "window. Before it the strategy learns from the data and holds no position, so "
+            "those days can't be scored. Comparisons on this page use the same window."
+        )
