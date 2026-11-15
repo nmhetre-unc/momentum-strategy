@@ -11,6 +11,7 @@ much.
     submit_poisson   POST /backtests, Poisson arrivals at a mean rate
     submit_burst     POST /backtests as fast as `concurrency` allows
     get_fixed_rate   GET /backtests/{id} at a fixed rate
+    predict_fixed_rate  POST /predict at a fixed rate
 """
 
 import asyncio
@@ -151,3 +152,18 @@ async def get_fixed_rate(base_url: str, job_ids: Sequence[str], rate: float, dur
             return Sample(due, sent, time.monotonic(), response.status_code, ids[i])
 
         return await _open_loop([i / rate for i in range(len(ids))], get)
+
+
+async def predict_fixed_rate(base_url: str, rate: float, duration: float,
+                             connections: int = 64) -> Run:
+    """POST /predict (the latest model) at a fixed rate; open loop like the others."""
+    async with _client(base_url, connections) as client:
+        async def predict(i: int, due: float) -> Sample:
+            sent = time.monotonic()
+            try:
+                response = await client.post("/predict", json={})
+            except httpx2.TransportError:
+                return Sample(due, sent, time.monotonic(), None)
+            return Sample(due, sent, time.monotonic(), response.status_code)
+
+        return await _open_loop([i / rate for i in range(int(rate * duration))], predict)

@@ -23,8 +23,13 @@ Determinism: LightGBM runs with deterministic=True, force_row_wise=True,
 n_jobs=1 and a fixed seed; logistic regression with lbfgs is
 deterministic. LightGBM is imported lazily, so the rest of qbt doesn't
 need it (it is the `ml` extra).
+
+Serving (C3): fit() returns a FittedModel; to_artifact() turns a LightGBM
+one into bytes (JSON plus LightGBM's text format, never pickle) and
+from_artifact() loads them back to bit-identical predictions.
 """
 
+import json
 from dataclasses import dataclass, field
 from itertools import product
 from typing import Any
@@ -86,7 +91,7 @@ def config_id(model: str, params: dict[str, Any]) -> str:
     return model + "(" + ",".join(f"{k}={v}" for k, v in params.items()) + ")"
 
 
-def _estimator(model: str, params: dict[str, Any], columns: list[str]) -> Any:
+def _estimator(model: str, params: dict[str, Any], columns: list[str], seed: int) -> Any:
     if model == "logistic":
         categorical = [c for c in columns if c in CATEGORICAL_FEATURES]
         numeric = [c for c in columns if c not in CATEGORICAL_FEATURES]
@@ -99,35 +104,118 @@ def _estimator(model: str, params: dict[str, Any], columns: list[str]) -> Any:
         return Pipeline([("encode", encode),
                          ("model", LogisticRegression(C=params["C"], max_iter=10_000))])
     from lightgbm import LGBMClassifier
-    return LGBMClassifier(**LIGHTGBM_FIXED, **params)
+    return LGBMClassifier(**(LIGHTGBM_FIXED | {"random_state": seed}), **params)
 
 
-def fit_predict_proba(model: str, params: dict[str, Any], X_train: pd.DataFrame,
-                      y_train: pd.Series, X_test: pd.DataFrame,
-                      classes: tuple[float, ...]) -> np.ndarray:
+def _booster_proba(booster: Any, values: np.ndarray) -> np.ndarray:
+    """A bare lightgbm.Booster's class probabilities, shaped as LGBMClassifier returns them."""
+    raw = np.asarray(booster.predict(values))
+    return np.vstack((1.0 - raw, raw)).T if raw.ndim == 1 else raw
+
+
+@dataclass(frozen=True)
+class FittedModel:
     """
-    Fits on (X_train, y_train) and returns P(class) for every row of
-    X_test over `classes`, floored at PROB_FLOOR and renormalized. A
-    training set with a single class predicts that class (no model can
-    be fitted).
+    A fitted classifier that returns probabilities over the target's full
+    class list, floored at PROB_FLOOR and renormalized. `estimator` is a
+    fitted scikit-learn-style estimator, a lightgbm.Booster (a model loaded
+    from an artifact), or None when the training set had a single class.
+    """
+
+    model: str
+    classes: tuple[float, ...]
+    columns: tuple[str, ...]
+    fitted_classes: tuple[float, ...]     # the classes the estimator saw, in its order
+    estimator: Any = None
+
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+        if tuple(X.columns) != self.columns:
+            raise ValueError(f"expected columns {list(self.columns)}, got {list(X.columns)}")
+        out = np.zeros((len(X), len(self.classes)))
+        if self.estimator is None:
+            out[:, self.classes.index(self.fitted_classes[0])] = 1.0
+        else:
+            # Plain arrays in and out: column names never reach either library,
+            # so there is no feature-name check to drift between fit and predict.
+            values = X.to_numpy(dtype=float)
+            proba = (self.estimator.predict_proba(values)
+                     if hasattr(self.estimator, "predict_proba")
+                     else _booster_proba(self.estimator, values))
+            for j, c in enumerate(self.fitted_classes):
+                out[:, self.classes.index(c)] = proba[:, j]
+        out = np.maximum(out, PROB_FLOOR)
+        return out / out.sum(axis=1, keepdims=True)
+
+
+def fit(model: str, params: dict[str, Any], X_train: pd.DataFrame, y_train: pd.Series,
+        classes: tuple[float, ...], seed: int = SEED) -> FittedModel:
+    """
+    Fits `model` with `params` on (X_train, y_train). A training set with
+    a single class gives a model that predicts that class (no estimator
+    can be fitted). `seed` is LightGBM's random_state.
     """
     present = np.unique(y_train.to_numpy(dtype=float))
     if not set(present) <= set(classes):
         raise ValueError(f"labels {present} outside classes {classes}")
-    out = np.zeros((len(X_test), len(classes)))
+    columns = tuple(X_train.columns)
     if len(present) == 1:
-        out[:, classes.index(float(present[0]))] = 1.0
-    else:
-        estimator = _estimator(model, params, list(X_train.columns))
-        # Plain arrays in and out: column names never reach either library,
-        # so there is no feature-name check to drift between fit and predict.
-        estimator.fit(X_train.to_numpy(dtype=float), y_train.to_numpy(dtype=float))
-        proba = estimator.predict_proba(X_test.to_numpy(dtype=float))
-        fitted = [float(c) for c in estimator.classes_]
-        for j, c in enumerate(fitted):
-            out[:, classes.index(c)] = proba[:, j]
-    out = np.maximum(out, PROB_FLOOR)
-    return out / out.sum(axis=1, keepdims=True)
+        return FittedModel(model, tuple(classes), columns, (float(present[0]),))
+    estimator = _estimator(model, params, list(columns), seed)
+    estimator.fit(X_train.to_numpy(dtype=float), y_train.to_numpy(dtype=float))
+    return FittedModel(model, tuple(classes), columns,
+                       tuple(float(c) for c in estimator.classes_), estimator)
+
+
+def fit_predict_proba(model: str, params: dict[str, Any], X_train: pd.DataFrame,
+                      y_train: pd.Series, X_test: pd.DataFrame,
+                      classes: tuple[float, ...], seed: int = SEED) -> np.ndarray:
+    """fit(), then P(class) for every row of X_test over `classes`."""
+    return fit(model, params, X_train, y_train, classes, seed).predict_proba(X_test)
+
+
+# ---- artifacts ----
+
+ARTIFACT_FORMAT = "qbt-ml-model/1"
+
+
+def to_artifact(fitted: FittedModel) -> bytes:
+    """
+    Serializes a fitted LightGBM model as canonical JSON (sorted keys, no
+    whitespace) holding the class bookkeeping and LightGBM's own text
+    model format. No pickle: loading an artifact runs no code. LightGBM
+    writes its text format deterministically and reads it back to
+    bit-identical predictions, so the same fit gives the same bytes.
+    Logistic regression has no artifact format (it isn't served).
+    """
+    if fitted.model != "lightgbm":
+        raise NotImplementedError(f"no artifact format for {fitted.model!r}; only lightgbm")
+    booster = None if fitted.estimator is None else fitted.estimator.booster_.model_to_string()
+    document = {
+        "format": ARTIFACT_FORMAT, "model": fitted.model,
+        "classes": list(fitted.classes), "columns": list(fitted.columns),
+        "fitted_classes": list(fitted.fitted_classes), "prob_floor": PROB_FLOOR,
+        "lightgbm_model": booster,
+    }
+    return json.dumps(document, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=True, allow_nan=False).encode()
+
+
+def from_artifact(artifact: bytes) -> FittedModel:
+    """The model to_artifact() serialized; its predictions are bit-identical."""
+    document = json.loads(artifact)
+    if document.get("format") != ARTIFACT_FORMAT:
+        raise ValueError(f"unknown artifact format {document.get('format')!r}")
+    if document["prob_floor"] != PROB_FLOOR:
+        raise ValueError(f"artifact floors at {document['prob_floor']}, this code at "
+                         f"{PROB_FLOOR}")
+    booster = None
+    if document["lightgbm_model"] is not None:
+        from lightgbm import Booster
+        booster = Booster(model_str=document["lightgbm_model"])
+        if booster.num_feature() != len(document["columns"]):
+            raise ValueError("the LightGBM model and the artifact's columns disagree")
+    return FittedModel(document["model"], tuple(document["classes"]),
+                       tuple(document["columns"]), tuple(document["fitted_classes"]), booster)
 
 
 @dataclass
@@ -139,7 +227,7 @@ class TuningResult:
 def tune(model: str, X: pd.DataFrame, y: pd.Series, t0: pd.Series, t1: pd.Series,
          classes: tuple[float, ...], n_splits: int = INNER_SPLITS,
          embargo: int = EMBARGO_MONTHS,
-         grid: list[dict[str, Any]] | None = None) -> TuningResult:
+         grid: list[dict[str, Any]] | None = None, seed: int = SEED) -> TuningResult:
     """
     Scores every configuration of `grid` (default: `model`'s grid) on
     purged k-fold splits of (X, y) -- which must be one outer fold's
@@ -156,7 +244,8 @@ def tune(model: str, X: pd.DataFrame, y: pd.Series, t0: pd.Series, t1: pd.Series
         y_true, probas = [], []
         for fold in inner:
             probas.append(fit_predict_proba(model, params, X.iloc[fold.train],
-                                            y.iloc[fold.train], X.iloc[fold.test], classes))
+                                            y.iloc[fold.train], X.iloc[fold.test], classes,
+                                            seed))
             y_true.append(y.iloc[fold.test].to_numpy(dtype=float))
         yt, pr = np.concatenate(y_true), np.vstack(probas)
         trials.append({
@@ -182,7 +271,8 @@ class WalkForwardPredictions:
 
 def walk_forward_predict(model: str, X: pd.DataFrame, y: pd.Series, t1: pd.Series,
                          folds: list[Fold], target: str,
-                         grid: list[dict[str, Any]] | None = None) -> WalkForwardPredictions:
+                         grid: list[dict[str, Any]] | None = None,
+                         seed: int = SEED) -> WalkForwardPredictions:
     """
     Nested walk-forward: tune on inner folds of each outer training set,
     refit, predict. `grid` overrides `model`'s grid.
@@ -193,9 +283,9 @@ def walk_forward_predict(model: str, X: pd.DataFrame, y: pd.Series, t1: pd.Serie
     for fold in folds:
         train = fold.train
         tuned = tune(model, X.iloc[train], y.iloc[train], t0.iloc[train], t1.iloc[train],
-                     classes, grid=grid)
+                     classes, grid=grid, seed=seed)
         proba = fit_predict_proba(model, tuned.params, X.iloc[train], y.iloc[train],
-                                  X.iloc[fold.test], classes)
+                                  X.iloc[fold.test], classes, seed)
         index = X.index[fold.test]
         pieces.append(pd.DataFrame(proba, index=index, columns=list(classes)))
         fold_numbers.append(pd.Series(fold.number, index=index))

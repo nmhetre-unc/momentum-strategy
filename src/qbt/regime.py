@@ -33,6 +33,9 @@ REGIME_METHODS = ("rules", "kmeans", "gmm", "hmm", "supervised")
 # Label used for rows that don't have enough history to be classified.
 # Downstream code treats it as "no opinion" and stays flat.
 UNKNOWN = -1
+# The `rules` method's four quadrants (see _rules_labels).
+RULES_REGIME_NAMES = {0: "Calm Uptrend", 1: "Quiet Range", 2: "Volatile Rally",
+                      3: "Crisis / Selloff"}
 
 REGIME_METHOD_DOCS = {
     "rules": (
@@ -487,8 +490,7 @@ def _rules_labels(features: pd.DataFrame, valid_index: pd.Index) -> tuple:
     ids.loc[valid_index[(high_vol & uptrend).to_numpy()]] = 2
     ids.loc[valid_index[(high_vol & ~uptrend).to_numpy()]] = 3
 
-    names = {0: "Calm Uptrend", 1: "Quiet Range", 2: "Volatile Rally", 3: "Crisis / Selloff"}
-    return ids, names, None, None
+    return ids, dict(RULES_REGIME_NAMES), None, None
 
 
 def _supervised_labels(df: pd.DataFrame, X: pd.DataFrame, fit_index: pd.Index,

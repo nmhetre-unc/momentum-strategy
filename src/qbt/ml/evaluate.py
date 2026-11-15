@@ -25,7 +25,13 @@ import numpy as np
 import pandas as pd
 from scipy.stats import binomtest
 
-from qbt.ml.baselines import predict_buy_and_hold, predict_majority, predict_previous
+from qbt.ml.baselines import (
+    conditional_prior_proba,
+    predict_buy_and_hold,
+    predict_majority,
+    predict_previous,
+    predict_rules_regime,
+)
 from qbt.ml.features import month_end_dates, monthly_features
 from qbt.ml.labels import (
     direction_labels,
@@ -37,6 +43,11 @@ from qbt.ml.labels import (
 from qbt.ml.splits import Fold, fold_table
 
 TARGETS = ("direction", "regime")
+REGIME_CLASSES = (0.0, 1.0, 2.0, 3.0)
+# The baseline a model has to beat (C2): for direction, always up (the
+# majority class, i.e. buy-and-hold); for regime, the rules-regime lookup
+# table, which beats both the raw rules regime and every C2 model.
+BAR = {"direction": "majority_class", "regime": "rules_regime_lookup"}
 MONTHS_PER_YEAR = 12
 WILSON_Z = 1.959963984540054  # two-sided 95%
 
@@ -79,6 +90,35 @@ def build_dataset(df: pd.DataFrame, target: str = "direction", include_hmm: bool
     keep = X.notna().all(axis=1) & y.notna() & previous.notna()
     return MonthlyDataset(target=target, X=X[keep], y=y[keep], t1=t1[keep],
                           previous=previous[keep], forward_return=fwd[keep])
+
+
+def baseline_predictions(ds: MonthlyDataset, folds: list[Fold],
+                         prob_floor: float = 1e-4) -> pd.DataFrame:
+    """
+    Per test month: fold, y, and every classification baseline's
+    prediction, each from what its fold may see. Regime adds the rules
+    regime on the decision date and rules_regime_lookup: the most frequent
+    next-month regime among training months with the same rules regime on
+    their decision date (ties to the lower class; an unseen regime falls
+    back to the training class frequencies).
+    """
+    pieces = []
+    for fold in folds:
+        cols = {"fold": fold.number,
+                "y": ds.y.iloc[fold.test].to_numpy(dtype=float),
+                "majority_class": predict_majority(ds.y, fold),
+                "previous_label": predict_previous(ds.previous, fold)}
+        if ds.target == "regime":
+            cols["rules_regime_at_decision"] = predict_rules_regime(ds.X, fold)
+            rules = ds.X["regime_rules"]
+            lookup = conditional_prior_proba(ds.y.iloc[fold.train], rules.iloc[fold.train],
+                                             rules.iloc[fold.test], REGIME_CLASSES, prob_floor)
+            cols["rules_regime_lookup"] = np.asarray(REGIME_CLASSES)[lookup.argmax(axis=1)]
+        pieces.append(pd.DataFrame(cols, index=ds.y.index[fold.test]))
+    out = pd.concat(pieces)
+    if not out.index.is_unique:
+        raise ValueError("test blocks overlap; each month must be tested once")
+    return out
 
 
 # ---- statistics ----

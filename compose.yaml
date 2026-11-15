@@ -3,7 +3,9 @@
 #   docker compose up -d --build                  db, migrate, api, 1 worker
 #   docker compose up -d --scale worker=4         more workers
 #   docker compose run --rm ingest SPY --start 2005-01-01 --end 2025-01-01
+#   docker compose run --rm train SPY --start 2008-01-01 --end 2025-01-01
 #   curl -s localhost:8000/strategies
+#   curl -s -X POST localhost:8000/predict
 #   docker compose down                           stop (add -v to drop the data)
 #
 # Only the database for local development and the tests:
@@ -129,6 +131,17 @@ services:
   ingest:
     <<: *service
     entrypoint: ["python", "-m", "qbt_service.ingest"]
+    command: ["--help"]
+    depends_on: *after-migrate
+    restart: "no"
+    profiles: ["tools"]
+
+  # One-shot: train a model on a stored snapshot and register a new version
+  # (python -m qbt_service.train). Ingest the range first.
+  #   docker compose run --rm train SPY --start 2008-01-01 --end 2025-01-01
+  train:
+    <<: *service
+    entrypoint: ["python", "-m", "qbt_service.train"]
     command: ["--help"]
     depends_on: *after-migrate
     restart: "no"

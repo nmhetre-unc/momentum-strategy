@@ -73,14 +73,13 @@ from ml_c1_report import (  # noqa: E402
 from qbt.data import fetch_ohlcv  # noqa: E402
 from qbt.ml.baselines import (  # noqa: E402
     conditional_prior_proba,
-    predict_majority,
-    predict_previous,
-    predict_rules_regime,
     prior_proba,
 )
 from qbt.ml.evaluate import (  # noqa: E402
+    BAR,
     MonthlyDataset,
     balanced_accuracy,
+    baseline_predictions,
     build_dataset,
     mcnemar_exact,
     strategy_returns,
@@ -106,7 +105,6 @@ from qbt.ml.models import (  # noqa: E402
     LIGHTGBM_FIXED,
     MODELS,
     PROB_FLOOR,
-    REGIME_CLASSES,
     SEED,
     WalkForwardPredictions,
     classes_for,
@@ -122,7 +120,6 @@ C1_FILE = OUT_DIR / "c1_baselines.json"
 TARGETS = ("direction", "regime")
 FEATURE_SETS = {"base": False, "base+hmm": True}
 ALPHA = 0.05
-BAR = {"direction": "majority_class", "regime": "rules_regime_lookup"}
 # The grids before they were widened (see qbt.ml.models): run on the base
 # features for both targets, then discarded. Counted as trials.
 FIRST_PASS: dict[str, Any] = {
@@ -136,23 +133,6 @@ FIRST_PASS: dict[str, Any] = {
 }
 SERIES_COLORS = {"logistic": "#2a78d6", "lightgbm": "#eb6834"}   # categorical slots 1, 2
 LINESTYLES = {"base": "-", "base+hmm": "--"}
-
-
-def _baseline_predictions(ds: MonthlyDataset, folds: list[Fold]) -> pd.DataFrame:
-    pieces = []
-    for fold in folds:
-        cols = {"fold": fold.number,
-                "y": ds.y.iloc[fold.test].to_numpy(dtype=float),
-                "majority_class": predict_majority(ds.y, fold),
-                "previous_label": predict_previous(ds.previous, fold)}
-        if ds.target == "regime":
-            cols["rules_regime_at_decision"] = predict_rules_regime(ds.X, fold)
-            rules = ds.X["regime_rules"]
-            lookup = conditional_prior_proba(ds.y.iloc[fold.train], rules.iloc[fold.train],
-                                             rules.iloc[fold.test], REGIME_CLASSES, PROB_FLOOR)
-            cols["rules_regime_lookup"] = np.asarray(REGIME_CLASSES)[lookup.argmax(axis=1)]
-        pieces.append(pd.DataFrame(cols, index=ds.y.index[fold.test]))
-    return pd.concat(pieces)
 
 
 def _references(ds: MonthlyDataset, folds: list[Fold]) -> dict[str, np.ndarray]:
@@ -475,7 +455,7 @@ def main() -> None:
     for (target, feature_set), ds in datasets.items():
         folds = walk_forward_splits(ds.t0, ds.t1, min_train=MIN_TRAIN,
                                     test_size=TEST_SIZE, embargo=EMBARGO)
-        base = _baseline_predictions(ds, folds)
+        base = baseline_predictions(ds, folds, PROB_FLOOR)
         _check_against_c1(c1, target, FEATURE_SETS[feature_set], base)
         baselines = [c for c in base.columns if c not in ("fold", "y")]
         refs = _references(ds, folds)

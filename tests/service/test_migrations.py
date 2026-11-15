@@ -14,6 +14,7 @@ from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import Column, MetaData, Text, inspect, text
+from sqlalchemy import exc as sa_exc
 
 from qbt_service.db import metadata
 
@@ -21,7 +22,8 @@ from .conftest import alembic_config, migrate
 
 pytestmark = pytest.mark.db
 
-TABLES = {"price_series", "price_bars", "strategies", "jobs", "results", "metrics"}
+TABLES = {"price_series", "price_bars", "strategies", "jobs", "results", "metrics",
+          "model_registry", "predictions"}
 
 
 def _diff(engine, target: MetaData) -> list:
@@ -31,7 +33,7 @@ def _diff(engine, target: MetaData) -> list:
 
 
 def test_single_head():
-    assert ScriptDirectory.from_config(alembic_config()).get_heads() == ["0003"]
+    assert ScriptDirectory.from_config(alembic_config()).get_heads() == ["0004"]
 
 
 def test_upgrade_downgrade_upgrade(empty_engine):
@@ -69,6 +71,69 @@ def test_0003_backfills_version_1_and_refuses_a_lossy_downgrade(empty_engine):
     migrate(empty_engine, "downgrade", "0002")
     with empty_engine.connect() as conn:
         assert "version" not in {c["name"] for c in inspect(conn).get_columns("strategies")}
+
+
+def _registry_row(**overrides) -> dict:
+    sha = "decode(repeat('ab', 32), 'hex')"
+    values = {
+        "version": "1", "model_type": "'lightgbm'", "target": "'regime'",
+        "feature_set": "'base'", "features": "ARRAY['ret_1m']", "classes": "ARRAY[0.0, 1.0]",
+        "hyperparameters": "'{}'", "training_config": "'{}'", "seed": "0",
+        "price_series_id": "1", "train_start": "'2015-01-30'", "train_end": "'2020-11-30'",
+        "train_label_end": "'2020-12-31'", "n_train": "60", "oos_accuracy": "0.8",
+        "oos_months": "24", "baseline_name": "'rules_regime_lookup'",
+        "baseline_accuracy": "0.82", "beats_baseline": "false", "metrics": "'{}'",
+        "serving_as_of": "'2020-12-31'", "serving_features": "'{}'",
+        "serving_features_sha256": sha, "artifact_format": "'qbt-ml-model/1'",
+        "artifact": "'\\x00'::bytea", "artifact_sha256": sha, "library_versions": "'{}'",
+    } | overrides
+    return values
+
+
+def _insert_registry_row(conn, **overrides) -> None:
+    values = _registry_row(**overrides)
+    conn.execute(text(f"INSERT INTO model_registry ({', '.join(values)}) "
+                      f"VALUES ({', '.join(values.values())})"))
+
+
+def test_0004_round_trip_leaves_earlier_tables_alone(empty_engine):
+    migrate(empty_engine, "upgrade", "0003")
+    with empty_engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO price_series (ticker, fetch_start, fetch_end, first_date, last_date, "
+            "n_bars, content_sha256) VALUES ('SPY', '2008-01-01', '2021-01-01', '2008-01-02', "
+            "'2020-12-31', 3000, decode(repeat('cd', 32), 'hex'))"))
+    before = set(inspect(empty_engine).get_table_names())
+
+    migrate(empty_engine, "upgrade", "0004")
+    assert set(inspect(empty_engine).get_table_names()) == before | {"model_registry",
+                                                                     "predictions"}
+    with empty_engine.begin() as conn:
+        _insert_registry_row(conn)
+        conn.execute(text(
+            "INSERT INTO predictions (model_version, as_of, features_sha256, prediction, "
+            "probabilities) VALUES (1, '2020-12-31', decode(repeat('ab', 32), 'hex'), 0, "
+            "ARRAY[0.6, 0.4])"))
+    # The constraints that keep a registry row honest.
+    for bad in ({"version": "2", "oos_accuracy": "1.5"},
+                {"version": "2", "baseline_name": "NULL"},
+                {"version": "2", "beats_baseline": "NULL"},
+                {"version": "2", "target": "'volatility'"},
+                {"version": "2", "artifact_sha256": "'\\x00'::bytea"},
+                {"version": "2", "serving_as_of": "'2020-11-30'"},
+                {"version": "2", "price_series_id": "99"},
+                {"version": "2"}):          # same snapshot and artifact hash as version 1
+        with pytest.raises(sa_exc.IntegrityError), empty_engine.begin() as conn:
+            _insert_registry_row(conn, **bad)
+    with pytest.raises(sa_exc.IntegrityError), empty_engine.begin() as conn:
+        conn.execute(text("DELETE FROM model_registry"))   # predictions point at it
+
+    migrate(empty_engine, "downgrade", "0003")
+    assert set(inspect(empty_engine).get_table_names()) == before
+    with empty_engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM price_series")).scalar_one() == 1
+    migrate(empty_engine, "upgrade", "0004")
+    assert set(inspect(empty_engine).get_table_names()) >= TABLES
 
 
 def test_migrations_match_metadata(migrated_engine):

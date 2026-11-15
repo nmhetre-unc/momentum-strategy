@@ -40,6 +40,15 @@ latency     4 workers, Poisson submissions at 50% and 75% of the median
             submitting; if it grows, the queue isn't stable, its p99 only
             measures how long the run was, and the growth rate is reported
             instead.
+predict     POST /predict (C3: the latest model version) at a fixed 100 req/s
+            for 60 s, open loop, latency from the scheduled send time, workers
+            idle. Before each repetition the API container is restarted, so
+            its first request (which loads LightGBM and the model, after
+            checking the artifact's SHA-256) is timed alone as the cold
+            start; then 5 s at the same rate are discarded as warm-up. Every
+            200 must have logged exactly one row in `predictions`. Setup
+            ingests SPY 2008-2025 and trains the default model once
+            (`compose run train`), as the smoke test does.
 get         GET /backtests/{id} of a succeeded job at a fixed 100 req/s for
             60 s, open loop, latency from the scheduled send time: once with
             the workers idle, once while 4 workers drain a backlog.
@@ -95,6 +104,8 @@ LATENCY_WORKERS, LATENCY_LOADS, LATENCY_SECONDS, WARMUP_SECONDS = 4, (0.5, 0.75)
 # arrival rate (jobs/s per s of run) over the measured window.
 GROWTH_THRESHOLD = 0.02
 GET_RATE, GET_SECONDS, GET_POOL = 100, 60, 1000
+PREDICT_RATE, PREDICT_SECONDS, PREDICT_WARMUP_SECONDS = 100, 60, 5
+TRAIN_TICKER, TRAIN_START, TRAIN_END = "SPY", "2008-01-01", "2025-01-01"
 KILL_WORKERS, KILL_LOAD, KILL_SECONDS, KILL_AT, KILL_RETRY = 4, 0.6, 150, 40, 20
 COOLDOWN_SECONDS = 10
 CONTROL_SECONDS = 30
@@ -622,6 +633,76 @@ def get() -> dict:
     return data
 
 
+# ---- POST /predict ----
+
+def setup_model() -> None:
+    if not sql("SELECT 1 FROM model_registry"):
+        log("stack: ingest SPY 2008-2025, train the default model")
+        compose("run", "--rm", "ingest", TRAIN_TICKER, "--start", TRAIN_START,
+                "--end", TRAIN_END)
+        compose("run", "--rm", "train", TRAIN_TICKER, "--start", TRAIN_START,
+                "--end", TRAIN_END)
+
+
+def predict_once(rep: int) -> dict:
+    reset()
+    sql("DELETE FROM predictions")
+    sql("VACUUM ANALYZE predictions")
+    compose("restart", "api")
+    compose("up", "-d", "--wait", "--wait-timeout", "180", "api")
+    cold = asyncio.run(loadgen.predict_fixed_rate(API, 1, 1, connections=1))
+    assert cold.errors == 0, "the cold request failed"
+    asyncio.run(loadgen.predict_fixed_rate(API, PREDICT_RATE, PREDICT_WARMUP_SECONDS))
+    (before,) = sql("SELECT count(*) FROM predictions")[0]
+    sampler = CpuSampler()
+    sampler.start()
+    t0 = time.time()
+    got = asyncio.run(loadgen.predict_fixed_rate(API, PREDICT_RATE, PREDICT_SECONDS))
+    sampler.stop()
+    (after,) = sql("SELECT count(*) FROM predictions")[0]
+    ok = sum(1 for s in got.samples if s.status == 200)
+    latency_ms = [s.latency_ms for s in got.samples]
+    return {"rep": rep + 1, "requests": len(got.samples), "errors": got.errors,
+            "logged_rows": after - before, "every_200_logged_once": after - before == ok,
+            "achieved_rate_per_s": len(got.samples) / (got.finished - got.started),
+            "cold_first_request_ms": cold.samples[0].latency_ms,
+            "predict_ms_p50": pct(latency_ms, 50), "predict_ms_p90": pct(latency_ms, 90),
+            "predict_ms_p99": pct(latency_ms, 99), "predict_ms_max": max(latency_ms),
+            "service_ms_p50": pct([s.service_ms for s in got.samples], 50),
+            "max_send_lag_ms": got.max_send_lag_ms, "cpus_busy": sampler.cores(t0, time.time())}
+
+
+def predict() -> dict:
+    setup_model()
+    (model,) = sql("SELECT version, encode(artifact_sha256, 'hex'), oos_accuracy, "
+                   "baseline_name, baseline_accuracy FROM model_registry "
+                   "ORDER BY version DESC LIMIT 1")
+    runs = []
+    for rep in range(REPS):
+        log(f"predict rep {rep + 1}/{REPS}")
+        run = guarded("predict", predict_once, rep)
+        log(f"  p50/p99 {run['predict_ms_p50']:.1f}/{run['predict_ms_p99']:.1f} ms, "
+            f"cold {run['cold_first_request_ms']:.0f} ms, {run['errors']} errors")
+        runs.append(run)
+        checkpoint("predict", runs, {"rate_per_s": PREDICT_RATE})
+    summary = {k: summarize([r[k] for r in runs])
+               for k in ("predict_ms_p50", "predict_ms_p90", "predict_ms_p99",
+                         "predict_ms_max", "cold_first_request_ms", "achieved_rate_per_s")}
+    data = {"measurement": "predict", "environment": environment(),
+            "config": {"rate_per_s": PREDICT_RATE, "seconds": PREDICT_SECONDS,
+                       "warmup_seconds": PREDICT_WARMUP_SECONDS, "workers_idle": True,
+                       "api_processes": "WEB_CONCURRENCY=2 (compose.yaml)", "reps": REPS,
+                       "latency_from": "scheduled send time (open loop)",
+                       "cold_start": "first request after `compose restart api`, alone",
+                       "model": {"version": model[0], "artifact_sha256": model[1],
+                                 "oos_accuracy": model[2], "baseline": model[3],
+                                 "baseline_accuracy": model[4]},
+                       "train": [TRAIN_TICKER, TRAIN_START, TRAIN_END]},
+            "summary": summary, "runs": runs}
+    save("predict", data)
+    return data
+
+
 # ---- kill a worker ----
 
 def _victims(container: str) -> list[str]:
@@ -828,6 +909,17 @@ def report() -> str:
                      f"{'workers idle' if cond == 'idle' else '4 workers draining a backlog'} | "
                      f"p50 {fmt(s['get_ms_p50'], 1)} ms, p99 {fmt(s['get_ms_p99'], 1)} ms | "
                      f"{src}get.json |")
+    if (RESULTS / "predict.json").exists() and load("predict").get("complete", True):
+        pr = load("predict")
+        s = pr["summary"]
+        logged = all(r["every_200_logged_once"] for r in pr["runs"])
+        lines.append(
+            f"| POST /predict | {PREDICT_RATE} req/s for {PREDICT_SECONDS} s, workers idle, "
+            f"model v{pr['config']['model']['version']} | p50 {fmt(s['predict_ms_p50'], 1)} ms, "
+            f"p99 {fmt(s['predict_ms_p99'], 1)} ms, max {fmt(s['predict_ms_max'], 1)} ms; cold "
+            f"first request {fmt(s['cold_first_request_ms'], 0)} ms; errors "
+            f"{sum(r['errors'] for r in pr['runs'])}; every 200 logged once: {logged} "
+            f"| {src}predict.json |")
     s = k["summary"]
     checks = [r["checks"] for r in k["runs"]]
     lines.append(
@@ -855,7 +947,7 @@ def report() -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    names = ["throughput", "control", "latency", "get", "kill"]
+    names = ["throughput", "control", "latency", "get", "predict", "kill"]
     parser.add_argument("what", nargs="+", choices=["all", "report", *names],
                         help="measurements to run, in this order; 'all' runs every one")
     parser.add_argument("--down", action="store_true", help="remove the stack afterwards")
@@ -867,7 +959,7 @@ def main() -> int:
         sys.exit("not on AC power")
     chosen = names if "all" in args.what else [n for n in names if n in args.what]
     steps = {"throughput": throughput, "control": control, "latency": latency, "get": get,
-             "kill": kill}
+             "predict": predict, "kill": kill}
     with KeepAwake():
         setup()
         try:

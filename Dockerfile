@@ -30,8 +30,9 @@ RUN python -m venv /opt/venv
 WORKDIR /src
 
 # Dependencies first, from pyproject.toml alone, so editing code doesn't
-# reinstall them: [project.dependencies] plus the [api] extra, minus httpx2
-# (only the tests and bench/ use it). The dashboard's packages live in the
+# reinstall them: [project.dependencies] plus the [api] and [ml] extras
+# (ml: LightGBM, for python -m qbt_service.train and POST /predict), minus
+# httpx2 (only the tests and bench/ use it). The dashboard's packages live in the
 # [ui] extra, which the image never installs. The list is derived here
 # rather than copied, so a new dependency reaches the image automatically;
 # the assert catches a rename of the excluded one.
@@ -42,7 +43,8 @@ import tomllib
 
 project = tomllib.load(open("pyproject.toml", "rb"))["project"]
 not_in_image = {"httpx2"}
-requirements = project["dependencies"] + project["optional-dependencies"]["api"]
+extras = project["optional-dependencies"]
+requirements = project["dependencies"] + extras["api"] + extras["ml"]
 names = {re.match(r"[A-Za-z0-9._-]+", r).group(0).lower(): r for r in requirements}
 missing = not_in_image - names.keys()
 assert not missing, f"excluded but not in pyproject.toml any more: {missing}"
@@ -69,6 +71,12 @@ RUN QBT_REQUIRE_EXTENSION=1 pip wheel --no-deps --wheel-dir /wheels . \
 
 # ---------------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS runtime
+
+# libgomp1: LightGBM's wheel links the GNU OpenMP runtime, which the slim
+# base doesn't ship.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # A fixed uid/gid, so volume permissions don't depend on the build host.
 RUN groupadd --system --gid 10001 qbt \
@@ -108,10 +116,12 @@ assert _bootstrap_ext.NUMPY_BUILD_VERSION == numpy.__version__ == pinned, (
 for name in ("streamlit", "altair", "matplotlib"):
     assert importlib.util.find_spec(name) is None, f"{name} should not be in the image"
 import qbt_service.api, qbt_service.health, qbt_service.ingest, qbt_service.worker  # noqa
+import qbt_service.train  # noqa
+import lightgbm  # noqa: loads lib_lightgbm.so, so a missing libgomp fails the build
 print("ok: C++ extension built against numpy", _bootstrap_ext.NUMPY_BUILD_VERSION)
 EOF
 
 EXPOSE 8000
-# The API by default; compose.yaml runs the worker, migrations and ingest
+# The API by default; compose.yaml runs the worker, migrations, ingest and train
 # from the same image with other commands.
 CMD ["uvicorn", "--factory", "qbt_service.api:create_app", "--host", "0.0.0.0", "--port", "8000"]

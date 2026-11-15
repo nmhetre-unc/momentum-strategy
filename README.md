@@ -30,7 +30,7 @@ Sharpe ratios following Bailey & López de Prado (2014).
   leases and fencing, and Docker Compose. With 4 workers it runs 926
   backtests/min, a job starts 8 ms after it is submitted at 50% load, and a
   SIGKILLed worker loses no jobs. See [Running as a service](#running-as-a-service).
-- 618 tests at 93% line coverage (90% for the engine, 98% for the service).
+- 653 tests at 94% line coverage (91% for the engine, 98% for the service).
   CI runs on every push: it builds the C++ extension, runs the suite against
   Postgres with coverage gates, and runs an end-to-end test of the Compose
   stack.
@@ -48,6 +48,7 @@ twice.
 ```
             curl / client
                  │  POST /backtests  ·  GET /backtests/{id}  ·  GET /strategies
+                 │  GET /models  ·  GET /models/{version}  ·  POST /predict
                  ▼
  ┌─ api ────────────────────────────┐
  │ FastAPI · 2 uvicorn processes    │   validate, pin a price snapshot,
@@ -57,6 +58,7 @@ twice.
  ┌─ db: Postgres 17 ───────────────────────────────────────────────┐
  │ jobs (the queue) · results · metrics · strategies               │
  │ price_series / price_bars (immutable, content-hashed snapshots) │
+ │ model_registry (immutable versions) · predictions (the log)     │
  └───────▲─────────────────────────────────────────────▲───────────┘
          │ claim, heartbeat, complete, reap             │ LISTEN qbt_jobs
  ┌─ worker × N ─────────────────────────────────────────────────────┐
@@ -66,6 +68,7 @@ twice.
 
  one-shots:  migrate (alembic upgrade head, before api and workers start)
              ingest  (download from Yahoo Finance into price_series)
+             train   (fit a model on a pinned snapshot, register a version)
 ```
 
 Each worker is two processes. The **supervisor** owns the database
@@ -162,6 +165,75 @@ retried with backoff, so a newer worker can take it. Each retry counts as an
 attempt, so it fails after `max_attempts` if none does. An `Idempotency-Key` replay returns the original
 job, whatever version it ran.
 
+### Model serving
+
+No monthly model beat its baselines
+([`results/ml/c2_results.json`](results/ml/c2_results.json)), so the
+service serves one anyway as an engineering demonstration, and the API
+says so. The default model is C2's best: LightGBM predicting next
+month's regime, with the HMM features. Every registry entry and every
+`POST /predict` response carries the model's out-of-sample accuracy next
+to the baseline it had to beat (for regime, the rules-regime lookup
+table), with the paired bootstrap interval, the McNemar p-value and
+`beats: false`.
+
+- **Training** is a one-shot CLI, `python -m qbt_service.train` (Compose:
+  `docker compose run --rm train …`). It pins a snapshot the way a
+  backtest does: the newest stored series covering the range. It then
+  runs the C2 nested purged walk-forward on that snapshot for the
+  out-of-sample numbers. Finally it fits the served model with the same
+  tuning on every labelled month
+  ([`src/qbt/ml/train.py`](src/qbt/ml/train.py)).
+- **The registry** (`model_registry`, migration 0004) keeps one immutable
+  row per version, with the target, feature list, hyperparameters,
+  training window and pinned snapshot. The out-of-sample accuracy, the
+  baseline's name and accuracy, and `beats_baseline` are NOT NULL
+  columns, so no model can be registered without them. The model is a
+  `bytea` artifact with its SHA-256. The artifact is JSON plus LightGBM's
+  own text format, never pickle, so loading it runs no code.
+- **Reproducibility:** the same snapshot and seed give a **byte-identical
+  artifact**, not just identical predictions. LightGBM runs
+  deterministically (`deterministic`, `force_row_wise`, one thread, fixed
+  seed), and its text format holds no timestamps. Training the same model
+  again therefore finds the existing version instead of adding one. A
+  different seed changes only the seed that LightGBM records in the
+  artifact, because bagging is off. That makes a new version whose
+  predictions are identical. Holds on the same library versions, which
+  each row records.
+- **Prediction:** `POST /predict` scores the latest version, or
+  `{"version": n}`, on the latest complete month in that version's
+  snapshot (`as_of`). It forecasts the month after `as_of`, whose label
+  isn't in the snapshot, so the model never trained on it. The HMM
+  features take tens of seconds to build, so they are computed once at
+  training and stored with their SHA-256. A request then loads the model
+  (cached per process after its artifact's SHA-256 is checked), scores
+  the stored input after checking its hash, and logs the prediction in
+  `predictions`. A hash mismatch is a 500 (`model-integrity-error`), and
+  nothing is scored or logged.
+
+```bash
+docker compose run --rm ingest SPY --start 2008-01-01 --end 2025-01-01
+docker compose run --rm train SPY --start 2008-01-01 --end 2025-01-01
+curl -s -X POST localhost:8000/predict
+```
+```
+{"model_version": 1, "as_of": "2024-12-31", "prediction": 0.0,
+ "prediction_name": "Calm Uptrend", "probabilities": [...],
+ "out_of_sample": {"accuracy": 0.808, "n_months": 104, ...},
+ "baseline": {"name": "rules_regime_lookup", "accuracy": 0.827,
+              "difference_ci": [-0.058, 0.019], "mcnemar_p": 0.69, "beats": false},
+ "summary": "Out of sample (104 months, 2016-04-29 to 2024-11-29) this model was
+             right 80.8% of the time; its baseline, rules_regime_lookup, was right
+             82.7% on the same months. It did not beat that baseline: ...", ...}
+```
+
+(Rounded; the numbers are those of `results/ml/c2_results.json` for
+regime / base+hmm / LightGBM. On a fresh Yahoo download they can differ
+in the last digits, since every download is a new snapshot.)
+`GET /models` lists the versions, and `GET /models/{version}` gives the
+full evaluation. Errors are problem details: `no-model-registered` and
+`unknown-model-version` (422), and `model-not-found` (404 on GET).
+
 ### How it's tested
 
 - **Forced-ordering concurrency tests** (`tests/service/test_queue.py`): one
@@ -186,9 +258,15 @@ job, whatever version it ran.
   - The stack is built from scratch.
   - A backtest is POSTed, and its metrics are checked against a direct
     `qbt.runner` run.
+  - A model is trained with the one-shot `train` service, and training
+    again finds the same version. `POST /predict` is then checked: the
+    response carries the out-of-sample accuracy and the baseline, the
+    prediction is logged, and the features are rebuilt from the snapshot
+    in a separate container, giving the same input hash and identical
+    probabilities from the registered artifact.
   - A worker is stopped mid-job with SIGTERM, and the job's release and
     hand-over are checked.
-  - CI runs the first half on every push (the `e2e` job).
+  - CI runs everything but the worker stop on every push (the `e2e` job).
 
 ### Run it
 
@@ -264,6 +342,7 @@ were measured before the two fixes below:
 | Queue latency, 75% of capacity (11.6 jobs/s) | **queue grows** in 2 of 3 runs, by +1.93 [0.01-2.38] jobs/s, so no p99 is reported | `bench/results/service/latency.json` |
 | GET /backtests/{id} at 100 req/s, workers idle | p50 5.6 ms, p99 10.5 ms | `bench/results/service/get.json` |
 | GET at 100 req/s, 4 workers draining a backlog | p50 3167 [9-4789] ms, p99 6557 [17-17777] ms | `bench/results/service/get.json` |
+| POST /predict at 100 req/s for 60 s, workers idle (regime LightGBM+HMM, version 1) | p50 7.7 [7.7-8.0] ms, p99 14.0 [13.2-23.0] ms; cold first request after an API restart 46 ms; 0 errors, every prediction logged once | `bench/results/service/predict.json` |
 | `docker kill` a worker mid-job (4 workers, 60% load) | requeued 33 s, finished 38 s after the kill (30 s lease + up to 15 s reaper interval). 0 jobs lost, 0 duplicated; killed jobs' metrics equal a direct run | `bench/results/service/kill.json` |
 
 **Two fixes, before vs after** (2 runs each, interleaved as before, after,
@@ -302,6 +381,9 @@ running both can't provide it.
 
 - **No authentication.** Anyone who can reach the port can submit jobs. The
   ports are bound to 127.0.0.1.
+- **The served model doesn't beat its baseline**, and each model version
+  predicts one month: the month after its snapshot ends. A newer forecast
+  needs a new snapshot and a new version.
 - **Idempotency keys are global and never expire.** With no clients to scope
   them to, two callers who choose the same key share it.
 - **Only the 4 base strategies** (`sma_crossover`, `momentum`,
@@ -554,7 +636,7 @@ Run the CLI:
 python main.py --ticker SPY --strategy momentum --rolling
 ```
 
-Run the tests (618 tests, 93% line coverage). The service's tests need
+Run the tests (653 tests, 94% line coverage). The service's tests need
 Postgres, which Compose provides:
 
 ```bash
