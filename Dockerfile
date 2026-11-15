@@ -30,19 +30,18 @@ RUN python -m venv /opt/venv
 WORKDIR /src
 
 # Dependencies first, from pyproject.toml alone, so editing code doesn't
-# reinstall them. The service needs [project.dependencies] plus the [api]
-# extra, minus what only the Streamlit dashboard (streamlit, altair,
-# matplotlib) or the tests (httpx2) use. The list is derived here rather
-# than copied, so a new dependency reaches the image automatically; the
-# assert catches a rename of an excluded one.
+# reinstall them: [project.dependencies] plus the [api] extra, minus httpx2
+# (only the tests and bench/ use it). The dashboard's packages live in the
+# [ui] extra, which the image never installs. The list is derived here
+# rather than copied, so a new dependency reaches the image automatically;
+# the assert catches a rename of the excluded one.
 COPY pyproject.toml ./
 RUN python - > /tmp/service-requirements.txt <<'EOF'
 import re
-import sys
 import tomllib
 
 project = tomllib.load(open("pyproject.toml", "rb"))["project"]
-not_in_image = {"streamlit", "altair", "matplotlib", "httpx2"}
+not_in_image = {"httpx2"}
 requirements = project["dependencies"] + project["optional-dependencies"]["api"]
 names = {re.match(r"[A-Za-z0-9._-]+", r).group(0).lower(): r for r in requirements}
 missing = not_in_image - names.keys()
@@ -62,6 +61,7 @@ COPY src ./src
 RUN QBT_REQUIRE_EXTENSION=1 pip wheel --no-deps --wheel-dir /wheels . \
     && pip install --no-deps /wheels/qbt-*.whl \
     && python -c "import qbt.bootstrap as b; assert b.cpp_available(), b._EXT_UNAVAILABLE" \
+    && pip check \
     && pip uninstall -y pip \
     && find /opt/venv -depth -type d -name tests -path "*/site-packages/*" -exec rm -rf {} +
 # (Last line: the dependencies' own test suites, about 105 MB that nothing

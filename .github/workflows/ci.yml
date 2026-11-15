@@ -39,7 +39,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install (builds the C++ extension via scikit-build-core)
-        run: pip install -v -e ".[dev,api]"
+        run: pip install -v -e ".[dev,api,ui]"  # ui: mypy checks qbt.visualize (matplotlib)
 
       - name: Check the extension loaded against the installed numpy
         run: |

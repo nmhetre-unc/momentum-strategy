@@ -227,9 +227,16 @@ implementation with a warning.
 ```bash
 python -m venv venv
 source venv/bin/activate        # venv\Scripts\activate on Windows
-pip install -e ".[dev]"         # builds the C++ extension
+pip install -e ".[dev,ui]"      # builds the C++ extension
 python -c "import qbt.bootstrap as b; print('C++ bootstrap:', b.cpp_available())"
 ```
+
+Extras: `ui` is the dashboard and the CLI's charts (Streamlit, Altair,
+Matplotlib); `dev` is the test and lint tools; `api` is the backtest
+service. A plain `pip install .` gives the library alone (backtests,
+analytics, the C++ bootstrap) without any of them. `pip install -r
+requirements.txt`, which is what Streamlit Community Cloud runs, installs
+the package with `ui`.
 
 After changing `src/cpp/` or upgrading NumPy, re-run `pip install -e .` to
 rebuild the extension. NumPy is pinned exactly: the extension is only used
