@@ -35,11 +35,9 @@ dev = [
     # ruff and mypy are pinned exactly so local and CI type-check/lint against
     # the same rules -- an unpinned mypy in particular drifts in how it infers
     # pandas ufunc results across releases, which reads as a code bug until
-    # you notice the version differs. mypy==1.10.0 predates the "librt"
-    # compiled runtime newer mypy ships, which this machine's Windows
-    # Application Control policy blocks outright.
+    # you notice the version differs.
     "ruff==0.16.6",
-    "mypy==1.10.0",
+    "mypy==2.4.1",
     "pandas-stubs==3.0.5.260730",
     "hypothesis",
     "pytest-benchmark",  # benchmarks/ only; never collected by the normal run
@@ -51,12 +49,9 @@ api = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
-    # <2.1: SQLAlchemy 2.1's modules carry an inline mypy setting
-    # (disable_error_code="untyped-decorator") that the pinned mypy==1.10.0
-    # rejects as invalid. pandas-stubs imports sqlalchemy, so this breaks
-    # `mypy src/` even before any service code uses it. Lift the cap
-    # together with the mypy pin.
-    "sqlalchemy>=2.0.30,<2.1",
+    # >=2.1: results are unpacked as plain Rows; 2.0 needed Result.tuples(),
+    # which 2.1 deprecates (an error under pytest's filterwarnings).
+    "sqlalchemy>=2.1",
     "psycopg[binary,pool]>=3.2",
     "alembic>=1.13",
     # FastAPI's TestClient and the bench/ load generator. httpx2, not httpx:

@@ -164,13 +164,11 @@ def _replicates_numpy(n: int, n_boot: int, p: float,
         # it still has length >= 1, since total was < n before it.
         lengths[-1] -= total - n
         length_arr = np.asarray(lengths, dtype=np.int64)
-        block_offset = np.subtract(np.cumsum(length_arr), length_arr)
+        block_offset = np.cumsum(length_arr) - length_arr
         # Position j inside block k maps to starts[k] + (j - block_offset[k]),
         # the same value the reference computes as start + arange(length).
-        # (Ufuncs rather than operators for the same mypy reason as below.)
-        shift = np.repeat(np.subtract(np.asarray(starts, dtype=np.int64), block_offset),
-                          length_arr)
-        yield np.remainder(np.add(shift, positions), n)
+        shift = np.repeat(np.asarray(starts, dtype=np.int64) - block_offset, length_arr)
+        yield (shift + positions) % n
 
 
 def _replicates_python(n: int, n_boot: int, p: float,
@@ -181,10 +179,7 @@ def _replicates_python(n: int, n_boot: int, p: float,
         while total < n:
             start = rng.integers(0, n)
             length = rng.geometric(p)
-            # np.remainder is what `%` dispatches to; spelled out because
-            # mypy 1.10 can't resolve numpy 2.x's 1-D array stubs and
-            # mistypes `start + arange` as a scalar.
-            pieces.append(np.remainder(start + np.arange(length), n))
+            pieces.append((start + np.arange(length)) % n)
             total += length
         replicate: np.ndarray = np.concatenate(pieces)
         yield replicate[:n]

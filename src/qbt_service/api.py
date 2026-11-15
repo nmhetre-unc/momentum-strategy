@@ -549,7 +549,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     422, "idempotency-key-reused", "Idempotency-Key reused",
                     "This Idempotency-Key was already used for a different request. Use a "
                     "new key for a new request.") from exc
-            status = "queued" if enqueued.created else conn.execute(
+            status: JobStatus = "queued" if enqueued.created else conn.execute(
                 select(jobs.c.status).where(jobs.c.id == enqueued.job_id)).scalar_one()
 
         href = f"/backtests/{enqueued.job_id}"
@@ -612,7 +612,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 values = {name: _finite(value) for name, value in conn.execute(
                     select(metrics.c.name, metrics.c.value)
                     .where(metrics.c.job_id == job_id).order_by(metrics.c.name)
-                ).tuples()}
+                )}
 
         return BacktestJob(**row, metrics=values,
                            result=ResultInfo(**result) if result is not None else None)
