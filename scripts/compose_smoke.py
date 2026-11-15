@@ -3,9 +3,10 @@ End-to-end smoke test of the Compose stack. Standard library only; needs
 Docker (Docker Desktop here) and network access to Yahoo Finance.
 
     python scripts/compose_smoke.py [--keep]
+    python scripts/compose_smoke.py --quick --project qbt-ci --start 2023-01-01 --end 2025-01-01
 
-Runs as its own Compose project (qbt-smoke) on ports 55432/58000, so it
-never touches the development stack or its data volume:
+Runs as its own Compose project (qbt-smoke unless --project) on ports
+55432/58000, so it never touches the development stack or its data volume:
 
 1. From scratch: `down -v`, build, `up --wait` (db -> migrate -> api,
    worker; waits until the api and worker healthchecks pass).
@@ -22,6 +23,9 @@ never touches the development stack or its data volume:
    and the metrics again equal a direct run.
 5. `down -v`, unless --keep.
 
+--quick stops after step 3 (one backtest end to end); CI runs that, with a
+short date range so the download and the backtest are quick.
+
 Exits non-zero, with the reason, on the first failed check.
 """
 
@@ -37,10 +41,10 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = "qbt-smoke"
+PROJECT = "qbt-smoke"  # --project overrides
 API_PORT, DB_PORT = 58000, 55432
 API = f"http://127.0.0.1:{API_PORT}"
-TICKER, START, END = "SPY", "2010-01-01", "2025-01-01"
+TICKER, START, END = "SPY", "2010-01-01", "2025-01-01"  # --start/--end override
 SLOW_SECONDS = 25  # longer than QBT_SHUTDOWN_GRACE_SECONDS (8), so the stop lands mid-job
 
 ENV = os.environ | {"QBT_API_PORT": str(API_PORT), "QBT_DB_PORT": str(DB_PORT),
@@ -162,7 +166,7 @@ def health(container: str) -> str:
     return docker("inspect", "--format", "{{.State.Health.Status}}", container).strip()
 
 
-def run(keep: bool) -> None:
+def run(keep: bool, quick: bool, start: str, end: str) -> None:
     step("from scratch: down -v, build, up --wait")
     compose("down", "-v", "--remove-orphans")
     compose("build")
@@ -175,17 +179,20 @@ def run(keep: bool) -> None:
     status, _, body = http("GET", "/health")
     check(status == 200 and body == {"status": "ok"}, "api /health is 200")
 
-    step(f"ingest {TICKER}")
-    compose("run", "--rm", "ingest", TICKER, "--start", START, "--end", END)
+    step(f"ingest {TICKER} {start} to {end}")
+    compose("run", "--rm", "ingest", TICKER, "--start", start, "--end", end)
 
     step("POST a backtest, poll until it succeeds, compare with a direct run")
-    payload = {"strategy": "sma_crossover", "ticker": TICKER, "start": START, "end": END}
+    payload = {"strategy": "sma_crossover", "ticker": TICKER, "start": start, "end": end}
     started = time.monotonic()
     job_id = submit(payload)
     job = wait_for_status(job_id, {"succeeded"}, timeout=120)
     check(True, f"succeeded in {time.monotonic() - started:.1f}s, attempt "
                 f"{job['result']['attempt']}, backtest {job['result']['duration_ms']} ms")
     check_matches_direct_run(job)
+    if quick:
+        down(keep)
+        return
 
     step(f"two workers, {SLOW_SECONDS}s backtests: stop the one running a job")
     ENV["QBT_TEST_COMPUTE_DELAY_SECONDS"] = str(SLOW_SECONDS)
@@ -217,19 +224,29 @@ def run(keep: bool) -> None:
     check(job["attempts"] == 1 and job["result"]["attempt"] == 1,
           "the released attempt was given back: attempts 1, result from attempt 1")
     check_matches_direct_run(job)
+    down(keep)
 
+
+def down(keep: bool) -> None:
     if not keep:
         step("down -v")
         compose("down", "-v", "--remove-orphans")
 
 
 def main() -> int:
+    global PROJECT
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--keep", action="store_true", help="leave the stack running")
+    parser.add_argument("--quick", action="store_true",
+                        help="one backtest end to end; skip the worker-stop test")
+    parser.add_argument("--project", default=PROJECT, help=f"Compose project (default {PROJECT})")
+    parser.add_argument("--start", default=START)
+    parser.add_argument("--end", default=END)
     args = parser.parse_args()
+    PROJECT = args.project
     try:
-        run(args.keep)
+        run(args.keep, args.quick, args.start, args.end)
     except SmokeFailure as exc:
         print(f"\nSMOKE TEST FAILED: {exc}", file=sys.stderr)
         print(f"(stack left up for inspection: docker compose -p {PROJECT} logs)",

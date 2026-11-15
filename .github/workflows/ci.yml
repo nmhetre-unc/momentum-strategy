@@ -70,3 +70,36 @@ jobs:
         run: |
           coverage report --include='src/qbt/*' --fail-under=82
           coverage report --include='src/qbt_service/*' --fail-under=90
+
+  # The service end to end, as it ships: build the image, start the Compose
+  # stack (db -> migrate -> api, worker) under its own project, ingest a
+  # short range of SPY from Yahoo, POST one backtest, poll until it
+  # succeeds, and check its metrics equal a direct qbt.runner run on the
+  # same snapshot. Runs alongside `test`.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compose smoke test (build, up, ingest, one backtest)
+        # Standard library only, so nothing to install.
+        run: >-
+          python scripts/compose_smoke.py --quick --project qbt-ci
+          --start 2023-01-01 --end 2025-01-01
+
+      - name: Service logs (on failure)
+        if: failure()
+        run: >-
+          docker compose -p qbt-ci -f compose.yaml -f scripts/compose.smoke.yaml
+          logs --no-color --timestamps
+
+      - name: Tear down
+        if: always()
+        run: >-
+          docker compose -p qbt-ci -f compose.yaml -f scripts/compose.smoke.yaml
+          down -v --remove-orphans
