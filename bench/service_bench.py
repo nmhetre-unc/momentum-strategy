@@ -107,8 +107,13 @@ def log(message: str) -> None:
 
 # ---- the stack ----
 
+# Which Compose file(s) to run; bench/before_after.py points this at variants.
+COMPOSE_FILES = ["-f", "compose.yaml"]
+
+
 def compose(*args: str, capture: bool = False) -> str:
-    result = subprocess.run(["docker", "compose", "-p", PROJECT, "-f", "compose.yaml", *args],
+    result = subprocess.run(["docker", "compose", "-p", PROJECT, *COMPOSE_FILES,
+                             "--project-directory", str(ROOT), *args],
                             cwd=ROOT, env=ENV, text=True, check=True,
                             stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
                             stderr=subprocess.STDOUT if capture else subprocess.DEVNULL)
@@ -426,7 +431,8 @@ def control_once(workers: int) -> dict:
     for w in range(workers):
         env_args = [arg for pair in THREADS_ONE for arg in ("-e", pair)]
         processes.append(subprocess.Popen(
-            ["docker", "compose", "-p", PROJECT, "-f", "compose.yaml", "run", "--rm", "--no-deps",
+            ["docker", "compose", "-p", PROJECT, *COMPOSE_FILES, "--project-directory", str(ROOT),
+             "run", "--rm", "--no-deps",
              *env_args, "--entrypoint", "python", "api", "-c", CONTROL_SCRIPT,
              str(start_at), str(CONTROL_SECONDS), str(w), ",".join(loadgen.STRATEGIES)],
             cwd=ROOT, env=ENV, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL))
