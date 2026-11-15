@@ -406,11 +406,19 @@ running both can't provide it.
 
 ## Deploying to AWS
 
-The service has run on AWS once (D2, 2026-11-15): applied from `infra/`,
-measured from a laptop, then destroyed. Nothing runs there between
-sessions. The pieces that deploy a new build, `.github/workflows/publish.yml`
-and `scripts/deploy.sh`, are new: their failure paths are tested, and the
-first real deploy is verified in a follow-up after this is merged.
+The service has run on AWS twice, both times applied from `infra/` and
+then destroyed. Nothing runs there between sessions.
+
+- **D2 (2026-11-15):** measured from a laptop.
+- **D3b (2026-11-15):** verified the deploy path end to end. publish.yml
+  built commit `07f6f63` on main, and `scripts/deploy.sh --migrate`
+  deployed it in 113.6 s. The api and worker then ran the published
+  digest, and one backtest and one `/predict` succeeded.
+  - The first run of `deploy.sh` failed at its own digest check: the copy
+    into ECR had changed the digest. It was fixed and re-run.
+  - Details:
+    [`bench/results/aws/deploy_verify.json`](bench/results/aws/deploy_verify.json),
+    summarised in [`bench/results/aws/README.md`](bench/results/aws/README.md#deploy-verified-d3b).
 
 ### Architecture
 
@@ -421,7 +429,7 @@ GitHub, push to main ──▶ publish.yml (GITHUB_TOKEN: contents read, package
 
 your machine, `aws login` ──▶ scripts/deploy.sh <sha>
    1. GHCR must serve the digest publish.yml recorded, or it stops
-   2. copies that digest into ECR (qbt-service:<sha>), checks ECR's digest
+   2. pulls that digest, pushes it to ECR (qbt-service:<sha>), checks ECR's digest
    3. SSM Run Command on the instance: pull qbt-service@<digest> from ECR,
       qbt up, wait for GET /health = 200
 

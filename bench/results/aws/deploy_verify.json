@@ -1,0 +1,447 @@
+{
+ "measurement": "D3b: first real deploy with scripts/deploy.sh, then teardown",
+ "date": "2026-11-15",
+ "branch": "deploy-verify",
+ "commit": "07f6f638a7570394cb6023ce1d5fa8f67418a3b1",
+ "publish_run": "https://github.com/nmhetre-unc/momentum-strategy/actions/runs/43769442391",
+ "published_digest": "sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+ "manifest_type": "application/vnd.docker.distribution.manifest.v2+json (single platform, linux/amd64)",
+ "client": "this laptop (Docker Desktop, containerd image store) over the public internet; credentials from `aws login`",
+ "infra": {
+  "plan": "15 to add, 0 to change, 0 to destroy (same resources as D2)",
+  "apply_start": "2026-11-15T22:33:33.445Z",
+  "apply_end": "2026-11-15T22:44:22.607Z",
+  "apply_seconds": 649.2,
+  "rds_creation": "10m32s",
+  "instance_ssm_online": "2026-11-15T22:44:37.175Z",
+  "cloud_init_done_on_instance": "2026-11-15T22:46:40Z",
+  "apply_output": [
+   "aws_ecr_repository.service: Creation complete after 1s [id=qbt-service]",
+   "aws_iam_role.instance: Creation complete after 1s [id=qbt-instance]",
+   "aws_ecr_lifecycle_policy.service: Creation complete after 0s [id=qbt-service]",
+   "aws_iam_role_policy.instance: Creation complete after 0s [id=qbt-instance:qbt-instance]",
+   "aws_db_subnet_group.db: Creation complete after 1s [id=qbt-db]",
+   "aws_security_group.app: Creation complete after 2s [id=sg-08c55d7349e0655e4]",
+   "aws_security_group.db: Creation complete after 2s [id=sg-0adb062fd3f09a32a]",
+   "aws_vpc_security_group_egress_rule.https: Creation complete after 1s [id=sgr-0c1847fd74a525d81]",
+   "aws_vpc_security_group_ingress_rule.api_from_allowed_ip: Creation complete after 1s [id=sgr-081ae8d89bc5d712a]",
+   "aws_vpc_security_group_ingress_rule.db_from_app: Creation complete after 1s [id=sgr-08f989222d06f2e4e]",
+   "aws_vpc_security_group_egress_rule.postgres: Creation complete after 1s [id=sgr-0fe65a789a940b693]",
+   "aws_iam_instance_profile.instance: Creation complete after 6s [id=qbt-instance]",
+   "aws_db_instance.db: Creation complete after 10m32s [id=db-NIOZQIPAK6SCXADY2NIDEQFJ5E]",
+   "aws_ssm_parameter.database_url: Creation complete after 0s [id=/qbt/database-url]",
+   "aws_instance.app: Creation complete after 14s [id=i-0fa0758b97d5b4ac0]",
+   "Apply complete! Resources: 15 added, 0 changed, 0 destroyed.",
+   "exit 0"
+  ]
+ },
+ "deploy_attempt_1": {
+  "started": "2026-11-15T22:46:57.257Z",
+  "outcome": "FAILED at the ECR digest check, before anything reached the instance",
+  "what_was_wrong": "deploy.sh copied GHCR to ECR with `docker buildx imagetools create --tag <ecr>:<sha> <ghcr>@<digest>`. publish.yml's image is a single-platform manifest (v2 schema 2), and given one, imagetools does not copy it as is: it pushed a new one-entry manifest list, sha256:729dc0bc..., under the tag. deploy.sh's post-copy check (ECR digest must equal the published digest) stopped the run. The local test before merge copied hello-world, which is already a manifest list, so it kept its digest and missed this.",
+  "fix": "scripts/deploy.sh now pulls the published digest from GHCR, tags it and pushes it to ECR (docker pull / tag / push), keeping the same check. With Docker Desktop's containerd image store the pushed manifest is byte-identical. The wrong ECR image (tag 07f6f63..., digest 729dc0bc...) was removed with `aws ecr batch-delete-image` (ECR tags are immutable), the only AWS change outside deploy.sh, terraform and the one-shots. deploy.sh's message for that case now prints that command.",
+  "ecr_delete": {
+   "imageIds": [
+    {
+     "imageDigest": "sha256:729dc0bc11d57106a0d9e7bfe2ecfb042508ad15e056ad56ddf8688f211d2c4a",
+     "imageTag": "07f6f638a7570394cb6023ce1d5fa8f67418a3b1"
+    }
+   ],
+   "failures": []
+  },
+  "output": [
+   "2026-11-15T22:46:57.807Z deploy: AWS account 027489138922 as arn:aws:sts::027489138922:assumed-role/AccountFullAccessRole/0468e4b8-70f1-70d2-e3f4-317ac4d009c8",
+   "2026-11-15T22:46:59.381Z deploy: instance i-0fa0758b97d5b4ac0, SSM Online",
+   "2026-11-15T22:47:02.361Z deploy: publish run 43769442391 recorded ghcr.io/nmhetre-unc/momentum-strategy:07f6f638a7570394cb6023ce1d5fa8f67418a3b1 = sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "2026-11-15T22:47:03.382Z deploy: GHCR serves the recorded digest",
+   "",
+   "WARNING! Your credentials are stored unencrypted in '/tmp/tmp.l2BUoNhDEK/docker/config.json'.",
+   "Configure a credential helper to remove this warning. See",
+   "https://docs.docker.com/go/credential-store/",
+   "",
+   "2026-11-15T22:47:05.129Z deploy: copying ghcr.io/nmhetre-unc/momentum-strategy@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf to 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:07f6f638a7570394cb6023ce1d5fa8f67418a3b1",
+   "#1 [internal] pushing 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service",
+   "#1 0.000 copying sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf from ghcr.io/nmhetre-unc/momentum-strategy@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf to 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service",
+   "#1 12.87 pushing sha256:729dc0bc11d57106a0d9e7bfe2ecfb042508ad15e056ad56ddf8688f211d2c4a to 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:07f6f638a7570394cb6023ce1d5fa8f67418a3b1",
+   "#1 DONE 13.1s",
+   "2026-11-15T22:47:19.842Z deploy: FAILED: ECR holds sha256:729dc0bc11d57106a0d9e7bfe2ecfb042508ad15e056ad56ddf8688f211d2c4a after the copy, not sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "exit 1"
+  ]
+ },
+ "deploy_attempt_2": {
+  "started": "2026-11-15T22:48:04.989Z",
+  "ended": "2026-11-15T22:49:58.581Z",
+  "seconds": 113.6,
+  "outcome": "succeeded",
+  "command": "scripts/deploy.sh 07f6f638a7570394cb6023ce1d5fa8f67418a3b1 --migrate",
+  "phases": [
+   {
+    "phase": "preflight: AWS credentials, instance and SSM agent, ECR repository",
+    "start": "2026-11-15T22:48:04.989Z",
+    "end": "2026-11-15T22:48:07.167Z",
+    "seconds": 2.2
+   },
+   {
+    "phase": "publish run lookup and recorded digest (gh)",
+    "start": "2026-11-15T22:48:07.167Z",
+    "end": "2026-11-15T22:48:09.949Z",
+    "seconds": 2.8
+   },
+   {
+    "phase": "GHCR digest check",
+    "start": "2026-11-15T22:48:09.949Z",
+    "end": "2026-11-15T22:48:11.200Z",
+    "seconds": 1.3
+   },
+   {
+    "phase": "ECR login",
+    "start": "2026-11-15T22:48:11.200Z",
+    "end": "2026-11-15T22:48:13.152Z",
+    "seconds": 2.0
+   },
+   {
+    "phase": "pull from GHCR to the laptop (~177 MB compressed, home connection)",
+    "start": "2026-11-15T22:48:13.152Z",
+    "end": "2026-11-15T22:49:28.440Z",
+    "seconds": 75.3
+   },
+   {
+    "phase": "push to ECR and digest check",
+    "start": "2026-11-15T22:49:28.440Z",
+    "end": "2026-11-15T22:49:30.232Z",
+    "seconds": 1.8
+   },
+   {
+    "phase": "SSM send-command accepted to first output on the instance",
+    "start": "2026-11-15T22:49:30.254Z",
+    "end": "2026-11-15T22:49:30.662Z",
+    "seconds": 0.4
+   },
+   {
+    "phase": "instance: docker pull by digest from ECR",
+    "start": "2026-11-15T22:49:30.662Z",
+    "end": "2026-11-15T22:49:40.620Z",
+    "seconds": 10.0
+   },
+   {
+    "phase": "instance: qbt migrate (0001 -> 0004)",
+    "start": "2026-11-15T22:49:40.620Z",
+    "end": "2026-11-15T22:49:43.773Z",
+    "seconds": 3.2
+   },
+   {
+    "phase": "instance: qbt up (until api and worker healthy)",
+    "start": "2026-11-15T22:49:43.773Z",
+    "end": "2026-11-15T22:49:55.228Z",
+    "seconds": 11.5
+   },
+   {
+    "phase": "instance: GET /health = 200 and image check",
+    "start": "2026-11-15T22:49:55.228Z",
+    "end": "2026-11-15T22:49:55.478Z",
+    "seconds": 0.2
+   },
+   {
+    "phase": "SSM result collected and summary",
+    "start": "2026-11-15T22:49:55.478Z",
+    "end": "2026-11-15T22:49:58.574Z",
+    "seconds": 3.1
+   }
+  ],
+  "output": [
+   "2026-11-15T22:48:05.657Z deploy: AWS account 027489138922 as arn:aws:sts::027489138922:assumed-role/AccountFullAccessRole/0468e4b8-70f1-70d2-e3f4-317ac4d009c8",
+   "2026-11-15T22:48:07.167Z deploy: instance i-0fa0758b97d5b4ac0, SSM Online",
+   "2026-11-15T22:48:09.949Z deploy: publish run 43769442391 recorded ghcr.io/nmhetre-unc/momentum-strategy:07f6f638a7570394cb6023ce1d5fa8f67418a3b1 = sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "2026-11-15T22:48:11.200Z deploy: GHCR serves the recorded digest",
+   "",
+   "WARNING! Your credentials are stored unencrypted in '/tmp/tmp.mWSFYrYEnI/docker/config.json'.",
+   "Configure a credential helper to remove this warning. See",
+   "https://docs.docker.com/go/credential-store/",
+   "",
+   "2026-11-15T22:48:13.152Z deploy: pulling ghcr.io/nmhetre-unc/momentum-strategy@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "ghcr.io/nmhetre-unc/momentum-strategy@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "2026-11-15T22:49:28.440Z deploy: pushing 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:07f6f638a7570394cb6023ce1d5fa8f67418a3b1",
+   "027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:07f6f638a7570394cb6023ce1d5fa8f67418a3b1",
+   "2026-11-15T22:49:30.232Z deploy: ECR holds qbt-service:07f6f638a7570394cb6023ce1d5fa8f67418a3b1 at the same digest",
+   "2026-11-15T22:49:30.254Z deploy: redeploying on i-0fa0758b97d5b4ac0 over SSM (pull, tag, migrate, qbt up)",
+   "---- on the instance (stdout)",
+   "2026-11-15T22:49:30.662Z instance: pull 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "2026-11-15T22:49:40.620Z instance: tagged 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf as 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:v1",
+   "2026-11-15T22:49:43.773Z instance: migrated",
+   "2026-11-15T22:49:55.228Z instance: qbt up done",
+   "{\"status\":\"ok\"}",
+   "2026-11-15T22:49:55.478Z instance: healthy; api and worker run 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "NAME           IMAGE                                                         COMMAND                  SERVICE   CREATED          STATUS                    PORTS",
+   "qbt-api-1      027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:v1   \"uvicorn --factory q\u2026\"   api       11 seconds ago   Up 10 seconds (healthy)   0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp",
+   "qbt-worker-1   027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:v1   \"python -m qbt_servi\u2026\"   worker    11 seconds ago   Up 10 seconds (healthy)   8000/tcp",
+   "",
+   "---- on the instance (stderr)",
+   " Network qbt_default Creating",
+   " Network qbt_default Creating",
+   " Network qbt_default Created",
+   " Network qbt_default Created",
+   " Container qbt-migrate-run-42df87211e4b Creating",
+   " Container qbt-migrate-run-42df87211e4b Created",
+   "INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.",
+   "INFO  [alembic.runtime.migration] Will assume transactional DDL.",
+   "INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Initial schema: price snapshots, strategy catalog, job queue, results, metrics.",
+   "INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Record each price snapshot's fetch range; fix 0001's CHECK constraint names.",
+   "INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Version strategies by behaviour as well as by parameter schema.",
+   "INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Model registry and prediction log.",
+   " Container qbt-worker-1 Creating",
+   " Container qbt-api-1 Creating",
+   " Container qbt-api-1 Created",
+   " Container qbt-worker-1 Created",
+   " Container qbt-worker-1 Starting",
+   " Container qbt-api-1 Starting",
+   " Container qbt-worker-1 Started",
+   " Container qbt-api-1 Started",
+   " Container qbt-api-1 Waiting",
+   " Container qbt-worker-1 Waiting",
+   " Container qbt-api-1 Healthy",
+   " Container qbt-worker-1 Healthy",
+   "",
+   "2026-11-15T22:49:58.574Z deploy: deployed 07f6f638a7570394cb6023ce1d5fa8f67418a3b1 (sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf) to i-0fa0758b97d5b4ac0; API http://<instance public IP>:8000 (from allowed_cidr only)",
+   "exit 0"
+  ],
+  "phase_notes": [
+   "Laptop phases are timed by deploy.sh's own UTC stamps, instance phases by the instance's; the 'SSM send-command accepted to first output' line spans the two clocks.",
+   "The push to ECR (1.8 s) uploaded almost nothing: attempt 1's imagetools copy had already put every layer blob, and the original manifest, into the repository. A first push into an empty repository would upload ~177 MB from the home connection; D2's push of a similar image took 8 s.",
+   "The GHCR pull (75.3 s) is this laptop's home connection; a re-deploy of a commit already pulled locally skips most of it."
+  ]
+ },
+ "ecr_after_deploy": [
+  {
+   "digest": "sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "tags": [
+    "07f6f638a7570394cb6023ce1d5fa8f67418a3b1"
+   ],
+   "type": "application/vnd.docker.distribution.manifest.v2+json",
+   "bytes": 176784629,
+   "pushed": "2026-11-15T17:47:17.965000-05:00"
+  }
+ ],
+ "one_shots": {
+  "ingest": {
+   "started": "2026-11-15T22:50:10Z",
+   "seconds": 8.9,
+   "status": "Success",
+   "stdout": [
+    "SPY: stored new series 1 (4279 bars, 2008-01-02 to 2024-12-31)"
+   ],
+   "stderr": [
+    " Container qbt-ingest-run-9a8adfbf3c9a Creating ",
+    " Container qbt-ingest-run-9a8adfbf3c9a Created "
+   ]
+  },
+  "train": {
+   "started": "2026-11-15T22:50:23Z",
+   "seconds": 78.4,
+   "status": "Success",
+   "stdout": [
+    "SPY: training lightgbm on regime (base+hmm) from price series 1, 4279 bars",
+    "registered model version 1 (artifact sha256 466cc389aceeac1e46a058ebcd8f9cbd503dca478a608a9760b3118b03e3c6bf, 70 s)",
+    "out of sample: accuracy 0.808 over 104 months (2016-04-29 to 2024-11-29); baseline rules_regime_lookup 0.827; does NOT beat its baseline"
+   ],
+   "stderr": [
+    " Container qbt-train-run-6cdd0bd4904d Creating ",
+    " Container qbt-train-run-6cdd0bd4904d Created "
+   ]
+  }
+ },
+ "end_to_end_from_laptop": {
+  "client": "this laptop over the internet",
+  "api": "http://<instance public IP>:8000",
+  "checks": [
+   {
+    "at": "2026-11-15T22:51:54Z",
+    "call": "GET /health",
+    "status": 200,
+    "body": {
+     "status": "ok"
+    },
+    "ms": 83.8
+   },
+   {
+    "at": "2026-11-15T22:51:54Z",
+    "call": "POST /backtests",
+    "request": {
+     "strategy": "sma_crossover",
+     "ticker": "SPY",
+     "start": "2010-01-01",
+     "end": "2024-12-31"
+    },
+    "status": 202,
+    "job": "dd922f16-64fb-4e3f-940d-dd7b6a758a83",
+    "ms": 88.0
+   },
+   {
+    "at": "2026-11-15T22:51:55Z",
+    "call": "GET /backtests/dd922f16-64fb-4e3f-940d-dd7b6a758a83 (polled every 0.5 s)",
+    "final_status": "succeeded",
+    "attempts": 1,
+    "created_at": "2026-11-15T22:51:53.964639Z",
+    "started_at": "2026-11-15T22:51:53.980624Z",
+    "finished_at": "2026-11-15T22:51:54.249926Z",
+    "seconds_to_final_at_laptop": 0.7,
+    "metrics_count": 12,
+    "sample_metrics": {
+     "annualized_volatility": 0.13668027829573992,
+     "cagr": 0.0950496663942022,
+     "exposure": 0.7898224224754837,
+     "max_drawdown": -0.3371727693638179
+    },
+    "result": {
+     "attempt": 1,
+     "qbt_version": "0.1.0",
+     "numpy_version": "2.5.4",
+     "bootstrap_impl": "cpp",
+     "duration_ms": 205,
+     "n_days": 3773,
+     "created_at": "2026-11-15T22:51:54.249926Z"
+    }
+   },
+   {
+    "at": "2026-11-15T22:51:55Z",
+    "call": "POST /predict",
+    "status": 200,
+    "ms": 132.5,
+    "body": {
+     "prediction_id": 1,
+     "created_at": "2026-11-15T22:51:54.736744Z",
+     "model_version": 1,
+     "model_href": "/models/1",
+     "target": "regime",
+     "predicts": "the most common daily `rules` regime over the trading days after as_of up to and including the next month end",
+     "as_of": "2024-12-31",
+     "prediction": 0.0,
+     "prediction_name": "Calm Uptrend",
+     "probabilities": [
+      {
+       "label": 0.0,
+       "name": "Calm Uptrend",
+       "probability": 0.7176662624679069
+      },
+      {
+       "label": 1.0,
+       "name": "Quiet Range",
+       "probability": 0.17320187722843497
+      },
+      {
+       "label": 2.0,
+       "name": "Volatile Rally",
+       "probability": 0.07947033446922185
+      },
+      {
+       "label": 3.0,
+       "name": "Crisis / Selloff",
+       "probability": 0.029661525834436354
+      }
+     ],
+     "features_sha256": "f5a6be19b77f42ecd445525eeddad5bf45ff09bb01056dfdf31a10f6457fc4ff",
+     "out_of_sample": {
+      "accuracy": 0.8076923076923077,
+      "accuracy_ci": [
+       0.7307692307692307,
+       0.875
+      ],
+      "n_months": 104,
+      "first_test_decision": "2016-04-29",
+      "last_test_decision": "2024-11-29",
+      "auc": 0.7927307350662947,
+      "log_loss": 0.7374338198126517,
+      "brier": 0.3418070392413176
+     },
+     "baseline": {
+      "name": "rules_regime_lookup",
+      "description": "the most frequent next-month regime among training months that had the same rules regime on their decision date",
+      "accuracy": 0.8269230769230769,
+      "difference": -0.019230769230769162,
+      "difference_ci": [
+       -0.05769230769230771,
+       0.019230769230769162
+      ],
+      "mcnemar_p": 0.6875,
+      "beats": false
+     },
+     "summary": "Out of sample (104 months, 2016-04-29 to 2024-11-29) this model was right 80.8% of the time; its baseline, rules_regime_lookup, was right 82.7% on the same months. It did not beat that baseline: treat its predictions as an engineering demonstration, not as a forecast better than the baseline."
+    }
+   }
+  ]
+ },
+ "digest_on_instance": {
+  "started": "2026-11-15T22:52:01Z",
+  "seconds": 3.3,
+  "status": "Success",
+  "stdout": [
+   "api /qbt-api-1 healthy image_id=sha256:2894092cd15bc78c2964561255e6efa8293b055b695971828092daa21cd47f1b repo_digests=027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "worker /qbt-worker-1 healthy image_id=sha256:2894092cd15bc78c2964561255e6efa8293b055b695971828092daa21cd47f1b repo_digests=027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service@sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf",
+   "compose image name: 027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:v1",
+   "027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:v1 sha256:679d45732bc6a0f8a2bec94049947be68500bfbbfcf1fe1d61927dd1c0f474bf 2894092cd15b",
+   "worker health log: 0 0 0 0 0 ",
+   "{\"status\":\"ok\"}"
+  ],
+  "stderr": []
+ },
+ "teardown": {
+  "destroy_start": "2026-11-15T22:52:12.242Z",
+  "destroy_end": "2026-11-15T22:54:40.874Z",
+  "destroy_seconds": 148.6,
+  "terraform_destroy": [
+   "aws_ecr_lifecycle_policy.service: Destruction complete after 1s",
+   "aws_iam_role_policy.instance: Destruction complete after 1s",
+   "aws_vpc_security_group_ingress_rule.db_from_app: Destruction complete after 1s",
+   "aws_vpc_security_group_ingress_rule.api_from_allowed_ip: Destruction complete after 1s",
+   "aws_vpc_security_group_egress_rule.https: Destruction complete after 1s",
+   "aws_vpc_security_group_egress_rule.postgres: Destruction complete after 1s",
+   "aws_instance.app: Destruction complete after 30s",
+   "aws_ecr_repository.service: Destruction complete after 1s",
+   "aws_iam_instance_profile.instance: Destruction complete after 1s",
+   "aws_ssm_parameter.database_url: Destruction complete after 1s",
+   "aws_iam_role.instance: Destruction complete after 0s",
+   "aws_security_group.app: Destruction complete after 1s",
+   "aws_db_instance.db: Destruction complete after 1m51s",
+   "aws_db_subnet_group.db: Destruction complete after 0s",
+   "aws_security_group.db: Destruction complete after 1s",
+   "Destroy complete! Resources: 15 destroyed.",
+   "exit 0"
+  ],
+  "verification_right_after_destroy": [
+   "## verified at 2026-11-15T22:54:51Z, region us-east-2 (empty output = none)",
+   "### EC2 instances not terminated",
+   "### EC2 instances (any state)",
+   "i-0fa0758b97d5b4ac0\tterminated",
+   "### EBS volumes",
+   "### EBS snapshots (owned by this account)",
+   "### Elastic IPs",
+   "### Network interfaces",
+   "### RDS DB instances",
+   "### RDS DB snapshots (manual and automated)",
+   "rds:qbt-db-2026-11-15-22-38\tautomated\tavailable",
+   "### RDS retained automated backups",
+   "### ECR repositories",
+   "### SSM parameters",
+   "### terraform state resources",
+   "0"
+  ],
+  "note": "The automated snapshot rds:qbt-db-2026-11-15-22-38 was still listed right after destroy (as in D2); RDS deleted it on its own by 2026-11-15T22:57:58Z.",
+  "verification_final": [
+   "## verified at 2026-11-15T22:57:58Z, region us-east-2 (empty output = none)",
+   "### EC2 instances not terminated",
+   "### EC2 instances (any state)",
+   "i-0fa0758b97d5b4ac0\tterminated",
+   "### EBS volumes",
+   "### EBS snapshots (owned by this account)",
+   "### Elastic IPs",
+   "### Network interfaces",
+   "### RDS DB instances",
+   "### RDS DB snapshots (manual and automated)",
+   "### RDS retained automated backups",
+   "### ECR repositories",
+   "### SSM parameters",
+   "### terraform state resources",
+   "0"
+  ]
+ }
+}
