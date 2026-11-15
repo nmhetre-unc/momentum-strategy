@@ -59,7 +59,9 @@ when it reports a Sharpe ratio and calls it significant. (The figures are in
 `adaptive_ensemble` used to be the example that held up best: 0.906, 0.549
 and 0.380 against the benchmark at 1, 5 and 11 trials. Those came from its
 full-period returns, which included the days it had learned from, and they
-don't survive scoring it out of sample.
+don't survive scoring it out of sample. (Both sets are measured by
+`scripts/audit_deflated_sharpe.py`, in
+`results/ml/deflated_sharpe_audit.json`.)
 
 The benchmark's own against-benchmark cell is suppressed rather than computed.
 The deflated Sharpe numerator is `sharpe − sr_benchmark − sr0`, so for the

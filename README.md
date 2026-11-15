@@ -22,6 +22,11 @@ Sharpe ratios following Bailey & López de Prado (2014).
   five, 0.380 at eleven. Out of sample it is 0.295, 0.042 and 0.015.
 - 12-1 momentum on the S&P 100: long-leg Sharpe 1.071 [0.727, 1.441], short leg
   -0.882; 88.7% of the loss traces to a -0.214 net beta mismatch, not the signal.
+- Monthly ML (logistic regression, LightGBM, HMM features) in nested purged
+  walk-forward: no model beats its bar. The best, a regime model, is right
+  80.8% of the time against a lookup table's 82.7%. It is served through the
+  API anyway, with those numbers in every response. See
+  [Machine learning](#machine-learning).
 - The stationary bootstrap, 62% of the full results run, now runs in C++ and
   gives bit-identical output. The bootstrap call is 19.4x faster and the whole
   pipeline 2.4x faster, against a ceiling of about 2.7x.
@@ -543,6 +548,158 @@ fit step.
 
 Full detail, including the regime analysis, is in [FINDINGS.md](FINDINGS.md).
 Generated tables are in [results/summary.md](results/summary.md).
+
+## Machine learning
+
+The question: can a model predict next month's SPY direction (up or not)
+or next month's regime (the most common daily `rules` regime: Calm
+Uptrend, Quiet Range, Volatile Rally, Crisis / Selloff) better than a
+simple rule? **No.** None of the models beats its bar, and the one
+served by the API says so in every response.
+
+### Leakage controls
+
+Monthly samples have a decision date (features known, prediction made)
+and a label end date (the next month end). They overlap in time, so
+plain k-fold leaks. [`src/qbt/ml/splits.py`](src/qbt/ml/splits.py) has
+the details.
+
+- **Purging.** A training sample is dropped when its label interval
+  touches the test block. In walk-forward this removes one boundary month
+  per fold (`n_purged: 1` in each fold of
+  [`results/ml/c1_baselines.json`](results/ml/c1_baselines.json)).
+- **Embargo** (12 months, the longest fixed feature look-back). It drops
+  the samples just *after* a test block, whose features were built from
+  the test block's prices. Walk-forward trains only on samples before
+  the test block, so there is nothing after it to drop. The embargo is a
+  no-op there (`n_embargoed: 0` in every fold), kept so both splitters
+  share one rule. It does real work in the purged k-fold used for inner
+  tuning.
+- **Nested tuning.** Hyperparameters are chosen on purged inner folds of
+  each outer training set only. Every reported month is predicted by a
+  model that never saw it, and never saw a choice made on it.
+- **A lookahead canary for every feature.** `tests/test_ml_monthly.py`
+  cuts the price history at several dates and requires each of the 14
+  features (10 base, 4 HMM) to be unchanged on every day that survives
+  the cut. The canary is proven against three deliberately leaky
+  features (tomorrow's return, a full-sample z-score, a centred moving
+  average), and it catches all three.
+
+### The audit: strategies scored on data they learned from
+
+Before this branch, the seven daily strategies that learn something (a
+fitted classifier, an HMM regime model, or a choice picked by past
+Sharpe) were scored over the full period. That included the years they
+had learned from. Two audits measured this against the old code and the
+fixed code:
+
+| What was counted | Before | After | Source |
+|---|---|---|---|
+| `ml_direction`: days with a signal from its own training period | 2,982 of 4,279 (70%), long on 2,937 | 0 | [`daily_ml_audit.json`](results/ml/daily_ml_audit.json) |
+| `ml_direction`, `ml_regime_conditional`: rolling walk-forward folds scored on training data | 18 of 27 each | 0 | [`learning_strategies_audit.json`](results/ml/learning_strategies_audit.json) |
+| HMM fitted on days the ML model treats as out of sample | 87 days | 0 | [`daily_ml_audit.json`](results/ml/daily_ml_audit.json) |
+| The five regime wrappers: in-sample days holding a position | 846 to 2,335 each | 0 | [`learning_strategies_audit.json`](results/ml/learning_strategies_audit.json) |
+| The five regime wrappers: rolling folds scored on training data | 19 of 27 each | 0 | same |
+| `regime_sized`: positions changed by rewriting *later* prices (lookahead) | 1,494 days | 0 | same |
+
+The fix: every learning strategy marks its first out-of-sample day and
+holds no position before it, and it is scored only from that day,
+against buy-and-hold over the same window. The changed strategies got
+new version numbers (v2 for `ml_direction`, the regime wrappers and
+`ml_regime_conditional`), recorded on
+every backtest the service runs and pinned by fingerprint in the tests.
+See [Strategy versions](#strategy-versions).
+
+What it changed, in plain terms: `adaptive_ensemble` had looked like the
+best strategy. The deflated Sharpe against buy-and-hold estimates the
+chance its true Sharpe beats the index after allowing for how many
+strategies were tried. With the learning period counted, it was 0.906
+at 1 trial, 0.549 at 5 and 0.380 at 11. Scored only on days it hadn't
+learned from, it is **0.295, 0.042 and 0.015**
+([`results/ml/deflated_sharpe_audit.json`](results/ml/deflated_sharpe_audit.json),
+both sections measured by one script, `scripts/audit_deflated_sharpe.py`).
+The apparent edge was mostly the strategy remembering its training data.
+
+### Monthly models (C2) against the real bars
+
+Logistic regression and LightGBM run in nested purged walk-forward on
+SPY 2008-2025, with and without HMM features. Each is compared with its
+**bar**, on the same months:
+
+- **Direction:** majority class (always "up", i.e. buy-and-hold).
+- **Regime:** `rules_regime_lookup`, the most frequent next-month regime
+  among training months that had the same `rules` regime on their
+  decision date. Regimes persist, so this simple table is hard to beat:
+  it beats the majority class and "same as last month" too.
+
+A model "beats" its bar only if the paired 95% stationary-bootstrap
+interval of the accuracy difference is above zero and the exact McNemar
+p < 0.05. All numbers are from
+[`results/ml/c2_results.json`](results/ml/c2_results.json)
+(`verdict.classification`).
+
+| Target | Features | Model | Months | Accuracy | Bar | Bar accuracy | Difference [95% CI] | McNemar p | Beats |
+|---|---|---|---|---|---|---|---|---|---|
+| direction | base | logistic | 128 | 0.656 | majority class | 0.688 | -0.031 [-0.086, +0.008] | 0.22 | no |
+| direction | base | LightGBM | 128 | 0.664 | majority class | 0.688 | -0.023 [-0.094, +0.031] | 0.51 | no |
+| direction | base+hmm | logistic | 104 | 0.721 | majority class | 0.721 | 0.000 [0.000, 0.000] | 1.00 | no (always "up") |
+| direction | base+hmm | LightGBM | 104 | 0.721 | majority class | 0.721 | 0.000 [0.000, 0.000] | 1.00 | no (always "up") |
+| regime | base | logistic | 128 | 0.711 | rules_regime_lookup | 0.805 | -0.094 [-0.180, -0.016] | 0.012 | no (worse) |
+| regime | base | LightGBM | 128 | 0.773 | rules_regime_lookup | 0.805 | -0.031 [-0.078, +0.023] | 0.39 | no |
+| regime | base+hmm | logistic | 104 | 0.779 | rules_regime_lookup | 0.827 | -0.048 [-0.087, -0.010] | 0.18 | no |
+| regime | base+hmm | LightGBM | 104 | 0.808 | rules_regime_lookup | 0.827 | -0.019 [-0.058, +0.019] | 0.69 | no |
+
+(The HMM features start later, so the base+hmm rows cover 104 months,
+2016-04 to 2024-11, rather than 128. The bar is recomputed on those
+months, which is why it differs between the base and base+hmm rows.)
+
+**The economic test.** A direction model trades: long when P(up) > 0.5,
+flat otherwise, 5bps costs. Against buy-and-hold over the same 128
+months, the base logistic model has a Sharpe of 0.833 against 0.910
+(difference -0.077 [-0.202, +0.015]), and LightGBM 0.881 against 0.910
+(-0.029 [-0.209, +0.111]). With HMM features both models are long every
+month, so they *are* buy-and-hold. The deflated Sharpe against
+buy-and-hold counts **116 trials**: every target, feature set, model and
+hyperparameter combination tried. At that count it is 0.002 (logistic)
+and 0.004 (LightGBM); even at a single trial it would be 0.41 and 0.46.
+
+**Disclosure: a discarded first pass.** Before the grids were widened, a
+first pass of 24 configurations (4 logistic and 8 LightGBM, both targets,
+base features) was run and its out-of-sample results were seen. Those
+configurations are also in the final grids, but that pass was a separate
+selection, so it counts as separate trials: 92 + 24 = 116
+(`trials.first_pass` in `c2_results.json`).
+
+**Conclusion.** Nothing beats its bar. The best model, regime LightGBM
+with HMM features, is right 80.8% of the time against the lookup table's
+82.7%, a difference whose interval includes zero. Its errors aren't
+detectably different from the table's. No direction model beats always
+"up", and none trades better than buy-and-hold. With 104 to 128
+out-of-sample months the intervals are a few points wide, so a small
+real edge can't be ruled out either; this data can't establish one.
+
+### Serving it anyway, honestly
+
+The regime LightGBM with HMM features is served through the API as an
+engineering demonstration ([Model serving](#model-serving)):
+
+- **Registry.** Each version is an immutable row (migration 0004) with
+  its training snapshot, window, features, hyperparameters and seed. Its
+  out-of-sample accuracy, its bar and `beats_baseline` are required
+  columns, so a model can't be registered without them.
+- **Reproducible artifacts.** The same snapshot and seed give a
+  byte-identical artifact (JSON wrapping LightGBM's text model, never
+  pickle), stored with its SHA-256. The hash is checked on every load,
+  and the served input is checked against its own hash. Retraining an
+  identical model finds the existing version.
+- **Honest `/predict`.** Every response carries the out-of-sample
+  accuracy (0.808 over 104 months) next to `rules_regime_lookup`'s 0.827,
+  the difference interval, the McNemar p, `beats: false`, and a sentence
+  saying to treat the prediction as a demonstration. Every prediction is
+  logged.
+- **Latency.** At 100 requests/s for 60 s: p50 7.7 ms, p99 14.0 ms, 0
+  errors, every prediction logged once
+  ([`bench/results/service/predict.json`](bench/results/service/predict.json)).
 
 ## What property-based testing found
 
