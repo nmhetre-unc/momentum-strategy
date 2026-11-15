@@ -1,0 +1,127 @@
+{
+  "measurement": "deploy timeline",
+  "apply_start_to_api_healthy_seconds": 941.5,
+  "note": "Wall time, run by hand step by step: it includes the waits between steps (checking SSM registration and cloud-init) and the TLS checks were done after. Commands: infra/README.md runbook.",
+  "image": {
+    "tag": "v1",
+    "index_digest": "sha256:97f3c946ed4eea84f129dbd7a8071a2e733f172770fdb19cb8027c38ed7b5c23",
+    "amd64_manifest_bytes": 175565866,
+    "git_commit": "2fdad5c"
+  },
+  "events": [
+    {
+      "event": "terraform apply start",
+      "utc": "2026-11-15T20:58:27.254Z",
+      "seconds_since_apply_start": 0.0
+    },
+    {
+      "event": "image push to ECR (during apply, once the repository existed)",
+      "utc": "2026-11-15T21:01:24.662Z",
+      "end": "2026-11-15T21:01:32.482Z",
+      "seconds_since_apply_start": 185.2
+    },
+    {
+      "event": "terraform apply complete (15 added; RDS 7m29s, instance 13s)",
+      "utc": "2026-11-15T21:06:14.437Z",
+      "seconds_since_apply_start": 467.2
+    },
+    {
+      "event": "instance Online in SSM (cloud-init already done at the first check, 21:08:46)",
+      "utc": "2026-11-15T21:06:28.270Z",
+      "seconds_since_apply_start": 481.0
+    },
+    {
+      "event": "pull image",
+      "utc": "2026-11-15T21:09:12.960Z",
+      "end": "2026-11-15T21:10:20.400Z",
+      "exit": 0,
+      "output": [],
+      "seconds_since_apply_start": 713.1
+    },
+    {
+      "event": "qbt migrate",
+      "utc": "2026-11-15T21:10:20.401Z",
+      "end": "2026-11-15T21:10:27.855Z",
+      "exit": 0,
+      "output": [
+        " Container qbt-migrate-run-d5bab3b59cb0 Creating ",
+        " Container qbt-migrate-run-d5bab3b59cb0 Created ",
+        "INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.",
+        "INFO  [alembic.runtime.migration] Will assume transactional DDL.",
+        "INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Initial schema: price snapshots, strategy catalog, job queue, results, metrics.",
+        "INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Record each price snapshot's fetch range; fix 0001's CHECK constraint names.",
+        "INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Version strategies by behaviour as well as by parameter schema.",
+        "INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Model registry and prediction log."
+      ],
+      "seconds_since_apply_start": 720.6
+    },
+    {
+      "event": "qbt ingest",
+      "utc": "2026-11-15T21:10:27.857Z",
+      "end": "2026-11-15T21:10:41.277Z",
+      "exit": 0,
+      "output": [
+        "Container qbt-ingest-run-bc7a9cf41d31 Creating ",
+        " Container qbt-ingest-run-bc7a9cf41d31 Created ",
+        "SPY: stored new series 1 (4279 bars, 2008-01-02 to 2024-12-31)"
+      ],
+      "seconds_since_apply_start": 734.0
+    },
+    {
+      "event": "qbt train",
+      "utc": "2026-11-15T21:10:41.279Z",
+      "end": "2026-11-15T21:12:54.560Z",
+      "exit": 0,
+      "output": [
+        "Container qbt-train-run-4f99474859c4 Creating ",
+        " Container qbt-train-run-4f99474859c4 Created ",
+        "SPY: training lightgbm on regime (base+hmm) from price series 1, 4279 bars",
+        "registered model version 1 (artifact sha256 1662bf6dae00bd79d3b36b908a3131cfbf0ba328b26d14af8a5c2a404050ee18, 122 s)",
+        "out of sample: accuracy 0.808 over 104 months (2016-04-29 to 2024-11-29); baseline rules_regime_lookup 0.827; does NOT beat its baseline"
+      ],
+      "seconds_since_apply_start": 867.3
+    },
+    {
+      "event": "qbt up",
+      "utc": "2026-11-15T21:12:54.562Z",
+      "end": "2026-11-15T21:13:57.985Z",
+      "exit": 0,
+      "output": [
+        "Container qbt-api-1 Creating ",
+        " Container qbt-worker-1 Creating ",
+        " Container qbt-api-1 Created ",
+        " Container qbt-worker-1 Created ",
+        " Container qbt-api-1 Starting ",
+        " Container qbt-worker-1 Starting ",
+        " Container qbt-api-1 Started ",
+        " Container qbt-worker-1 Started ",
+        " Container qbt-api-1 Healthy ",
+        " Container qbt-worker-1 Healthy"
+      ],
+      "seconds_since_apply_start": 930.7
+    },
+    {
+      "event": "first GET /health = 200 from the laptop",
+      "utc": "2026-11-15T21:14:08.759Z",
+      "seconds_since_apply_start": 941.5
+    }
+  ],
+  "terraform_apply_summary": [
+    "aws_ecr_repository.service: Creation complete after 1s [id=qbt-service]",
+    "aws_ecr_lifecycle_policy.service: Creation complete after 0s [id=qbt-service]",
+    "aws_iam_role.instance: Creation complete after 1s [id=qbt-instance]",
+    "aws_iam_role_policy.instance: Creation complete after 0s [id=qbt-instance:qbt-instance]",
+    "aws_db_subnet_group.db: Creation complete after 1s [id=qbt-db]",
+    "aws_security_group.app: Creation complete after 2s [id=sg-0de1c40079d69ef99]",
+    "aws_security_group.db: Creation complete after 2s [id=sg-0ae109eba049dd018]",
+    "aws_vpc_security_group_egress_rule.https: Creation complete after 0s [id=sgr-022ef066a7a533066]",
+    "aws_vpc_security_group_ingress_rule.api_from_allowed_ip: Creation complete after 0s [id=sgr-003fe2f61d147e97e]",
+    "aws_vpc_security_group_ingress_rule.db_from_app: Creation complete after 1s [id=sgr-0fc13b61f8ffaa998]",
+    "aws_vpc_security_group_egress_rule.postgres: Creation complete after 1s [id=sgr-06bd5715073dfb3e8]",
+    "aws_iam_instance_profile.instance: Creation complete after 6s [id=qbt-instance]",
+    "aws_db_instance.db: Creation complete after 7m29s [id=db-JOCTP4BXJ5UVYFYZYVDFB46K6M]",
+    "aws_ssm_parameter.database_url: Creation complete after 1s [id=/qbt/database-url]",
+    "aws_instance.app: Creation complete after 13s [id=i-0b77a0a58d5db16e9]",
+    "Apply complete! Resources: 15 added, 0 changed, 0 destroyed."
+  ]
+}

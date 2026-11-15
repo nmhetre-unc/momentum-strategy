@@ -1,0 +1,35 @@
+{
+  "measurement": "tls",
+  "recorded_at": "2026-11-15T21:14:57+00:00",
+  "openssl_s_client": [
+    "0 s:CN=qbt-db.ct0g48m4kus8.us-east-2.rds.amazonaws.com, OU=RDS, O=Amazon.com, L=Seattle, ST=Washington, C=US",
+    "   i:C=US, O=Amazon Web Services, Inc., OU=Amazon RDS, ST=WA, CN=Amazon RDS us-east-2 Subordinate CA RSA2048 G1.A.4, L=Seattle",
+    " 1 s:C=US, O=Amazon Web Services, Inc., OU=Amazon RDS, ST=WA, CN=Amazon RDS us-east-2 Subordinate CA RSA2048 G1.A.4, L=Seattle",
+    "   i:C=US, O=Amazon Web Services, Inc., OU=Amazon RDS, ST=WA, CN=Amazon RDS us-east-2 Root CA RSA2048 G1, L=Seattle",
+    " 2 s:C=US, O=Amazon Web Services, Inc., OU=Amazon RDS, ST=WA, CN=Amazon RDS us-east-2 Root CA RSA2048 G1, L=Seattle",
+    "   i:C=US, O=Amazon Web Services, Inc., OU=Amazon RDS, ST=WA, CN=Amazon RDS us-east-2 Root CA RSA2048 G1, L=Seattle",
+    "New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384",
+    "Protocol: TLSv1.3",
+    "Verify return code: 0 (ok)"
+  ],
+  "api_container_psycopg": [
+    "url sslmode: verify-full sslrootcert: /etc/ssl/rds/global-bundle.pem",
+    "connected: ssl_in_use True | libpq sslmode verify-full | sslrootcert /etc/ssl/rds/global-bundle.pem | host qbt-db.ct0g48m4kus8.us-east-2.rds.amazonaws.com",
+    "pg_stat_ssl: (True, 'TLSv1.3', 'TLS_AES_256_GCM_SHA384', 256)",
+    "server: 17.9",
+    "refused as expected: host as IP (name mismatch) -> connection failed: connection to server at \"172.31.39.153\", port 5432 failed: server certificate for \"qbt-db.ct0g48m4kus8.us-east-2.rds.amazonaws.com\" (and 1 other name) does not match host name \"172.",
+    "refused as expected: system CA bundle, not RDS's -> connection failed: connection to server at \"172.31.39.153\", port 5432 failed: SSL error: certificate verify failed"
+  ],
+  "service_connections_pg_stat_ssl": {
+    "query": "application_name, client_addr, ssl, version, count over pg_stat_activity JOIN pg_stat_ssl for user qbt",
+    "rows": [
+      [
+        "",
+        "172.31.45.182/32",
+        true,
+        "TLSv1.3",
+        4
+      ]
+    ]
+  }
+}

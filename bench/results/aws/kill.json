@@ -1,0 +1,118 @@
+{
+  "measurement": "kill",
+  "rtt": {
+    "method": "TCP connect to 8000/tcp, 40 samples",
+    "measured_at": "2026-11-15T21:33:34+00:00",
+    "min_ms": 30.658003997814376,
+    "p50_ms": 34.52703649963951,
+    "p90_ms": 40.85336700154585,
+    "max_ms": 41.935863002436236
+  },
+  "config": {
+    "workers": 2,
+    "backlog_jobs_first": 40,
+    "load": 0.6,
+    "seconds": 120,
+    "kill_at_seconds": 10,
+    "signal": "SIGKILL (docker kill, on the instance)",
+    "times_from": "the instance's clock: kill to status changes seen polling the API on localhost every 0.1 s",
+    "lease_seconds": 30,
+    "reaper_seconds": 15,
+    "reps": 2
+  },
+  "all_checks_pass": true,
+  "runs": [
+    {
+      "rep": 1,
+      "load_rate_per_s": 0.28532307707389154,
+      "kill_attempts": [
+        {
+          "victim": "3172a43a6394",
+          "killed_at": 1794778435.0304494,
+          "jobs": "557138eb-f76d-4702-82dc-fa9ce1f9ce2d",
+          "status_after_kill": "running"
+        }
+      ],
+      "victims": {
+        "557138eb-f76d-4702-82dc-fa9ce1f9ce2d": {
+          "requeued": 36.08595609664917,
+          "requeue_reason": "lease expired (worker 3172a43a6394:8, attempt 1)",
+          "reclaimed": 41.064706563949585,
+          "finished": 41.38828897476196,
+          "final_status": "succeeded",
+          "attempts": 2
+        }
+      },
+      "checks": {
+        "posts_accepted": 73,
+        "post_errors": 0,
+        "jobs_in_db": 73,
+        "lost": 0,
+        "unexpected_extra_jobs": 0,
+        "not_succeeded": 0,
+        "without_result": 0,
+        "result_attempt_mismatch": 0,
+        "jobs_with_more_than_one_attempt": [
+          "557138eb-f76d-4702-82dc-fa9ce1f9ce2d"
+        ],
+        "metric_rows_per_job": [
+          12
+        ],
+        "fencing_rejections_in_logs": 0,
+        "results_discarded_in_logs": 0,
+        "reaper_requeues_in_logs": 1
+      },
+      "all_checks_pass": true,
+      "started": "2026-11-15T21:33:34+00:00",
+      "ended": "2026-11-15T21:35:51+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "rep": 2,
+      "load_rate_per_s": 0.28532307707389154,
+      "kill_attempts": [
+        {
+          "victim": "3172a43a6394",
+          "killed_at": 1794778576.7096512,
+          "jobs": "c1e79ac3-a4de-4149-8650-717286c3faa0",
+          "status_after_kill": "running"
+        }
+      ],
+      "victims": {
+        "c1e79ac3-a4de-4149-8650-717286c3faa0": {
+          "requeued": 31.517852067947388,
+          "requeue_reason": "lease expired (worker 3172a43a6394:7, attempt 1)",
+          "reclaimed": 37.59450340270996,
+          "finished": 39.515641927719116,
+          "final_status": "succeeded",
+          "attempts": 2
+        }
+      },
+      "checks": {
+        "posts_accepted": 75,
+        "post_errors": 0,
+        "jobs_in_db": 75,
+        "lost": 0,
+        "unexpected_extra_jobs": 0,
+        "not_succeeded": 0,
+        "without_result": 0,
+        "result_attempt_mismatch": 0,
+        "jobs_with_more_than_one_attempt": [
+          "c1e79ac3-a4de-4149-8650-717286c3faa0"
+        ],
+        "metric_rows_per_job": [
+          12
+        ],
+        "fencing_rejections_in_logs": 0,
+        "results_discarded_in_logs": 0,
+        "reaper_requeues_in_logs": 1
+      },
+      "all_checks_pass": true,
+      "started": "2026-11-15T21:35:51+00:00",
+      "ended": "2026-11-15T21:38:06+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    }
+  ]
+}

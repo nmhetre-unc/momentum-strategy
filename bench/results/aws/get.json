@@ -1,0 +1,32 @@
+{
+  "measurement": "get",
+  "rtt": {
+    "method": "TCP connect to 8000/tcp, 40 samples",
+    "measured_at": "2026-11-15T21:23:17+00:00",
+    "min_ms": 30.969743005698547,
+    "p50_ms": 36.23670899833087,
+    "p90_ms": 40.53785560026881,
+    "max_ms": 46.32750799646601
+  },
+  "config": {
+    "rate_per_s": 20,
+    "seconds": 30,
+    "workers": "idle",
+    "latency_from": "scheduled send time at the laptop (open loop)"
+  },
+  "runs": [
+    {
+      "requests": 600,
+      "errors": 0,
+      "p50_ms": 42.87952499362291,
+      "p90_ms": 47.17706459996407,
+      "p99_ms": 78.16791118668331,
+      "max_ms": 106.22005099867238,
+      "max_send_lag_ms": 3.941741000744514,
+      "started": "2026-11-15T21:23:17+00:00",
+      "ended": "2026-11-15T21:23:48+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "client": "this laptop, over the public internet (home connection) to us-east-2",
+  "laptop": {
+    "recorded_at": "2026-11-15T21:44:45+00:00",
+    "host": {
+      "cpu_model": "Intel(R) Core(TM) 7 150U",
+      "windows": {
+        "physical_cores": 10,
+        "logical_processors": 12,
+        "max_clock_mhz": 1800,
+        "ram_gib": 15.7,
+        "battery_status_code": 2,
+        "power_plan": "Balanced"
+      },
+      "power": {
+        "AC1.online": "1",
+        "BAT1.status": "Full",
+        "BAT1.capacity": "100"
+      },
+      "on_ac_power": true,
+      "wslconfig": "absent (WSL defaults: all logical CPUs, 50% of host RAM)"
+    },
+    "wsl_distro": {
+      "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+      "logical_cpus": 12,
+      "loadavg_1_5_15": [
+        0.265625,
+        0.20068359375,
+        0.2392578125
+      ]
+    },
+    "docker": {
+      "operating_system": "Docker Desktop",
+      "server_version": "29.9.3",
+      "kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "vm_cpus": 12,
+      "vm_memory_bytes": 8162783232,
+      "vm_memory_gib": 7.6,
+      "storage_driver": "overlayfs",
+      "cgroup_version": "2",
+      "compose_version": "5.7.0"
+    },
+    "image": "sha256:581b951337299bf8f2cd504c976d3a4ff55cf988de768ecffdc2654cf374e6c8",
+    "git_commit": "2fdad5c+dirty",
+    "python": "3.12.16"
+  },
+  "region": "us-east-2",
+  "instance": {
+    "InstanceId": "i-0b77a0a58d5db16e9",
+    "InstanceType": "t3.small",
+    "ImageId": "ami-0df8a753693e6366d",
+    "Placement": {
+      "AvailabilityZoneId": "use2-az3",
+      "GroupName": "",
+      "Tenancy": "default",
+      "AvailabilityZone": "us-east-2c"
+    },
+    "LaunchTime": "2026-11-15T21:06:01+00:00",
+    "Architecture": "x86_64",
+    "CpuOptions": {
+      "CoreCount": 1,
+      "ThreadsPerCore": 2
+    },
+    "cpu_credits": "standard (infra/instance.tf)",
+    "memory_mib_seen_by_os": 1909,
+    "source": "aws ec2 describe-instances after termination; memory from `free -m` on the instance"
+  },
+  "database": {
+    "DBInstanceClass": "db.t4g.micro",
+    "Engine": "postgres",
+    "EngineVersion": "17.9 (SHOW server_version, tls.json)",
+    "AllocatedStorage": 20,
+    "StorageType": "gp3",
+    "CACertificateIdentifier": "rds-ca-rsa2048-g1",
+    "MultiAZ": false,
+    "source": "infra/database.tf as applied and tls.json; the instance was deleted before this file was written"
+  },
+  "image": {
+    "repository": "027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service",
+    "tag": "v1",
+    "index_digest": "sha256:97f3c946ed4eea84f129dbd7a8071a2e733f172770fdb19cb8027c38ed7b5c23",
+    "git_commit": "2fdad5c"
+  },
+  "note": "Recorded after teardown (the step meant to write it was skipped when the first TLS check failed). The laptop was on AC for every measurement: each run passed the power guard (power_events [] in its file)."
+}
