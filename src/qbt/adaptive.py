@@ -24,6 +24,7 @@ from qbt.ml import ml_direction_signal
 from qbt.regime import UNKNOWN, detect_regimes, detect_regimes_walk_forward
 from qbt.regime_features import realized_volatility
 from qbt.strategies import STRATEGIES
+from qbt.timesplit import split_index
 
 # Strategies the `auto` selectors choose between. ml_direction is
 # excluded since it would be refit inside every candidate evaluation;
@@ -40,13 +41,16 @@ MIN_LEARN_DAYS = 60
 def _resolve_regimes(df: pd.DataFrame, regimes=None, regime_method: str = "hmm",
                      n_regimes: int = 3, regime_fit_frac: float = 0.7,
                      regime_smooth: str = "min_duration", min_duration: int = 5,
-                     regime_walk_forward: bool = False):
+                     regime_walk_forward: bool = False,
+                     regime_fit_end_max: pd.Timestamp | None = None):
     """
     Accepts either a precomputed RegimeResult / label Series, or the
     parameters needed to detect regimes from scratch. The dashboard
     passes a precomputed result; the CLI and walk_forward.py let it be
     computed here, which keeps these wrappers usable as plain
-    strategy_fn(df, **params).
+    strategy_fn(df, **params). `regime_fit_end_max` caps a single fit's
+    window (detect_regimes(fit_end_max=...)); walk-forward detection is
+    causal already and ignores it.
     """
     if regimes is not None:
         if hasattr(regimes, "labels"):
@@ -62,7 +66,7 @@ def _resolve_regimes(df: pd.DataFrame, regimes=None, regime_method: str = "hmm",
         )
     return detect_regimes(
         df, method=regime_method, n_regimes=n_regimes, fit_frac=regime_fit_frac,
-        smooth=regime_smooth, min_duration=min_duration,
+        smooth=regime_smooth, min_duration=min_duration, fit_end_max=regime_fit_end_max,
     )
 
 
@@ -359,10 +363,20 @@ def ml_regime_conditional(df: pd.DataFrame, train_frac: float = 0.7, model_type:
     """
     The ML direction model, told which regime it's in.
     regime_mode="feature" gives one model the regime as an input column;
-    "conditional" fits a separate model per regime -- see qbt/ml.py's
+    "conditional" fits a separate model per regime -- see qbt/ml/__init__.py's
     module docstring for the overfitting tradeoff.
+
+    A regime model detected here is fitted only on days before the ML
+    split (the first out-of-sample day), so every out-of-sample regime
+    label comes from a model that never saw it; regime_fit_frac can
+    shorten that window but not extend it. Precomputed `regimes` are
+    used as given.
     """
-    regime_result = _resolve_regimes(df, **regime_kwargs)
+    if "regime_fit_end_max" in regime_kwargs:
+        raise ValueError("ml_regime_conditional sets regime_fit_end_max from its own split")
+    first_oos = split_index(len(df), train_frac)
+    regime_result = _resolve_regimes(df, regime_fit_end_max=df.index[first_oos - 1],
+                                     **regime_kwargs)
     return ml_direction_signal(
         df, train_frac=train_frac, model_type=model_type,
         regimes=regime_result.labels, regime_mode=regime_mode,

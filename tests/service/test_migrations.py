@@ -31,7 +31,7 @@ def _diff(engine, target: MetaData) -> list:
 
 
 def test_single_head():
-    assert ScriptDirectory.from_config(alembic_config()).get_heads() == ["0002"]
+    assert ScriptDirectory.from_config(alembic_config()).get_heads() == ["0003"]
 
 
 def test_upgrade_downgrade_upgrade(empty_engine):
@@ -47,6 +47,28 @@ def test_upgrade_downgrade_upgrade(empty_engine):
 
     migrate(empty_engine, "upgrade", "head")
     assert set(inspect(empty_engine).get_table_names()) >= TABLES
+
+
+def test_0003_backfills_version_1_and_refuses_a_lossy_downgrade(empty_engine):
+    migrate(empty_engine, "upgrade", "0002")
+    with empty_engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO strategies (name, schema_hash, param_schema) "
+            "VALUES ('momentum', decode(repeat('ab', 32), 'hex'), '{}')"))
+    migrate(empty_engine, "upgrade", "0003")
+    with empty_engine.begin() as conn:
+        assert conn.execute(text("SELECT version FROM strategies")).scalar_one() == 1
+        # Version 2 with the same schema: allowed now, and not representable in 0002.
+        conn.execute(text(
+            "INSERT INTO strategies (name, version, schema_hash, param_schema, is_current) "
+            "VALUES ('momentum', 2, decode(repeat('ab', 32), 'hex'), '{}', false)"))
+    with pytest.raises(RuntimeError, match="several versions with the same parameter schema"):
+        migrate(empty_engine, "downgrade", "0002")
+    with empty_engine.begin() as conn:
+        conn.execute(text("DELETE FROM strategies WHERE version = 2"))
+    migrate(empty_engine, "downgrade", "0002")
+    with empty_engine.connect() as conn:
+        assert "version" not in {c["name"] for c in inspect(conn).get_columns("strategies")}
 
 
 def test_migrations_match_metadata(migrated_engine):

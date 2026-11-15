@@ -111,13 +111,18 @@ strategies = Table(
     "strategies", metadata,
     Column("id", BigInteger, Identity(always=True), primary_key=True),
     Column("name", Text, nullable=False),
+    # qbt.strategies.STRATEGY_VERSIONS: bumped when the strategy's behaviour
+    # changes for the same params, which the schema hash can't see.
+    Column("version", Integer, nullable=False, server_default=text("1")),
     Column("schema_hash", LargeBinary, nullable=False),
     Column("param_schema", JSONB, nullable=False),
     Column("description", Text),
     Column("is_current", Boolean, nullable=False, server_default=text("true")),
     Column("registered_at", DateTime(timezone=True), nullable=False, server_default=NOW),
-    # A new row per parameter-schema change: old jobs keep the schema they were validated with.
-    UniqueConstraint("name", "schema_hash"),
+    # A new row per behaviour version or parameter-schema change: old jobs
+    # keep the version and schema they were validated and run with.
+    UniqueConstraint("name", "version", "schema_hash"),
+    CheckConstraint("version >= 1", name="version_positive"),
 )
 Index("strategies_one_current", strategies.c.name, unique=True,
       postgresql_where=strategies.c.is_current)

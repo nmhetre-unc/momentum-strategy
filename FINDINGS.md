@@ -9,16 +9,20 @@ follows Bailey & López de Prado (2014).
 
 Eleven strategies were tested. Every one produces a 90% confidence interval on
 the Sharpe difference versus buy-and-hold that contains zero. The two closest
-are `adaptive_ensemble` at +0.324 [-0.045, +0.686] and `ml_direction` at +0.10
-[-0.01, +0.20]. Buy-and-hold's own Sharpe over the period is 0.607.
+are `adaptive_ensemble` at +0.324 [-0.045, +0.686] and `volatility_targeted` at
++0.22 [-0.08, +0.54]. Buy-and-hold's own Sharpe over the period is 0.607.
 
-`ml_direction` has by far the narrowest difference interval — width 0.21
-against `adaptive_ensemble`'s 0.74 — because it is invested most of the time
-and moves closely with the benchmark, so the paired difference has low
-variance. Small effect, precisely measured, against a large effect measured
-imprecisely.
+An earlier version of this section named `ml_direction` second, at +0.10
+[-0.01, +0.20], with by far the narrowest interval. That was an artifact of
+version 1 of the strategy predicting across its own training period: 2,982
+of its days (69.7%) were in-sample predictions
+(`results/ml/daily_ml_audit.json`). From version 2 it trades only out of
+sample and holds cash before 2019-11-22. Its row, -0.15 [-0.50, +0.23], and
+`ml_regime_conditional`'s, -0.20 [-0.54, +0.19], therefore mostly compare
+holding cash in 2008-2019 with holding SPY. They say little about either
+model, in either direction.
 
-`mean_reversion` is the only strategy that plausibly underperforms: -0.14
+Setting those two rows aside, `mean_reversion` is the only strategy that plausibly underperforms: -0.14
 difference, deflated Sharpe against the benchmark of 0.038. Its kurtosis of
 34.8 and -47.7% drawdown match the short-volatility payoff profile its own
 documentation predicts — many small wins, occasional large loss.
@@ -72,17 +76,27 @@ instrument.
 
 ## 4. Regime filtering never binds
 
-Across four base strategies on this data, the learned allow-list is always
-[0, 1, 2] — no regime is ever excluded. The reason is structural: a long/flat
+For `sma_crossover`, `momentum` and `mean_reversion` on this data, the learned
+allow-list is [0, 1, 2] — no regime is ever excluded. The reason is structural: a long/flat
 overlay on an asset that rose in every regime has no losing regime to exclude.
 SPY was up even in the turbulent regime, which contains the 2009 and 2020
 recoveries alongside the crashes.
 
-Where `regime_filtered` differs from its base strategy, the difference is
+Where `regime_filtered` differs from those base strategies, the difference is
 entirely the UNKNOWN warm-up override — 97 days for `momentum`, 229 for
-`mean_reversion`, 266 for `ml_direction`, and 0 for `sma_crossover`, whose own
+`mean_reversion`, and 0 for `sma_crossover`, whose own
 200-day warm-up already covers the regime detector's. That confounds any
 comparison with a start-date effect rather than a regime effect.
+
+`ml_direction` (version 2 on) is a degenerate case. It holds no position in the
+allow-list's learning window, which ends 2018-03-13, before the model's
+out-of-sample split. Its Sharpe is therefore 0 in every regime, the
+positive-Sharpe rule excludes them all, and `regime_filtered` over it is flat
+every day. That is a property of the pairing, not evidence about regimes.
+Version 1 held positions there, on in-sample predictions. This section used
+to report 266 warm-up days for it. Current counts and allow-lists are in
+`results/regime_filter_override_days.json`
+(`scripts/regime_filter_override_days.py`).
 
 ## 5. The regime allow-list rests on an undetectable sign
 
@@ -247,8 +261,15 @@ choice lose the most: regime_switch 1.35 to 0.86, adaptive_ensemble 1.26 to
 selection was made once on the whole 17-year series, so even early folds were
 judged on a choice informed by later data.
 
-Fitted classifiers lose less: ml_regime_conditional 1.19 to 0.99, ml_direction
-1.37 to 1.18.
+The two ML classifiers no longer fit this comparison. Version 1 of
+ml_direction lost 0.19 (1.37 to 1.18), and ml_regime_conditional lost 0.20
+(1.19 to 0.99). Since the out-of-sample-only fix, their full-series signal
+holds no position before the ML split (2019-11-22). Under the fixed-model
+approach, every fold that ends before that split scores a Sharpe of 0, so
+their fixed-model means (ml_direction 0.56, ml_regime_conditional 0.54)
+average empty folds. Refit per fold, each fold's model trains on its own
+training window and trades its test window. They score 1.19 and 0.99, against
+1.18 and 0.99 before the fix.
 
 Strategies with no fit step — sma_crossover, momentum, mean_reversion,
 volatility_targeted — are unchanged to two decimals, which is the control that
@@ -284,11 +305,13 @@ proxy with no market impact, borrow, or financing. Regime labels come from a
 available but the reported numbers use the fixed fit. Walk-forward folds are sliced from a full-length backtest, so each fold
 inherits the position going into it rather than starting flat. Fold-level
 costs therefore exclude the entry cost of initiating a position at the fold's
-start. Headline metrics for fitted strategies come from full-period backtests in
-which the model predicts across its own training period — 70% of the equity
-curve for ml_direction and the learn_frac-based adaptive wrappers. The
-rolling walk-forward results in results/summary.md refit each fold and are
-the honest read for these strategies; the gap is 0.19 to 0.49 Sharpe
-depending on how much selection the strategy performs. Since every paired
+start. Headline metrics for the learn_frac-based adaptive wrappers come from
+full-period backtests that apply choices learned on the first 60% of history
+across that same 60%. The rolling walk-forward results in results/summary.md
+refit each fold and are the honest read for these strategies; for the three
+Sharpe-selected wrappers the gap is 0.42 to 0.49 Sharpe. The ML strategies
+(ml_direction from version 2, ml_regime_conditional) no longer predict their
+own training period: they hold cash for the first 70%, so their full-period
+rows say little about the models either way. Since every paired
 difference against buy-and-hold already contains zero, correcting this would
 strengthen rather than change the conclusion.

@@ -51,10 +51,12 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_labels(df: pd.DataFrame) -> pd.Series:
     """
-    1 if tomorrow's close is higher than today's, else 0. Uses shift(-1)
-    -- looking one row into the future -- which is correct here because
+    1.0 if tomorrow's close is higher than today's, else 0.0, and NaN on
+    the last row, where tomorrow's close doesn't exist yet (a comparison
+    against NaN would otherwise call it 0, "not up"). Uses shift(-1) --
+    looking one row into the future -- which is correct here because
     this is the training target, not the trading signal: the model maps
     "features known as of day t" to "was day t+1 up".
     """
     future_return = df["Close"].shift(-1) / df["Close"] - 1
-    return (future_return > 0).astype(int)
+    return (future_return > 0).astype(float).where(future_return.notna())

@@ -26,16 +26,16 @@ from sqlalchemy import func, make_url, select, text
 
 from qbt.runner import metrics_equal, run
 from qbt_service.api import MAX_KEY_LENGTH, create_app, parse_idempotency_key
-from qbt_service.catalog import sync_catalog
+from qbt_service.catalog import CATALOG, sync_catalog
 from qbt_service.db import jobs, price_bars, price_series
 from qbt_service.models import parse_request, request_hash
 from qbt_service.prices import load_frame
-from qbt_service.queue import JobResult, claim, complete, fail
+from qbt_service.queue import JobResult, claim, complete, enqueue, fail
 from qbt_service.settings import Settings
 from qbt_service.worker import Worker
 
 from .conftest import base_url, migrate, temporary_database
-from .factories import store_synthetic_series
+from .factories import add_strategy, store_synthetic_series
 
 pytestmark = pytest.mark.db
 
@@ -376,10 +376,26 @@ def test_get_a_queued_job(client, db):
     assert (got["attempts"], got["max_attempts"]) == (0, 4)
     assert got["request"] == row["request"] == parse_request(body()).model_dump(mode="json")
     assert got["price_series_id"] == db.info["series_id"]
+    assert got["strategy_version"] == CATALOG[got["request"]["strategy"]].version
     assert got["created_at"] and got["run_after"]
     for absent in ("started_at", "heartbeat_at", "finished_at", "last_error", "metrics",
                    "result"):
         assert got[absent] is None
+
+
+def test_get_reports_the_version_a_stored_job_was_submitted_to(client, db):
+    # A job stored under a since-retired version keeps reporting that version.
+    entry = CATALOG["ml_direction"]
+    request = parse_request(body(strategy="ml_direction", params={}))
+    with db.engine.begin() as conn:
+        retired = add_strategy(conn, name="ml_direction", version=entry.version - 1,
+                               schema_hash=entry.schema_hash, param_schema=entry.param_schema,
+                               is_current=False)
+        job_id = enqueue(conn, strategy_id=retired, price_series_id=db.info["series_id"],
+                         request=request.model_dump(mode="json"),
+                         request_hash=request_hash(request)).job_id
+    got = client.get(f"/backtests/{job_id}").json()
+    assert got["strategy_version"] == entry.version - 1
 
 
 def test_get_a_running_job(client, db):

@@ -663,14 +663,18 @@ COMPARISON_CONFIG = {
 
 def causal_badge(regime_result):
     """
-    'Causal' or 'Non-causal (full-sample fit)', rendered as a coloured badge
-    rather than left to a tooltip -- whether a backtest can trust these
-    labels is not something to bury.
+    'Causal', 'Out of sample from <date>' or 'Non-causal', rendered as a
+    coloured badge rather than left to a tooltip -- whether a backtest can
+    trust these labels is not something to bury.
     """
+    causal_from = getattr(regime_result, "causal_from", None)
     if regime_result.causal:
         st.badge("Causal", icon=":material/check_circle:", color="green")
+    elif causal_from is not None:
+        st.badge(f"Out of sample from {pd.Timestamp(causal_from).date()}",
+                 icon=":material/warning:", color="orange")
     else:
-        st.badge("Non-causal (full-sample fit)", icon=":material/warning:", color="orange")
+        st.badge("Non-causal", icon=":material/warning:", color="orange")
 
 
 def show_regime_health(regime_result, stability: dict):
@@ -708,11 +712,16 @@ def show_regime_health(regime_result, stability: dict):
                 "number of regimes, before building anything on these labels."
             )
         if not regime_result.causal:
+            causal_from = getattr(regime_result, "causal_from", None)
+            window = ("Only the labels from "
+                      f"{pd.Timestamp(causal_from).date()} on come from a model that hadn't "
+                      "seen them; everything before is in-sample. "
+                      if causal_from is not None else "")
             caveat(
                 "These labels are **not causal**: the model was fitted on data it is also "
-                "labelling, so they embed knowledge of the future. Fine for describing history, "
-                "not for feeding a backtest. Set the fit fraction below 1.0, or switch on "
-                "walk-forward detection, before quoting any performance number from them."
+                f"labelling, so they embed knowledge of the future. {window}Fine for describing "
+                "history, not for feeding a backtest. Switch on walk-forward detection before "
+                "quoting any performance number from them."
             )
 
 

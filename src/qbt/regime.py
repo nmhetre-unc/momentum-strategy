@@ -285,10 +285,17 @@ class RegimeResult:
     features: pd.DataFrame       # raw (unstandardized) regime features
     method: str
     n_regimes: int
-    causal: bool                 # False if the fit saw data it's labelling
+    # True only if NO label came from a model that saw the day it labels
+    # (rules, walk-forward). A single fit labels its own fit window
+    # in-sample, so it is never causal; causal_from says where its
+    # out-of-sample labels begin.
+    causal: bool
     probabilities: pd.DataFrame | None = None
     model: object = None
     fit_end: object = None       # last date the model was allowed to see
+    # First day whose label came from a model that saw nothing from that
+    # day on (None if no day qualifies, e.g. viterbi/smooth decoding).
+    causal_from: object = None
     meta: dict = field(default_factory=dict)
 
     def named_labels(self) -> pd.Series:
@@ -343,7 +350,8 @@ def _quadrant_name(trend: float, vol_pct: float) -> str:
     }[(vol_band, trend_band)]
 
 
-def _order_and_name(labels: pd.Series, features: pd.DataFrame) -> tuple:
+def _order_and_name(labels: pd.Series, features: pd.DataFrame,
+                    fit_index: pd.Index | None = None) -> tuple:
     """
     Cluster IDs come out of every fitting algorithm in arbitrary order
     and change between refits, which would make "regime 2" mean something
@@ -351,17 +359,25 @@ def _order_and_name(labels: pd.Series, features: pd.DataFrame) -> tuple:
     highest ID is most violent, then names each from its centroid.
     Returns (renumbered_labels, names, remap); remap is needed to reorder
     any probability columns to match.
+
+    With `fit_index`, the ordering and names are computed from the
+    labelled days inside it only, so the numbering of a label outside the
+    fit window never depends on days after it. A cluster with no labelled
+    fit day sorts last.
     """
     valid = labels != UNKNOWN
     if not valid.any():
         return labels, {}, {}
 
     present = sorted(labels[valid].unique())
+    if fit_index is not None:
+        valid = valid & labels.index.isin(fit_index)
     # Ordered on absolute volatility rather than its expanding percentile,
     # since percentile rank could let an early moderately-choppy stretch
     # outrank a later violent one.
     vol_by_label = {
-        k: features.loc[valid & (labels == k), "vol_20d"].mean()
+        k: features.loc[valid & (labels == k), "vol_20d"].mean() if (valid & (labels == k)).any()
+        else np.nan
         for k in present
     }
     # NaN centroids (a cluster with no complete feature rows) sort last.
@@ -580,14 +596,18 @@ def detect_regimes(
     horizon: int = 21,
     random_state: int = 42,
     features: pd.DataFrame | None = None,
+    fit_end_max: str | pd.Timestamp | None = None,
 ) -> RegimeResult:
     """
     Labels every day in `df` with a market regime. At fit_frac=1.0 the
     model is fit on all the data it then labels, which embeds knowledge
     of the future -- valid for describing history, not for feeding a
-    backtest; below 1.0, `causal` on the result records that the fit used
-    only a leading slice. `fit_end` fixes the fit window by date instead
-    of by fraction and takes precedence over `fit_frac` when supplied.
+    backtest. Below 1.0 the fit uses only a leading slice: labels inside
+    that slice are still in-sample, and `causal_from` on the result is
+    the first day labelled out of sample. `fit_end` fixes the fit window
+    by date instead of by fraction and takes precedence over `fit_frac`
+    when supplied; `fit_end_max` then caps it, so a caller can guarantee
+    the fit never reaches a date (it can only shorten the window).
     `rules` is always causal because it fits nothing.
     """
     if method not in REGIME_METHODS:
@@ -622,8 +642,20 @@ def detect_regimes(
         fit_index = X.index[:split_idx]
         resolved_fit_end = fit_index[-1]
 
-    last_label_date = df.index[-1]
+    if fit_end_max is not None and method != "rules":
+        fit_index = fit_index[fit_index <= pd.Timestamp(fit_end_max)]
+        if len(fit_index) < 30:
+            raise ValueError(
+                f"Only {len(fit_index)} rows on or before fit_end_max="
+                f"{pd.Timestamp(fit_end_max).date()} survive the regime-feature warm-up "
+                "(need 30+). Fetch a longer history."
+            )
+        resolved_fit_end = fit_index[-1]
 
+    # Out-of-sample labels start after the last day whose information the
+    # fit used: fit_end itself, or fit_end plus the forward horizon for
+    # `supervised`, whose training targets look `horizon` days ahead.
+    out_of_sample_after: pd.Timestamp | None = None
     if method == "rules":
         ids, names, proba, model = _rules_labels(raw_features, X.index)
         n_regimes, causal, resolved_fit_end = 4, True, None
@@ -631,16 +663,20 @@ def detect_regimes(
         ids, names, proba, model = _supervised_labels(df, X, fit_index, horizon, random_state)
         ids = ids.reindex(raw_features.index, fill_value=UNKNOWN)
         proba = proba.reindex(raw_features.index)
-        n_regimes, causal = 4, resolved_fit_end < last_label_date
+        n_regimes, causal = 4, False
+        position = int(df.index.searchsorted(resolved_fit_end)) + horizon
+        out_of_sample_after = pd.Timestamp(df.index[min(position, len(df) - 1)])
     else:
         ids, proba, model = _fit_predict(method, X, fit_index, n_regimes, decode, random_state)
         ids = ids.reindex(raw_features.index, fill_value=UNKNOWN)
         proba = proba.reindex(raw_features.index)
         names = None
-        causal = resolved_fit_end < last_label_date and decode == "filter"
+        causal = False
+        if method != "hmm" or decode == "filter":
+            out_of_sample_after = resolved_fit_end
 
     if names is None:
-        ids, names, remap = _order_and_name(ids, raw_features)
+        ids, names, remap = _order_and_name(ids, raw_features, fit_index=fit_index)
         if proba is not None:
             # Columns must follow the labels through the renumbering,
             # otherwise ema_prob smoothing would read column 2 as regime 2
@@ -655,8 +691,18 @@ def detect_regimes(
         probabilities=proba, ema_span=ema_span, window=min_duration,
     )
 
+    labels = smoothed.reindex(df.index, fill_value=UNKNOWN).astype(int)
+    labelled = labels.index[labels != UNKNOWN]
+    if causal:
+        causal_from = labelled[0] if len(labelled) else None
+    elif out_of_sample_after is not None:
+        later = labelled[labelled > out_of_sample_after]
+        causal_from = later[0] if len(later) else None
+    else:
+        causal_from = None
+
     return RegimeResult(
-        labels=smoothed.reindex(df.index, fill_value=UNKNOWN).astype(int),
+        labels=labels,
         names=names,
         features=raw_features,
         method=method,
@@ -665,6 +711,7 @@ def detect_regimes(
         probabilities=None if proba is None else proba.reindex(df.index),
         model=model,
         fit_end=resolved_fit_end,
+        causal_from=causal_from,
         meta={
             "fit_frac": fit_frac, "smooth": smooth, "min_duration": min_duration,
             "decode": decode, "standardize": standardize, "use_pca": use_pca,
@@ -764,6 +811,7 @@ def detect_regimes_walk_forward(
         probabilities=probabilities,
         model=model,
         fit_end=None,
+        causal_from=None if labelled.empty else labelled.index[0],
         meta={
             "walk_forward": True, "initial_train": initial_train,
             "refit_every": refit_every, "n_refits": len(refit_dates),

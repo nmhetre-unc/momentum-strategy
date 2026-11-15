@@ -329,9 +329,10 @@ if show_regimes:
         caveat(
             "**The regime labels are not causal.** The regime model was fitted on the same days "
             "it is labelling, so the labels embed knowledge of the future. That is fine for "
-            "*describing* history and invalid for any performance number conditioned on it. Set "
-            "the sidebar's fit fraction below 1.0, or switch on walk-forward detection, before "
-            "quoting anything from the regime breakdown below."
+            "*describing* history and invalid for any performance number conditioned on it "
+            "(a fit fraction below 1.0 only makes the labels after the fit window out of "
+            "sample). Switch on walk-forward detection before quoting anything from the "
+            "regime breakdown below."
         )
 else:
     regimes = None

@@ -16,6 +16,8 @@ from scipy.stats import skew as _skew
 from qbt.analytics import TRADING_DAYS_PER_YEAR, full_report, performance_by_regime
 from qbt.backtest import run_backtest
 from qbt.stats import deflated_sharpe_ratio
+from qbt.timesplit import split_date as shared_split_date
+from qbt.timesplit import split_index
 
 
 def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.7,
@@ -30,8 +32,9 @@ def evaluate_out_of_sample(df: pd.DataFrame, strategy_fn, split_frac: float = 0.
     signal = strategy_fn(df, **strategy_params)
     result = run_backtest(df, signal, cost_bps=cost_bps)
 
-    split_idx = int(len(result) * split_frac)
-    split_date = result.index[split_idx]
+    # The same date a fitted strategy's own train_frac split lands on
+    # (qbt.timesplit), so "out of sample" here is out of sample for it too.
+    split_date = shared_split_date(result.index, split_frac)
 
     in_sample = result.loc[:split_date]
     out_sample = result.loc[split_date:]
@@ -211,7 +214,11 @@ def rolling_walk_forward(df: pd.DataFrame, strategy_fn, train_days: int = 756,
             f"walk-forward; got {len(df)}. Shorten the windows or widen the date range."
         )
 
+    # The override puts a fitted strategy's first out-of-sample day exactly
+    # on the fold's first test day (both use qbt.timesplit).
     fold_frac = train_days / (train_days + test_days)
+    if split_index(train_days + test_days, fold_frac) != train_days:
+        raise AssertionError("fold split does not land on the fold's first test day")
     accepted_params = set(inspect.signature(strategy_fn).parameters)
     fold_override = {
         name: fold_frac for name in ("train_frac", "learn_frac") if name in accepted_params
@@ -270,8 +277,7 @@ def evaluate_with_regimes(df: pd.DataFrame, strategy_fn, regimes, split_frac: fl
     signal = strategy_fn(df, **(strategy_params or {}))
     result = run_backtest(df, signal, cost_bps=cost_bps, regimes=labels)
 
-    split_idx = int(len(result) * split_frac)
-    split_date = result.index[split_idx]
+    split_date = shared_split_date(result.index, split_frac)
     in_sample, out_sample = result.loc[:split_date], result.loc[split_date:]
 
     def regime_mix(segment: pd.DataFrame) -> pd.Series:
@@ -300,7 +306,7 @@ def _oos_split(df: pd.DataFrame, fn, params: dict, split_frac: float,
     (in_stats, out_stats, out_of_sample strategy_return series)."""
     signal = fn(df, **params)
     result = run_backtest(df, signal, cost_bps=cost_bps)
-    split_date = result.index[int(len(result) * split_frac)]
+    split_date = shared_split_date(result.index, split_frac)
     out_result = result.loc[split_date:]
     in_stats = full_report(result.loc[:split_date], n_boot=n_boot)
     out_stats = full_report(out_result, n_boot=n_boot)

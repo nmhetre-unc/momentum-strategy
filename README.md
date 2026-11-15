@@ -138,6 +138,26 @@ Yahoo's adjustment arithmetic isn't stable from one response to the next.
 So in practice almost every ingest creates a new series. On any one
 snapshot, repeated runs of a request agree bit for bit.
 
+### Strategy versions
+
+A strategy's behaviour is versioned the way the schema is migrated:
+`qbt.strategies.STRATEGY_VERSIONS` gives each strategy a version, and a
+published version never changes. If a code change alters what a strategy
+does, it gets a new version. `tests/test_strategy_versions.py` pins a
+fingerprint of every version's positions and fails until that happens. Each
+version is its own row in `strategies`, keyed by (name, version, parameter
+schema). `GET /backtests/{id}` reports the `strategy_version` a job ran, and
+`GET /strategies` the version that new jobs get.
+
+When a version is retired (`ml_direction` 1 became 2 when it stopped
+predicting its own training period), its stored backtests stay as they were:
+same results, same metrics, still reported as version 1. Jobs still queued
+under the old version fail with a message to resubmit, because this code
+can't reproduce it. A job for a version newer than the worker's own is
+retried with backoff, so a newer worker can take it. Each retry counts as an
+attempt, so it fails after `max_attempts` if none does. An `Idempotency-Key` replay returns the original
+job, whatever version it ran.
+
 ### How it's tested
 
 - **Forced-ordering concurrency tests** (`tests/service/test_queue.py`): one
@@ -225,7 +245,9 @@ Docker Desktop 29.9.3 runs on WSL2 (kernel 6.18), and its VM has 12 CPUs
 and 7.6 GiB, **shared with the load generator**. The job mix is
 `sma_crossover`, `momentum`, `mean_reversion` and `ml_direction`, round
 robin, on SPY 2010-2025 with `n_boot` 2000. Cells are median [min-max].
-Scripts and method are in [bench/README.md](bench/README.md).
+Scripts and method are in [bench/README.md](bench/README.md). These runs used
+`ml_direction` version 1. Version 2 (out of sample only) trains the same model
+once but has not been re-measured.
 
 **Service measurements** (3 runs each). The queue-latency and GET rows
 were measured before the two fixes below:
@@ -282,6 +304,9 @@ running both can't provide it.
   `mean_reversion`, `ml_direction`). The adaptive strategies take
   structured arguments, and cross-sectional momentum is a portfolio
   strategy, so neither is exposed yet.
+- **Workers from before strategy versioning don't check versions.** In a
+  rolling deploy, one could run a version-2 job on version-1 code. Stop the
+  old workers before starting new ones.
 - **A `docker kill`ed worker isn't restarted.** Under
   `restart: unless-stopped`, Docker restarts only containers that exit on
   their own. The dead worker's jobs are still requeued by the other
@@ -378,8 +403,11 @@ Full details, scripts and raw JSON are in [benchmarks/](benchmarks/README.md).
 **No timing strategy beats buy-and-hold detectably.** Eleven strategies were
 tested on SPY. Every one produces a 90% confidence interval on the Sharpe
 difference against buy-and-hold that contains zero. The closest are
-`adaptive_ensemble` at +0.324 [-0.045, +0.686] and `ml_direction` at +0.10
-[-0.01, +0.20]. Buy-and-hold's own Sharpe over the period is 0.607.
+`adaptive_ensemble` at +0.324 [-0.045, +0.686] and `volatility_targeted` at
++0.22 [-0.08, +0.54]. Buy-and-hold's own Sharpe over the period is 0.607.
+(`ml_direction` used to be second, at +0.10 [-0.01, +0.20]. That was an
+artifact of predicting its own training period, fixed in version 2. See
+[FINDINGS.md](FINDINGS.md) section 1.)
 
 **The choice of benchmark inverts the conclusion.** Each strategy's own
 Sharpe interval excludes zero — `sma_crossover` [0.35, 1.17],
@@ -463,11 +491,13 @@ between 2008 and 2025 are absent. Those are disproportionately the sustained
 underperformers a short leg would have profited from, so the bias runs in the
 strategy's favor and the negative result is if anything understated.
 
-Headline metrics for fitted strategies come from full-period backtests in
-which the model predicts across its own training period — 70% of the equity
-curve for `ml_direction` and the adaptive wrappers. The walk-forward results
-in `results/summary.md` refit each fold and are the honest read for those
-strategies. Since every paired difference against buy-and-hold already
+Headline metrics for the learn_frac-based adaptive wrappers come from
+full-period backtests that apply choices learned on the first 60% of history
+across that same 60%. The walk-forward results in `results/summary.md` refit
+each fold and are the honest read for those strategies. The ML strategies
+(`ml_direction` from version 2, `ml_regime_conditional`) trade only out of
+sample and hold cash for the first 70%, so their full-period rows say little
+about the models either way. Since every paired difference against buy-and-hold already
 contains zero, correcting this would strengthen rather than change the
 conclusion.
 

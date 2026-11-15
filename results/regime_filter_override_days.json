@@ -1,0 +1,52 @@
+{
+  "data": {
+    "ticker": "SPY",
+    "start": "2008-01-01",
+    "end": "2025-01-01",
+    "n_trading_days": 4279
+  },
+  "learn_end": "2018-03-13",
+  "unknown_days": 310,
+  "bases": {
+    "sma_crossover": {
+      "learned_allow_list": [
+        0,
+        1,
+        2
+      ],
+      "base_days_in_position_in_learning_window": 1890,
+      "days_differing_from_base": 0,
+      "of_which_unknown_warm_up": 0,
+      "of_which_excluded_regime": 0
+    },
+    "momentum": {
+      "learned_allow_list": [
+        0,
+        1,
+        2
+      ],
+      "base_days_in_position_in_learning_window": 1682,
+      "days_differing_from_base": 97,
+      "of_which_unknown_warm_up": 97,
+      "of_which_excluded_regime": 0
+    },
+    "mean_reversion": {
+      "learned_allow_list": [
+        0,
+        1,
+        2
+      ],
+      "base_days_in_position_in_learning_window": 854,
+      "days_differing_from_base": 229,
+      "of_which_unknown_warm_up": 229,
+      "of_which_excluded_regime": 0
+    },
+    "ml_direction": {
+      "learned_allow_list": [],
+      "base_days_in_position_in_learning_window": 0,
+      "days_differing_from_base": 1260,
+      "of_which_unknown_warm_up": 0,
+      "of_which_excluded_regime": 1260
+    }
+  }
+}

@@ -60,11 +60,13 @@ from typing import Any
 import psycopg
 from psycopg import sql
 from pydantic import ValidationError
-from sqlalchemy import Engine, make_url
+from sqlalchemy import Connection as DBConnection
+from sqlalchemy import Engine, make_url, select
 from sqlalchemy.exc import SQLAlchemyError
 
+from qbt_service.catalog import CATALOG
 from qbt_service.compute import THREAD_VARIABLES, Handshake, Task, child_main
-from qbt_service.db import make_engine
+from qbt_service.db import make_engine, strategies
 from qbt_service.models import parse_request
 from qbt_service.prices import load_frame
 from qbt_service.queue import (
@@ -307,6 +309,36 @@ class Heartbeat(threading.Thread):
         self.join(timeout=self._settings.heartbeat_seconds + 5)
 
 
+def strategy_version_mismatch(conn: DBConnection, strategy_id: int,
+                              name: str) -> tuple[str, bool] | None:
+    """
+    (why this worker can't run the job, whether to retry it), or None if
+    it can. A job is bound to the strategy version and parameter schema
+    it was submitted to (qbt_service.catalog); running it on other code
+    would store results the request never asked for. A retired version
+    or an old schema fails for good, and the client resubmits. A version
+    newer than this worker's (a rolling deploy in progress) is retried,
+    so a worker running that version can take it.
+    """
+    row = conn.execute(
+        select(strategies.c.name, strategies.c.version, strategies.c.schema_hash)
+        .where(strategies.c.id == strategy_id)
+    ).one()
+    entry = CATALOG.get(name)
+    if entry is None or row.name != name:
+        return f"strategy {name!r} is not served by this worker", False
+    if row.version < entry.version:
+        return (f"{name} version {row.version} is retired: this worker runs version "
+                f"{entry.version}. Resubmit the request to run version {entry.version}.", False)
+    if row.version > entry.version:
+        return (f"{name} version {row.version} is newer than this worker's version "
+                f"{entry.version}; left for a worker that runs it.", True)
+    if bytes(row.schema_hash) != entry.schema_hash:
+        return (f"{name}'s parameter schema has changed since this job was submitted. "
+                "Resubmit the request.", False)
+    return None
+
+
 @dataclass(frozen=True)
 class Outcome:
     label: str     # succeeded, failed, retrying, lease_lost, released, db_error
@@ -443,6 +475,10 @@ class Worker:
         try:
             request = parse_request(job.request)
             with self.engine.connect() as conn:
+                mismatch = strategy_version_mismatch(conn, job.strategy_id, request.strategy)
+                if mismatch is not None:
+                    message, retry = mismatch
+                    return self._fail(job, message, retry=retry)
                 frame = load_frame(conn, job.price_series_id, request.start, request.end)
         except (ValidationError, ValueError) as exc:
             return self._fail(job, f"invalid request: {exc}", retry=False)

@@ -16,6 +16,8 @@ console as well as a POSIX terminal.
 import argparse
 from pathlib import Path
 
+import pandas as pd
+
 from qbt.adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES, describe_choices
 from qbt.analytics import full_report, performance_by_regime
 from qbt.backtest import run_backtest
@@ -119,6 +121,9 @@ def main():
                   "fewer regimes.")
         if not regimes.causal:
             print("  WARNING: labels are not causal (the model saw the days it is labelling).")
+            if regimes.causal_from is not None:
+                print(f"           Only labels from {pd.Timestamp(regimes.causal_from).date()} "
+                      "on are out of sample.")
             print("           Fine for describing history; invalid for the numbers below.")
 
         print("\n  What the asset did in each regime:")

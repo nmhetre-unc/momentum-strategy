@@ -56,7 +56,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from qbt_service.catalog import CATALOG, sync_catalog
-from qbt_service.db import jobs, make_engine, metrics, results
+from qbt_service.db import jobs, make_engine, metrics, results, strategies
 from qbt_service.models import (
     PARAMS_MODELS,
     BacktestRequest,
@@ -182,6 +182,11 @@ class StrategyInfo(BaseModel):
         description="JSON Schema of `params` for POST /backtests with this strategy."
     )
     defaults: dict[str, Any] = Field(description="The values used for omitted params.")
+    version: int = Field(
+        description="Behaviour version. It goes up whenever the strategy would compute "
+                    "different positions for the same request; a stored job keeps the "
+                    "version it ran (`strategy_version` on GET /backtests/{id})."
+    )
     schema_hash: str = Field(
         description="SHA-256 of params_schema; changes whenever the schema does."
     )
@@ -242,6 +247,11 @@ class BacktestJob(BaseModel):
         description="The request as validated and stored, with every default filled in."
     )
     price_series_id: int = Field(description="The price snapshot the backtest runs on.")
+    strategy_version: int = Field(
+        description="The strategy's behaviour version this job was submitted to (and, once "
+                    "it has run, ran with). A job whose version is no longer current is "
+                    "failed rather than run with newer code; resubmit it."
+    )
     metrics: dict[str, float | None] | None = Field(
         description="full_report() metrics, once succeeded; otherwise null. A value that "
                     "is NaN (e.g. a Sharpe ratio with no variance) is null."
@@ -323,7 +333,8 @@ def _job_example(status: str) -> dict[str, Any]:
         "id": EXAMPLE_ID, "status": status, "attempts": 0, "max_attempts": 3,
         "created_at": "2026-11-14T10:00:00.000000Z", "run_after": "2026-11-14T10:00:00.000000Z",
         "started_at": None, "heartbeat_at": None, "finished_at": None, "last_error": None,
-        "request": EXAMPLE_REQUEST, "price_series_id": 7, "metrics": None, "result": None,
+        "request": EXAMPLE_REQUEST, "price_series_id": 7, "strategy_version": 1,
+        "metrics": None, "result": None,
     }
     started = {"attempts": 1, "started_at": "2026-11-14T10:00:01.200000Z"}
     if status == "running":
@@ -355,7 +366,7 @@ def _strategy_list() -> StrategyList:
     return StrategyList(strategies=[
         StrategyInfo(name=e.name, family=e.family, description=e.description,
                      params_schema=e.param_schema, defaults=e.defaults,
-                     schema_hash=e.schema_hash.hex())
+                     version=e.version, schema_hash=e.schema_hash.hex())
         for e in CATALOG.values()
     ])
 
@@ -592,7 +603,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 select(jobs.c.id, jobs.c.status, jobs.c.attempts, jobs.c.max_attempts,
                        jobs.c.created_at, jobs.c.run_after, jobs.c.started_at,
                        jobs.c.heartbeat_at, jobs.c.finished_at, jobs.c.last_error,
-                       jobs.c.request, jobs.c.price_series_id)
+                       jobs.c.request, jobs.c.price_series_id,
+                       strategies.c.version.label("strategy_version"))
+                .select_from(jobs.join(strategies, jobs.c.strategy_id == strategies.c.id))
                 .where(jobs.c.id == job_id)
             ).mappings().one_or_none()
             if row is None:
