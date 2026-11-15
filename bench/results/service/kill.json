@@ -1,0 +1,248 @@
+{
+  "measurement": "kill",
+  "environment": {
+    "recorded_at": "2026-11-15T03:02:45+00:00",
+    "host": {
+      "cpu_model": "Intel(R) Core(TM) 7 150U",
+      "windows": {
+        "physical_cores": 10,
+        "logical_processors": 12,
+        "max_clock_mhz": 1800,
+        "ram_gib": 15.7,
+        "battery_status_code": 2,
+        "power_plan": "Balanced"
+      },
+      "power": {
+        "AC1.online": "1",
+        "BAT1.status": "Full",
+        "BAT1.capacity": "100"
+      },
+      "on_ac_power": true,
+      "wslconfig": "absent (WSL defaults: all logical CPUs, 50% of host RAM)"
+    },
+    "wsl_distro": {
+      "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+      "logical_cpus": 12,
+      "loadavg_1_5_15": [
+        3.23486328125,
+        3.58544921875,
+        3.83740234375
+      ]
+    },
+    "docker": {
+      "operating_system": "Docker Desktop",
+      "server_version": "29.9.3",
+      "kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "vm_cpus": 12,
+      "vm_memory_bytes": 8162783232,
+      "vm_memory_gib": 7.6,
+      "storage_driver": "overlayfs",
+      "cgroup_version": "2",
+      "compose_version": "5.7.0"
+    },
+    "image": "sha256:80f5516e627985ffea1eda09b74045fe754599b6099734197ab02f49cc2dc4f7",
+    "git_commit": "42927fa+dirty",
+    "python": "3.12.16"
+  },
+  "config": {
+    "workers": 4,
+    "load": 0.6,
+    "seconds": 150,
+    "kill_at_seconds": 40,
+    "signal": "SIGKILL (docker kill)",
+    "lease_seconds": 30,
+    "heartbeat_seconds": 10,
+    "reaper_seconds": 15,
+    "retry_backoff_seconds": 5,
+    "reps": 3
+  },
+  "summary": {
+    "requeued": {
+      "median": 33.11591074899843,
+      "min": 30.401804323999386,
+      "max": 33.11758916499821
+    },
+    "reclaimed": {
+      "median": 38.208448166999005,
+      "min": 35.45862851199854,
+      "max": 38.22371037799894
+    },
+    "finished": {
+      "median": 38.44801085400104,
+      "min": 35.69275021700014,
+      "max": 38.454774433997954
+    }
+  },
+  "all_checks_pass": true,
+  "runs": [
+    {
+      "rep": 1,
+      "load_rate_per_s": 9.26385652001701,
+      "kill_attempts": [
+        {
+          "container": "44cf882615d7",
+          "jobs_in_flight": 1
+        }
+      ],
+      "victims": {
+        "21c7bee1-21f5-4213-94ed-59e815b5954a": {
+          "requeued": 33.11591074899843,
+          "requeue_reason": "lease expired (worker 44cf882615d7:7, attempt 1)",
+          "reclaimed": 38.22371037799894,
+          "finished": 38.454774433997954,
+          "final_status": "succeeded",
+          "attempts": 2
+        }
+      },
+      "container_restarted_by_docker": [
+        {
+          "container": "44cf882615d7",
+          "restart_count": 0,
+          "state": "exited",
+          "health": "unhealthy"
+        }
+      ],
+      "checks": {
+        "posts_accepted": 1405,
+        "post_errors": 0,
+        "jobs_in_db": 1405,
+        "lost": 0,
+        "unexpected_extra_jobs": 0,
+        "not_succeeded": 0,
+        "without_result": 0,
+        "result_attempt_mismatch": 0,
+        "jobs_with_more_than_one_attempt": [
+          "21c7bee1-21f5-4213-94ed-59e815b5954a"
+        ],
+        "metric_rows_per_job": [
+          12
+        ],
+        "fencing_rejections_in_logs": 0,
+        "results_discarded_in_logs": 0,
+        "reaper_requeues_in_logs": 1,
+        "killed_job_metrics_equal_direct_run": true
+      },
+      "all_checks_pass": true,
+      "started": "2026-11-15T02:53:48+00:00",
+      "ended": "2026-11-15T02:56:42+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "rep": 2,
+      "load_rate_per_s": 9.26385652001701,
+      "kill_attempts": [
+        {
+          "container": "68429db4f08a",
+          "jobs_in_flight": 0
+        },
+        {
+          "container": "44cf882615d7",
+          "jobs_in_flight": 1
+        }
+      ],
+      "victims": {
+        "9f71d30d-3296-4bc5-b937-22f05a5a6a8b": {
+          "requeued": 30.401804323999386,
+          "requeue_reason": "lease expired (worker 44cf882615d7:7, attempt 1)",
+          "reclaimed": 35.45862851199854,
+          "finished": 35.69275021700014,
+          "final_status": "succeeded",
+          "attempts": 2
+        }
+      },
+      "container_restarted_by_docker": [
+        {
+          "container": "68429db4f08a",
+          "restart_count": 0,
+          "state": "exited",
+          "health": "unhealthy"
+        },
+        {
+          "container": "44cf882615d7",
+          "restart_count": 0,
+          "state": "exited",
+          "health": "unhealthy"
+        }
+      ],
+      "checks": {
+        "posts_accepted": 1402,
+        "post_errors": 0,
+        "jobs_in_db": 1402,
+        "lost": 0,
+        "unexpected_extra_jobs": 0,
+        "not_succeeded": 0,
+        "without_result": 0,
+        "result_attempt_mismatch": 0,
+        "jobs_with_more_than_one_attempt": [
+          "9f71d30d-3296-4bc5-b937-22f05a5a6a8b"
+        ],
+        "metric_rows_per_job": [
+          12
+        ],
+        "fencing_rejections_in_logs": 0,
+        "results_discarded_in_logs": 0,
+        "reaper_requeues_in_logs": 1,
+        "killed_job_metrics_equal_direct_run": true
+      },
+      "all_checks_pass": true,
+      "started": "2026-11-15T02:56:42+00:00",
+      "ended": "2026-11-15T02:59:51+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "rep": 3,
+      "load_rate_per_s": 9.26385652001701,
+      "kill_attempts": [
+        {
+          "container": "163c20d95b69",
+          "jobs_in_flight": 1
+        }
+      ],
+      "victims": {
+        "1cd7ec86-b32e-4c7c-b012-f0acc489810f": {
+          "requeued": 33.11758916499821,
+          "requeue_reason": "lease expired (worker 163c20d95b69:7, attempt 1)",
+          "reclaimed": 38.208448166999005,
+          "finished": 38.44801085400104,
+          "final_status": "succeeded",
+          "attempts": 2
+        }
+      },
+      "container_restarted_by_docker": [
+        {
+          "container": "163c20d95b69",
+          "restart_count": 0,
+          "state": "exited",
+          "health": "unhealthy"
+        }
+      ],
+      "checks": {
+        "posts_accepted": 1326,
+        "post_errors": 0,
+        "jobs_in_db": 1326,
+        "lost": 0,
+        "unexpected_extra_jobs": 0,
+        "not_succeeded": 0,
+        "without_result": 0,
+        "result_attempt_mismatch": 0,
+        "jobs_with_more_than_one_attempt": [
+          "1cd7ec86-b32e-4c7c-b012-f0acc489810f"
+        ],
+        "metric_rows_per_job": [
+          12
+        ],
+        "fencing_rejections_in_logs": 0,
+        "results_discarded_in_logs": 0,
+        "reaper_requeues_in_logs": 1,
+        "killed_job_metrics_equal_direct_run": true
+      },
+      "all_checks_pass": true,
+      "started": "2026-11-15T02:59:51+00:00",
+      "ended": "2026-11-15T03:02:45+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    }
+  ]
+}

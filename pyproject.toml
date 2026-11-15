@@ -15,14 +15,20 @@ dependencies = [
     "yfinance>=0.2.40",
     "pandas>=2.2",
     "numpy==2.5.4",  # must equal the [build-system] pin; see there
-    "matplotlib>=3.8",
-    "altair>=5.4",
     "scikit-learn>=1.4",
     "scipy>=1.11",
-    "streamlit>=1.62",
 ]
 
 [project.optional-dependencies]
+# The Streamlit dashboard (app/) and the CLI's charts (main.py, via
+# qbt.visualize). Not in [project.dependencies] so the service image
+# doesn't carry them; requirements.txt (the Streamlit Cloud deploy)
+# installs `-e .[ui]`.
+ui = [
+    "matplotlib>=3.8",
+    "altair>=5.4",
+    "streamlit>=1.62",
+]
 dev = [
     "pytest",
     "pytest-cov",
@@ -38,16 +44,48 @@ dev = [
     "hypothesis",
     "pytest-benchmark",  # benchmarks/ only; never collected by the normal run
 ]
+# The backtest service (src/qbt_service). Kept out of [project.dependencies]
+# so the library, CLI and Streamlit deploy (requirements.txt) don't pull in
+# a web framework and a database driver they never use.
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    # <2.1: SQLAlchemy 2.1's modules carry an inline mypy setting
+    # (disable_error_code="untyped-decorator") that the pinned mypy==1.10.0
+    # rejects as invalid. pandas-stubs imports sqlalchemy, so this breaks
+    # `mypy src/` even before any service code uses it. Lift the cap
+    # together with the mypy pin.
+    "sqlalchemy>=2.0.30,<2.1",
+    "psycopg[binary,pool]>=3.2",
+    "alembic>=1.13",
+    # FastAPI's TestClient and the bench/ load generator. httpx2, not httpx:
+    # Starlette >= 1.10's TestClient warns (an error under pytest's
+    # filterwarnings) when it has to fall back to httpx.
+    "httpx2>=2.16",
+]
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
-wheel.packages = ["src/qbt"]
+wheel.packages = ["src/qbt", "src/qbt_service"]
 cmake.build-type = "Release"
 
 [tool.pytest.ini_options]
 filterwarnings = ["error"]
 # benchmarks/ is run explicitly (see benchmarks/README.md), not by a bare `pytest`.
 testpaths = ["tests"]
+markers = [
+    "db: needs PostgreSQL via DATABASE_URL (skipped without it unless QBT_REQUIRE_DB=1)",
+]
+
+[tool.coverage.run]
+# Measure the worker's own processes too: `python -m qbt_service.worker`
+# started by the process tests (patch = subprocess) and the compute child
+# it spawns (concurrency = multiprocessing). sigterm: save data when a
+# process is stopped with SIGTERM; a SIGKILLed one records nothing.
+patch = ["subprocess"]
+concurrency = ["thread", "multiprocessing"]
+sigterm = true
 
 [tool.mypy]
 python_version = "3.12"

@@ -1,0 +1,231 @@
+{
+  "measurement": "get",
+  "environment": {
+    "recorded_at": "2026-11-15T02:53:45+00:00",
+    "host": {
+      "cpu_model": "Intel(R) Core(TM) 7 150U",
+      "windows": {
+        "physical_cores": 10,
+        "logical_processors": 12,
+        "max_clock_mhz": 1800,
+        "ram_gib": 15.7,
+        "battery_status_code": 2,
+        "power_plan": "Balanced"
+      },
+      "power": {
+        "AC1.online": "1",
+        "BAT1.status": "Full",
+        "BAT1.capacity": "100"
+      },
+      "on_ac_power": true,
+      "wslconfig": "absent (WSL defaults: all logical CPUs, 50% of host RAM)"
+    },
+    "wsl_distro": {
+      "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+      "logical_cpus": 12,
+      "loadavg_1_5_15": [
+        5.15673828125,
+        5.07958984375,
+        4.27099609375
+      ]
+    },
+    "docker": {
+      "operating_system": "Docker Desktop",
+      "server_version": "29.9.3",
+      "kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "vm_cpus": 12,
+      "vm_memory_bytes": 8162783232,
+      "vm_memory_gib": 7.6,
+      "storage_driver": "overlayfs",
+      "cgroup_version": "2",
+      "compose_version": "5.7.0"
+    },
+    "image": "sha256:80f5516e627985ffea1eda09b74045fe754599b6099734197ab02f49cc2dc4f7",
+    "git_commit": "42927fa+dirty",
+    "python": "3.12.16"
+  },
+  "config": {
+    "rate_per_s": 100,
+    "seconds": 60,
+    "workers": 4,
+    "pool_of_succeeded_jobs": 1000,
+    "reps": 3,
+    "latency_from": "scheduled send time (open loop)"
+  },
+  "summary": {
+    "idle": {
+      "get_ms_p50": {
+        "median": 5.555878997256514,
+        "min": 5.323292498360388,
+        "max": 5.724509999708971
+      },
+      "get_ms_p99": {
+        "median": 10.525639279476314,
+        "min": 9.535491739334256,
+        "max": 11.985440689932153
+      },
+      "achieved_rate_per_s": {
+        "median": 100.0023589123101,
+        "min": 100.0017530040662,
+        "max": 100.0041468152919
+      }
+    },
+    "under_load": {
+      "get_ms_p50": {
+        "median": 3167.3072789999424,
+        "min": 9.312189999036491,
+        "max": 4789.258634000362
+      },
+      "get_ms_p99": {
+        "median": 6556.698944929049,
+        "min": 16.838989978750764,
+        "max": 17776.910372090133
+      },
+      "achieved_rate_per_s": {
+        "median": 90.24259345795465,
+        "min": 77.32399708261015,
+        "max": 99.9943216307947
+      }
+    }
+  },
+  "runs": [
+    {
+      "rep": 1,
+      "condition": "idle",
+      "requests": 6000,
+      "errors": 0,
+      "achieved_rate_per_s": 100.0041468152919,
+      "get_ms_p50": 5.323292498360388,
+      "get_ms_p99": 9.535491739334256,
+      "service_ms_p50": 4.5189224983914755,
+      "max_send_lag_ms": 7.200010997621575,
+      "queued_at_end": null,
+      "cpus_busy": {
+        "vm": 0.84,
+        "api": 0.3,
+        "db": 0.07,
+        "worker": 0.1,
+        "host_clock_ghz": 3.97
+      },
+      "started": "2026-11-15T02:34:01+00:00",
+      "ended": "2026-11-15T02:36:20+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "rep": 1,
+      "condition": "under_load",
+      "requests": 6000,
+      "errors": 0,
+      "achieved_rate_per_s": 99.9943216307947,
+      "get_ms_p50": 9.312189999036491,
+      "get_ms_p99": 16.838989978750764,
+      "service_ms_p50": 8.535445998859359,
+      "max_send_lag_ms": 7.563335999293486,
+      "queued_at_end": 514,
+      "cpus_busy": {
+        "vm": 5.95,
+        "api": 0.61,
+        "db": 0.39,
+        "worker": 4.03,
+        "host_clock_ghz": 2.88
+      },
+      "started": "2026-11-15T02:36:20+00:00",
+      "ended": "2026-11-15T02:39:24+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "rep": 2,
+      "condition": "idle",
+      "requests": 6000,
+      "errors": 0,
+      "achieved_rate_per_s": 100.0017530040662,
+      "get_ms_p50": 5.555878997256514,
+      "get_ms_p99": 10.525639279476314,
+      "service_ms_p50": 4.807519999303622,
+      "max_send_lag_ms": 21.597130995360203,
+      "queued_at_end": null,
+      "cpus_busy": {
+        "vm": 1.04,
+        "api": 0.34,
+        "db": 0.09,
+        "worker": 0.15,
+        "host_clock_ghz": 3.95
+      },
+      "started": "2026-11-15T02:39:24+00:00",
+      "ended": "2026-11-15T02:42:20+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "rep": 2,
+      "condition": "under_load",
+      "requests": 6000,
+      "errors": 0,
+      "achieved_rate_per_s": 90.24259345795465,
+      "get_ms_p50": 3167.3072789999424,
+      "get_ms_p99": 6556.698944929049,
+      "service_ms_p50": 3166.5250944988657,
+      "max_send_lag_ms": 41.75326699623838,
+      "queued_at_end": 742,
+      "cpus_busy": {
+        "vm": 6.93,
+        "api": 1.3,
+        "db": 0.42,
+        "worker": 4.18,
+        "host_clock_ghz": 2.49
+      },
+      "started": "2026-11-15T02:42:20+00:00",
+      "ended": "2026-11-15T02:46:32+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "rep": 3,
+      "condition": "idle",
+      "requests": 6000,
+      "errors": 0,
+      "achieved_rate_per_s": 100.0023589123101,
+      "get_ms_p50": 5.724509999708971,
+      "get_ms_p99": 11.985440689932153,
+      "service_ms_p50": 4.9140205010189675,
+      "max_send_lag_ms": 7.680884998990223,
+      "queued_at_end": null,
+      "cpus_busy": {
+        "vm": 1.07,
+        "api": 0.35,
+        "db": 0.09,
+        "worker": 0.17,
+        "host_clock_ghz": 3.97
+      },
+      "started": "2026-11-15T02:46:32+00:00",
+      "ended": "2026-11-15T02:49:24+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "rep": 3,
+      "condition": "under_load",
+      "requests": 6000,
+      "errors": 0,
+      "achieved_rate_per_s": 77.32399708261015,
+      "get_ms_p50": 4789.258634000362,
+      "get_ms_p99": 17776.910372090133,
+      "service_ms_p50": 4786.2871659981465,
+      "max_send_lag_ms": 127.52496299799532,
+      "queued_at_end": 762,
+      "cpus_busy": {
+        "vm": 7.15,
+        "api": 1.4,
+        "db": 0.45,
+        "worker": 4.25,
+        "host_clock_ghz": 2.09
+      },
+      "started": "2026-11-15T02:49:24+00:00",
+      "ended": "2026-11-15T02:53:45+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    }
+  ]
+}

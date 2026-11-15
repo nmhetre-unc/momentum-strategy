@@ -24,8 +24,269 @@ Sharpe ratios following Bailey & López de Prado (2014).
   gives bit-identical output. The bootstrap call is 19.4x faster and the whole
   pipeline 2.4x faster, against a ceiling of about 2.7x.
   See [Performance](#performance).
-- 184 tests at 82.9% line coverage, with CI on every push (building the C++
-  extension) and an 82% coverage gate.
+- The engine also runs as a service: an HTTP API, a Postgres job queue with
+  leases and fencing, and Docker Compose. With 4 workers it runs 926
+  backtests/min, a job starts 8 ms after it is submitted at 50% load, and a
+  SIGKILLed worker loses no jobs. See [Running as a service](#running-as-a-service).
+- 498 tests at 91% line coverage (85% for the engine, 98% for the service).
+  CI runs on every push: it builds the C++ extension, runs the suite against
+  Postgres with coverage gates, and runs an end-to-end test of the Compose
+  stack.
+
+## Running as a service
+
+The engine also runs as an HTTP service. You POST a backtest and get a job
+id at once. A worker runs the job, and you GET the result. The queue is
+Postgres itself, with no broker. Any number of workers can share it, and a
+worker can be killed at any point without losing a job or recording one
+twice.
+
+### Architecture
+
+```
+            curl / client
+                 │  POST /backtests  ·  GET /backtests/{id}  ·  GET /strategies
+                 ▼
+ ┌─ api ────────────────────────────┐
+ │ FastAPI · 2 uvicorn processes    │   validate, pin a price snapshot,
+ │ cpu_shares 4096                  │   INSERT the job + NOTIFY (one transaction)
+ └────────────────┬─────────────────┘
+                  ▼
+ ┌─ db: Postgres 17 ───────────────────────────────────────────────┐
+ │ jobs (the queue) · results · metrics · strategies               │
+ │ price_series / price_bars (immutable, content-hashed snapshots) │
+ └───────▲─────────────────────────────────────────────▲───────────┘
+         │ claim, heartbeat, complete, reap             │ LISTEN qbt_jobs
+ ┌─ worker × N ─────────────────────────────────────────────────────┐
+ │ supervisor (DB, leases, reaper) ──pipe──► compute child          │
+ │                                           (qbt.runner, 1 thread) │
+ └──────────────────────────────────────────────────────────────────┘
+
+ one-shots:  migrate (alembic upgrade head, before api and workers start)
+             ingest  (download from Yahoo Finance into price_series)
+```
+
+Each worker is two processes. The **supervisor** owns the database
+connection: it claims jobs, keeps their leases alive, and writes the
+outcomes. A long-lived **compute child** runs the backtests. Heartbeats
+keep flowing however long a backtest holds the GIL, and a job that must
+stop is ended by killing the child, which can't write anything. Code:
+[`src/qbt_service/`](src/qbt_service/); the stack is in
+[`compose.yaml`](compose.yaml).
+
+### The queue
+
+- **Claiming:** `SELECT … FOR UPDATE SKIP LOCKED` takes the oldest due job,
+  so concurrent workers never block on each other or take the same row.
+- **Leases and heartbeats:** a claimed job gets a 30 s lease, which the
+  supervisor extends every 10 s. Nothing holds a row lock while a backtest
+  runs.
+- **Fencing tokens:** each claim writes a fresh random `lease_token`, and
+  every later write (heartbeat, complete, fail, release) is conditioned on
+  it. A worker that stalls past its lease, wakes up after the job was
+  requeued and claimed by someone else, can neither extend the new lease
+  nor write its result.
+- **The reaper:** every 15 s each worker requeues jobs whose lease expired,
+  with backoff of 5 s × 2^(attempt−1), up to 3 attempts. All times come
+  from the database's `now()`, never a worker's clock.
+- **Wake-up:** every change that makes a job claimable (enqueue, retry,
+  release, reaper requeue) sends `NOTIFY` in the same transaction, so it
+  arrives only on commit. Idle workers `LISTEN` and claim at once. A job
+  backing off wakes them when it becomes due. A 5 s fallback poll covers a
+  notification lost while a `LISTEN` connection was down, so a job never
+  depends on a notification to run, only to run promptly.
+- **At least once, made safe:** a job whose worker dies runs again. That is
+  harmless because a backtest has no side effects before its fenced
+  `complete()`, and it is deterministic: same request, same pinned prices,
+  a seeded bootstrap, and BLAS/OpenMP pinned to one thread in the compute
+  child, so a multithreaded reduction can't reorder floating-point sums.
+  Whichever attempt commits writes the same numbers, bit for bit.
+
+### Idempotency
+
+`POST /backtests` takes an optional `Idempotency-Key` header, following the
+[IETF draft](https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/):
+
+- **Same key, same request:** the original job comes back: 202, the same id,
+  `Idempotent-Replayed: true`. Requests are compared after validation, so
+  key order, omitted defaults, `5` vs `5.0` and ticker case don't matter.
+- **Same key, different request:** **422** `idempotency-key-reused`. The
+  draft keeps **409** for a retry that arrives while the original is still
+  in flight. That state can't happen here: the job is created by one
+  `INSERT`, and a concurrent retry waits on the unique index until the
+  first transaction commits, then sees its job. So this API never returns
+  409.
+- **Database down:** **503** with `Retry-After: 5`. The POST may or may not
+  have created its job, and retrying with the same key is safe either way.
+
+Every error is an RFC 9457 `application/problem+json` body with its own
+`type`, so a client can tell "key reused" from "invalid body" although both
+are 422.
+
+### Price snapshots
+
+yfinance's adjusted closes are rewritten after every dividend or split. So
+prices are never updated in place. Each ingest stores an immutable
+`price_series`, identified by a SHA-256 hash of its float64 contents
+(re-ingesting identical data is a no-op), and each job pins the series it
+was submitted against. A retry next week uses the same prices as the first
+attempt. This was observed, not just assumed. Two smoke runs, each
+downloading SPY afresh, got Sharpe 0.7312770 and 0.7312760 for the same
+request. Two downloads of SPY 2015-2024 taken one minute apart then
+differed on 1,989 of 2,516 adjusted closes, by up to 7×10⁻⁷ relative.
+Yahoo's adjustment arithmetic isn't stable from one response to the next.
+So in practice almost every ingest creates a new series. On any one
+snapshot, repeated runs of a request agree bit for bit.
+
+### How it's tested
+
+- **Forced-ordering concurrency tests** (`tests/service/test_queue.py`): one
+  transaction holds a row lock, a second is made to queue behind it (the
+  test polls `pg_locks` until it is waiting), then the first commits. That
+  runs each order of a race explicitly, instead of leaving it to the
+  scheduler: a stale completion against the reaper, in both orders, and a
+  claim skipping a row another claim holds. Free races check that only one
+  side wins every time: 4 concurrent reapers, 8 concurrent enqueues, and
+  16 concurrent POSTs with one key (`test_backtests_api.py`).
+- **Fault injection with `pg_terminate_backend`** (`tests/service/test_worker.py`,
+  `test_backtests_api.py`): no mocks. The test takes a lock the worker's next
+  statement needs, waits until `pg_stat_activity` shows that backend
+  blocked on exactly that statement, and kills it. That covers every
+  database-error path in the worker, the API's 503s, and a dropped `LISTEN`
+  connection.
+- **A real SIGKILL** (`test_sigkilled_worker_job_is_finished_by_another_worker`):
+  a real worker process group is killed mid-job. A second worker reaps the
+  job, runs it as attempt 2, and its stored equity curve, positions and
+  metrics equal those of an uninterrupted run.
+- **Compose smoke test** ([`scripts/compose_smoke.py`](scripts/compose_smoke.py)):
+  - The stack is built from scratch.
+  - A backtest is POSTed, and its metrics are checked against a direct
+    `qbt.runner` run.
+  - A worker is stopped mid-job with SIGTERM, and the job's release and
+    hand-over are checked.
+  - CI runs the first half on every push (the `e2e` job).
+
+### Run it
+
+Requires Docker with Compose v2.
+
+```bash
+docker compose up -d --build --wait     # db -> migrate -> api + 1 worker
+docker compose up -d --scale worker=4   # optional: more workers
+docker compose run --rm ingest SPY --start 2015-01-01 --end 2025-01-01
+
+curl -s localhost:8000/strategies       # names and parameter schemas
+```
+
+Submit a backtest (`end` is exclusive, as in yfinance):
+
+```bash
+curl -si -X POST localhost:8000/backtests \
+  -H 'Content-Type: application/json' -H 'Idempotency-Key: "my-run-1"' \
+  -d '{"strategy": "sma_crossover", "ticker": "SPY",
+       "start": "2015-01-01", "end": "2025-01-01",
+       "params": {"short_window": 20, "long_window": 100}}'
+```
+```
+HTTP/1.1 202 Accepted
+location: /backtests/e73d550b-b7c5-4094-9835-7ed8fc38fe5c
+
+{"id":"e73d550b-…","status":"queued","href":"/backtests/e73d550b-…"}
+```
+
+Fetch it:
+
+```bash
+curl -s localhost:8000/backtests/e73d550b-b7c5-4094-9835-7ed8fc38fe5c
+```
+```
+{"id": "e73d550b-…", "status": "succeeded", "attempts": 1, "max_attempts": 3,
+ "price_series_id": 1,
+ "metrics": {"sharpe_ratio": 0.6506, "sharpe_ci_low": 0.1406, "sharpe_ci_high": 1.1915,
+             "cagr": 0.0754, "max_drawdown": -0.2199, "num_trades": 25.0, …},
+ "result": {"attempt": 1, "bootstrap_impl": "cpp", "duration_ms": 71, "n_days": 2516, …}, …}
+```
+
+Errors are problem details, for example a range with no snapshot:
+
+```
+{"type": "/problems/no-price-data", "status": 422, "title": "No price data",
+ "detail": "No price snapshot for QQQ covers [2015-01-01, 2025-01-01). Ingest one first: …"}
+```
+
+`docker compose down` stops the stack (add `-v` to drop the data).
+`GET /docs` serves the OpenAPI UI.
+
+### Results
+
+Measured on one laptop: Intel Core 7 150U (2 P + 8 E cores, 12 threads,
+15 W), 15.7 GiB, on AC power, with every repetition power-guarded.
+Docker Desktop 29.9.3 runs on WSL2 (kernel 6.18), and its VM has 12 CPUs
+and 7.6 GiB, **shared with the load generator**. The job mix is
+`sma_crossover`, `momentum`, `mean_reversion` and `ml_direction`, round
+robin, on SPY 2010-2025 with `n_boot` 2000. Cells are median [min-max].
+Scripts and method are in [bench/README.md](bench/README.md).
+
+**Service measurements** (3 runs each). The queue-latency and GET rows
+were measured before the two fixes below:
+
+| Measurement | Result | Source |
+|---|---|---|
+| Throughput, 1 / 2 / 4 / 8 workers | **472 / 740 / 926 / 1097 jobs/min** (1.00 / 1.57 / 1.96 / 2.33x). That is 62-73% of a compute-only control at each count. The host clock falls from 3.7 to 2.5 GHz as workers are added. | `bench/results/service/throughput.json` |
+| Compute-only control, 1 / 2 / 4 / 8 containers, no API, queue or DB | 758 / 1152 / 1274 / 1606 backtests/min | `bench/results/service/control.json` |
+| Queue latency, 4 workers, Poisson arrivals at 50% of capacity (7.7 jobs/s) | submit-to-start p50 345 [231-353] ms, p99 2521 [868-2859] ms; backlog stable | `bench/results/service/latency.json` |
+| Queue latency, 75% of capacity (11.6 jobs/s) | **queue grows** in 2 of 3 runs, by +1.93 [0.01-2.38] jobs/s, so no p99 is reported | `bench/results/service/latency.json` |
+| GET /backtests/{id} at 100 req/s, workers idle | p50 5.6 ms, p99 10.5 ms | `bench/results/service/get.json` |
+| GET at 100 req/s, 4 workers draining a backlog | p50 3167 [9-4789] ms, p99 6557 [17-17777] ms | `bench/results/service/get.json` |
+| `docker kill` a worker mid-job (4 workers, 60% load) | requeued 33 s, finished 38 s after the kill (30 s lease + up to 15 s reaper interval). 0 jobs lost, 0 duplicated; killed jobs' metrics equal a direct run | `bench/results/service/kill.json` |
+
+**Two fixes, before vs after** (2 runs each, interleaved as before, after,
+after, before):
+- **Claim latency:** a 1 s idle poll was replaced with LISTEN/NOTIFY.
+- **The GET cliff:** one API process at the default CPU weight was replaced
+  with 2 processes at `cpu_shares` 4096.
+
+| Measurement | Before | After |
+|---|---|---|
+| Submit-to-start p50, 50% load, 4 workers | 236 [220-252] ms | **8 [8-8] ms** |
+| Submit-to-start p99, same | 833 [832-834] ms | **363 [220-506] ms** |
+| Submit-to-done p50 / p99 | 459 / 1022 ms | 214 / 668 ms |
+| GET p50, 100 req/s, 4 workers busy | 8475 [4539-12411] ms | **17 [14-20] ms** |
+| GET p99, same | 10010 [6110-13910] ms | 4023 [366-7680] ms |
+| GET p50 / p99, workers idle (must not regress) | 5.5 / 169 [9-328] ms | 5.5 / 10.3 [10.0-10.5] ms |
+
+Source: `bench/results/service/before_after.json`.
+
+What the "before" numbers show: a single Python process tops out at about
+1.4 CPUs because of the GIL, and under load the API ran at exactly 1.39-1.40
+CPUs and queued requests for seconds. Two processes double that headroom.
+`cpu_shares` 4096 (cgroup weight 303 against 100) gives the API priority
+only under contention; it is not a cap.
+
+**The GET p99 limitation, stated plainly:** the p50 under load is fixed, but
+the p99 is not. One "after" run had a 366 ms p99 and the other 7.7 s.
+During the bad run, the load generator itself fell 710 ms behind its own
+schedule, the host clock dropped to 1.97 GHz, and the whole machine was
+saturated. A CPU weight inside Docker's VM can't protect a process from
+contention on the host. A trustworthy p99 under full saturation needs the
+service and the load generator on separate machines. One 15 W laptop
+running both can't provide it.
+
+### Known limitations
+
+- **No authentication.** Anyone who can reach the port can submit jobs. The
+  ports are bound to 127.0.0.1.
+- **Idempotency keys are global and never expire.** With no clients to scope
+  them to, two callers who choose the same key share it.
+- **Only the 4 base strategies** (`sma_crossover`, `momentum`,
+  `mean_reversion`, `ml_direction`). The adaptive strategies take
+  structured arguments, and cross-sectional momentum is a portfolio
+  strategy, so neither is exposed yet.
+- **A `docker kill`ed worker isn't restarted.** Under
+  `restart: unless-stopped`, Docker restarts only containers that exit on
+  their own. The dead worker's jobs are still requeued by the other
+  workers' reapers, but capacity stays reduced until `docker compose up`
+  runs again. An orchestrator (Kubernetes, Nomad, Swarm) would replace it.
 
 ## Performance
 
@@ -227,9 +488,18 @@ implementation with a warning.
 ```bash
 python -m venv venv
 source venv/bin/activate        # venv\Scripts\activate on Windows
-pip install -e ".[dev]"         # builds the C++ extension
+pip install -e ".[dev,ui]"      # builds the C++ extension
 python -c "import qbt.bootstrap as b; print('C++ bootstrap:', b.cpp_available())"
 ```
+
+For the service, see [Running as a service](#running-as-a-service).
+
+Extras: `ui` is the dashboard and the CLI's charts (Streamlit, Altair,
+Matplotlib); `dev` is the test and lint tools; `api` is the backtest
+service. A plain `pip install .` gives the library alone (backtests,
+analytics, the C++ bootstrap) without any of them. `pip install -r
+requirements.txt`, which is what Streamlit Community Cloud runs, installs
+the package with `ui`.
 
 After changing `src/cpp/` or upgrading NumPy, re-run `pip install -e .` to
 rebuild the extension. NumPy is pinned exactly: the extension is only used
@@ -247,11 +517,17 @@ Run the CLI:
 python main.py --ticker SPY --strategy momentum --rolling
 ```
 
-Run the tests (184 tests, 82.9% line coverage):
+Run the tests (498 tests, 91% line coverage). The service's tests need
+Postgres, which Compose provides:
 
 ```bash
-pytest --cov=src/qbt
+pip install -e ".[dev,api,ui]"
+docker compose up -d db
+export DATABASE_URL=postgresql+psycopg://qbt:qbt@localhost:5432/qbt
+pytest --cov=src/qbt --cov=src/qbt_service
 ```
+
+Without `DATABASE_URL`, the database tests are skipped.
 
 Run the benchmarks (not part of the test run; see
 [benchmarks/README.md](benchmarks/README.md)):
@@ -259,6 +535,8 @@ Run the benchmarks (not part of the test run; see
 ```bash
 python benchmarks/micro_interleaved.py
 python benchmarks/full_run.py --runs 3
+python bench/service_bench.py throughput latency get kill   # the service; see bench/README.md
+python bench/before_after.py
 ```
 
 ## References

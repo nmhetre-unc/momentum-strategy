@@ -90,7 +90,8 @@ def max_drawdown(equity_curve: pd.Series) -> float:
     return drawdown_series(equity_curve).min()
 
 
-def full_report(result: pd.DataFrame, n_boot: int = 0) -> dict:
+def full_report(result: pd.DataFrame, n_boot: int = 0, seed: int = 0,
+                impl: str = "auto") -> dict:
     """
     Recomputes a normalized equity curve (starting at 1.0) from
     `strategy_return` rather than trusting result['equity_curve']
@@ -99,7 +100,9 @@ def full_report(result: pd.DataFrame, n_boot: int = 0) -> dict:
     walk_forward.py uses it. `n_boot=0` (default) skips the bootstrap
     entirely and reports `sharpe_ci_low`/`sharpe_ci_high` as None, since
     a stationary bootstrap over thousands of replicates dominates this
-    function's cost; pass `n_boot > 0` to compute them.
+    function's cost; pass `n_boot > 0` to compute them. `seed` and `impl`
+    are forwarded to stationary_bootstrap_sharpe (every impl gives
+    bit-identical intervals; see qbt.bootstrap).
     """
     strategy_return = result["strategy_return"].fillna(0)
     equity = (1 + strategy_return).cumprod()
@@ -115,7 +118,7 @@ def full_report(result: pd.DataFrame, n_boot: int = 0) -> dict:
         # so a top-level import here would be circular.
         from qbt.stats import stationary_bootstrap_sharpe
         _, sharpe_ci_low, sharpe_ci_high = stationary_bootstrap_sharpe(
-            strategy_return, n_boot=n_boot
+            strategy_return, n_boot=n_boot, seed=seed, impl=impl
         )
     else:
         sharpe_ci_low = sharpe_ci_high = None

@@ -18,11 +18,15 @@ scikit-learn>=1.4
 scipy>=1.11
 streamlit>=1.62
 
-# Installs the qbt package (src/qbt/) in editable mode so `import qbt` and
-# `import qbt.<module>` resolve for app/ and main.py. Community Cloud always
-# runs pip from the repo root, so "." resolves to the directory containing
-# pyproject.toml regardless of which entrypoint file triggered the build.
-# Must be kept in sync with pyproject.toml's [project.dependencies] above --
-# both currently list the same packages at the same constraints (floors,
-# except numpy, which is pinned exactly to match the C++ extension's build).
--e .
+# Installs the qbt package (src/qbt/) in editable mode, with its [ui] extra,
+# so `import qbt` and `import qbt.<module>` resolve for app/ and main.py.
+# Community Cloud always runs the installer (pip or uv) from the repo root,
+# so "." resolves to the directory containing pyproject.toml regardless of
+# which entrypoint file triggered the build. The [ui] extra (matplotlib,
+# altair, streamlit) is no longer part of qbt's base dependencies, so the
+# package line must keep it.
+# The list above must stay in sync with pyproject.toml's
+# [project.dependencies] plus [project.optional-dependencies].ui -- same
+# packages, same constraints (floors, except numpy, which is pinned exactly
+# to match the C++ extension's build).
+-e .[ui]
