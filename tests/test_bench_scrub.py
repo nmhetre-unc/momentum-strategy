@@ -68,3 +68,16 @@ def test_leaves_other_text_alone():
     text = ("connected: ssl_in_use True | libpq sslmode verify-full | host " + HOST + "\n"
             "http://127.0.0.1:8000/backtests/abc and https://example.com/a:b")
     assert scrub(text) == text
+
+
+def test_filter_mode_scrubs_stdin_line_by_line():
+    # scripts/deploy.sh: exec > >(python3 -u bench/scrub.py) 2>&1
+    import subprocess
+    import sys
+
+    script = Path(__file__).resolve().parents[1] / "bench" / "scrub.py"
+    text = f"pulling\nDATABASE_URL={DATABASE_URL}\nok\n"
+    out = subprocess.run([sys.executable, "-u", str(script)], input=text, capture_output=True,
+                         text=True, check=True, timeout=30).stdout
+    assert PASSWORD not in out
+    assert out.splitlines()[0] == "pulling" and out.splitlines()[-1] == "ok"

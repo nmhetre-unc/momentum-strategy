@@ -14,8 +14,12 @@ the database, so a fresh file means the loop is turning and the database
 answers. The default limit is the lease length: a worker silent for that
 long could not have kept a job anyway.
 
-Standard library only (plus Settings), so a check costs a few ms of
-interpreter start-up, not a pandas import.
+Standard library only (plus Settings), so a check costs interpreter
+start-up, not a pandas import. That was still too slow for the worker on
+a CPU-throttled host (D2: over the 5 s timeout on a t3.small at its credit
+baseline), so the worker's container healthcheck is now the same file-age
+check written in the shell (compose.yaml, tests/service/
+test_worker_healthcheck.py). `worker` here remains for checking by hand.
 """
 
 import argparse

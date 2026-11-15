@@ -77,7 +77,8 @@ services:
       QBT_SHUTDOWN_GRACE_SECONDS: "8"
     stop_grace_period: 15s
     healthcheck:
-      test: ["CMD", "python", "-m", "qbt_service.health", "worker"]
+      # The same shell check as the repo's compose.yaml (see there).
+      test: ["CMD-SHELL", "t=$$(stat -c %Y \"$$QBT_HEALTH_FILE\" 2>/dev/null) || { echo \"no heartbeat file at $$QBT_HEALTH_FILE\" >&2; exit 1; }; age=$$(( $$(date +%s) - t )); [ $$age -le 30 ] || { echo \"heartbeat $$age s old (limit 30 s = lease)\" >&2; exit 1; }"]
       interval: 10s
       timeout: 5s
       retries: 3

@@ -3,8 +3,9 @@ Removes database passwords from text before it is printed or saved.
 
 bench/aws_bench.py passes everything that comes back from the instance
 (command output, and the stderr inside a failed command's error) through
-scrub(). The case that leaked once in D2: psycopg given a SQLAlchemy URL
-raised
+scrub(), and scripts/deploy.sh pipes all of its output through this file
+as a filter (`python3 bench/scrub.py`). The case that leaked once in D2:
+psycopg, given a SQLAlchemy URL, raised
 
     psycopg.ProgrammingError: invalid connection option
     "postgresql+psycopg://qbt:<password>@host:5432/qbt?sslmode"
@@ -34,3 +35,16 @@ def scrub(text: str, *secrets: str) -> str:
             text = text.replace(secret, MASK)
     text = _URL_PASSWORD.sub(lambda m: f"{m['head']}{MASK}@", text)
     return _CONNINFO_PASSWORD.sub(lambda m: f"{m['head']}{MASK}", text)
+
+
+def main() -> None:
+    """A filter, stdin to stdout, one line at a time: scripts/deploy.sh pipes its output here."""
+    import sys
+
+    for line in sys.stdin:
+        sys.stdout.write(scrub(line))
+        sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    main()

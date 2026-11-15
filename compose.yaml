@@ -109,7 +109,13 @@ services:
     stop_grace_period: 15s
     depends_on: *after-migrate
     healthcheck:
-      test: ["CMD", "python", "-m", "qbt_service.health", "worker"]
+      # The age of QBT_HEALTH_FILE, in the shell: no Python start-up, so it
+      # runs in milliseconds even on a CPU-throttled host (D2: the Python
+      # check exceeded its 5 s timeout on a t3.small at its credit
+      # baseline). Healthy while the file is at most 30 s old, the lease
+      # length (QBT_LEASE_SECONDS): a worker silent that long could not have
+      # kept a job anyway. tests/service/test_worker_healthcheck.py runs it.
+      test: ["CMD-SHELL", "t=$$(stat -c %Y \"$$QBT_HEALTH_FILE\" 2>/dev/null) || { echo \"no heartbeat file at $$QBT_HEALTH_FILE\" >&2; exit 1; }; age=$$(( $$(date +%s) - t )); [ $$age -le 30 ] || { echo \"heartbeat $$age s old (limit 30 s = lease)\" >&2; exit 1; }"]
       interval: 10s
       timeout: 5s
       retries: 3

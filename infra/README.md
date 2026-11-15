@@ -1,8 +1,12 @@
 # infra: the service on AWS
 
 Terraform for running the Compose stack's services on AWS in `us-east-2`.
-Nothing here has been applied. `terraform plan` is clean: 15 resources to
-add, 0 to change, 0 to destroy.
+It has been applied once (D2, 2026-11-15): 15 resources, measured from a
+laptop, then destroyed, with the teardown checked using the AWS CLI. The
+results and their caveats are in
+[`bench/results/aws/`](../bench/results/aws/README.md). Nothing runs between
+sessions. New builds are deployed with
+[`scripts/deploy.sh`](../scripts/deploy.sh), by digest (see the Runbook).
 
 ```
  your IP ──:8000──▶ EC2 t3.small (default VPC, public subnet, public IPv4)
@@ -39,6 +43,19 @@ minus the database and minus the migrate dependency. One-shots are
 `docker compose run --rm`, the same as locally. A single systemd unit
 (`qbt.service`) runs `qbt up` at boot, so a stopped and started instance
 comes back.
+
+**The worker healthcheck is a shell command, not Python.** It passes while
+the worker's heartbeat file (`QBT_HEALTH_FILE`) is at most 30 s old, which
+is the lease length. The same command is in `templates/compose.yaml.tftpl`
+and the repo's `compose.yaml`, and `tests/service/test_worker_healthcheck.py`
+checks that both carry it.
+
+- **Why:** in D2, the earlier `python -m qbt_service.health worker` check
+  ran past its 5 s timeout. The t3.small was at its CPU-credit baseline,
+  and Compose's `--wait` reported a worker unhealthy while it was
+  processing jobs.
+- **Cost now:** the shell check takes about 2 ms in the image, against
+  about 254 ms for the Python one on a laptop.
 
 **Migrations, ingest and training are one-shot commands, never part of API
 start-up.** The instance's compose file has no `depends_on: migrate`, and
@@ -231,7 +248,8 @@ automated backups, and takes no final snapshot.
 
 ## Runbook
 
-Prerequisites: AWS CLI signed in (`aws login`), Docker, Terraform >= 1.11,
+Prerequisites: AWS CLI signed in (`aws login`), Docker with buildx, the
+GitHub CLI signed in (`gh`, for `deploy.sh`), Terraform >= 1.11,
 and the [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
 for `aws ssm start-session`.
 
@@ -242,18 +260,15 @@ terraform init
 terraform plan -out=qbt.tfplan
 terraform apply qbt.tfplan          # ~5-10 min, mostly RDS
 
-# Build and push the image under the tag the instance expects (image_tag, default v1).
-REPO=$(terraform output -raw ecr_repository_url)
-aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin "${REPO%%/*}"
-docker build --platform linux/amd64 -t "$REPO:v1" ..
-docker push "$REPO:v1"
+# Deploy a commit that .github/workflows/publish.yml has built and published
+# to GHCR (its job summary prints this command). Copies the image into ECR by
+# digest, then pulls it on the instance, migrates and runs `qbt up` over SSM.
+../scripts/deploy.sh <full commit sha> --migrate
 
-# On the instance.
+# First time only, on the instance: data and model.
 aws ssm start-session --region us-east-2 --target "$(terraform output -raw instance_id)"
-sudo qbt migrate
 sudo qbt ingest SPY --start 2008-01-01 --end 2025-01-01
 sudo qbt train  SPY --start 2008-01-01 --end 2025-01-01
-sudo qbt up
 
 # From your machine.
 curl -s "$(terraform output -raw api_url)/health"
@@ -263,9 +278,33 @@ curl -s -X POST "$(terraform output -raw api_url)/predict"
 terraform destroy
 ```
 
-A new build: push it under a new tag, set `image_tag`, and apply. The
-instance is replaced, because its compose file is in user data. Then run
-`qbt migrate` and `qbt up` on the new instance; the data stays in RDS.
+**A new build:** merge to main, wait for publish.yml, then run
+`scripts/deploy.sh <sha>`. Add `--migrate` if the commit adds a migration.
+Nothing here changes, and the instance isn't replaced.
+
+`deploy.sh` checks the image before it deploys:
+
+- It takes only an image from a successful publish.yml run on main.
+- GHCR must serve the digest that run recorded.
+- After copying that digest into ECR as `qbt-service:<sha>`, it checks ECR
+  holds the same digest.
+- On the instance it pulls `qbt-service@<digest>` from ECR, which is the
+  only registry the instance pulls from. It then waits for `GET /health`
+  = 200 and checks that the api and worker containers run that image.
+
+**Why the local retag:** the instance's compose file names one image,
+`<repository>:<image_tag>` (default `v1`), because it comes from user data.
+ECR tags are immutable, so `v1` can't be moved to the new build. Rewriting
+the file on the instance would make it drift from user data, and changing
+`image_tag` would replace the instance. Instead, `deploy.sh` runs
+`docker tag qbt-service@<digest> <repository>:<image_tag>` locally, on the
+instance only. Compose finds that name locally and doesn't pull. So
+`qbt up`, the one-shots and `qbt.service` at boot all run the deployed
+digest. In ECR, `v1` (if it exists) still means the original image.
+
+To change `image_tag` deliberately, set it and apply. The instance is
+replaced, then needs `deploy.sh <sha> --migrate` again. The data stays in
+RDS.
 
 The state (`terraform.tfstate`), plans and `terraform.tfvars` (your IP)
 are gitignored. `.terraform.lock.hcl` is committed.

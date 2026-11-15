@@ -51,7 +51,7 @@ variable "db_password_version" {
 }
 
 variable "image_tag" {
-  description = "Tag of the qbt-service image in ECR that the instance runs. Tags are immutable in this repository, so deploy a new build by pushing a new tag and changing this."
+  description = "Image name (qbt-service:<image_tag>) in the instance's compose file. New builds don't change this: scripts/deploy.sh copies them into ECR by digest and, on the instance, tags the pulled digest locally under this name (README, Runbook). Change it only to change that compose image name, which replaces the instance."
   type        = string
   default     = "v1"
 }
