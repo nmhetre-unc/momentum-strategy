@@ -16,6 +16,8 @@ console as well as a POSIX terminal.
 import argparse
 from pathlib import Path
 
+import pandas as pd
+
 from qbt.adaptive import ADAPTIVE_STRATEGIES, ALL_STRATEGIES, describe_choices
 from qbt.analytics import full_report, performance_by_regime
 from qbt.backtest import run_backtest
@@ -119,6 +121,9 @@ def main():
                   "fewer regimes.")
         if not regimes.causal:
             print("  WARNING: labels are not causal (the model saw the days it is labelling).")
+            if regimes.causal_from is not None:
+                print(f"           Only labels from {pd.Timestamp(regimes.causal_from).date()} "
+                      "on are out of sample.")
             print("           Fine for describing history; invalid for the numbers below.")
 
         print("\n  What the asset did in each regime:")
@@ -169,6 +174,8 @@ def main():
             rolling_params["n_regimes"] = args.n_regimes
         rolling = rolling_walk_forward(df, strategy_fn, cost_bps=args.cost_bps, **rolling_params)
         print(f"\n--- Rolling walk-forward: {rolling['n_folds']} out-of-sample windows ---")
+        print(f"  Folds scored:     {rolling['n_folds_scored']} of {rolling['n_folds']} "
+              "(those where the strategy can hold a position)")
         print(f"  Folds positive:   {rolling['pct_folds_positive']:.0%}")
         print(f"  Median Sharpe:    {rolling['median_sharpe']:.2f}")
         print(f"  Sharpe std dev:   {rolling['sharpe_std']:.2f}")

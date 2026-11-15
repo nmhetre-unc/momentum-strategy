@@ -1,0 +1,54 @@
+{
+  "data": {
+    "ticker": "SPY",
+    "start": "2008-01-01",
+    "end": "2025-01-01",
+    "n_trading_days": 4279
+  },
+  "learn_end": "2018-03-13",
+  "unknown_days": 310,
+  "bases": {
+    "sma_crossover": {
+      "learned_allow_list": [
+        0,
+        1,
+        2
+      ],
+      "first_out_of_sample_day": "2020-04-08",
+      "out_of_sample_days": 1191,
+      "out_of_sample_days_differing_from_base": 0,
+      "of_which_unknown_warm_up": 0,
+      "of_which_excluded_regime": 0,
+      "in_sample_unknown_days_base_held_a_position": 0
+    },
+    "momentum": {
+      "learned_allow_list": [
+        0,
+        1,
+        2
+      ],
+      "first_out_of_sample_day": "2020-04-08",
+      "out_of_sample_days": 1191,
+      "out_of_sample_days_differing_from_base": 0,
+      "of_which_unknown_warm_up": 0,
+      "of_which_excluded_regime": 0,
+      "in_sample_unknown_days_base_held_a_position": 97
+    },
+    "mean_reversion": {
+      "learned_allow_list": [
+        0,
+        1,
+        2
+      ],
+      "first_out_of_sample_day": "2020-04-08",
+      "out_of_sample_days": 1191,
+      "out_of_sample_days_differing_from_base": 0,
+      "of_which_unknown_warm_up": 0,
+      "of_which_excluded_regime": 0,
+      "in_sample_unknown_days_base_held_a_position": 229
+    },
+    "ml_direction": {
+      "raises": "'ml_direction' holds no position on or before learn_end (2018-03-13), so there is nothing to learn from: every regime would score a Sharpe of 0 and be excluded. Choose a base or candidate that trades in the learning window, pass the choice explicitly (allowed_regimes / strategy_map), or raise learn_frac."
+    }
+  }
+}

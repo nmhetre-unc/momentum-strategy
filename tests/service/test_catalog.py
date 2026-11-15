@@ -1,8 +1,9 @@
 """
 Strategy catalog sync: rows match the code, a re-sync changes nothing, a
-schema change adds a new current row and keeps the old one for old jobs,
-a strategy that is no longer served stops being current, and concurrent
-syncs (several API replicas starting at once) don't collide.
+schema change or a behaviour version bump adds a new current row and
+keeps the old one for old jobs, a strategy that is no longer served
+stops being current, and concurrent syncs (several API replicas starting
+at once) don't collide.
 """
 
 import threading
@@ -11,6 +12,7 @@ import pytest
 from pydantic import Field
 from sqlalchemy import select
 
+from qbt.strategies import STRATEGY_VERSIONS
 from qbt_service.catalog import CATALOG, build_catalog, sync_catalog
 from qbt_service.db import strategies
 from qbt_service.models import PARAMS_MODELS, StrategyParams
@@ -20,8 +22,8 @@ pytestmark = pytest.mark.db
 
 def rows(conn):
     return conn.execute(
-        select(strategies.c.id, strategies.c.name, strategies.c.schema_hash,
-               strategies.c.param_schema, strategies.c.is_current)
+        select(strategies.c.id, strategies.c.name, strategies.c.version,
+               strategies.c.schema_hash, strategies.c.param_schema, strategies.c.is_current)
         .order_by(strategies.c.id)
     ).mappings().all()
 
@@ -39,6 +41,7 @@ def test_sync_writes_the_catalog(conn):
         assert stored[name]["id"] == ids[name]
         assert stored[name]["schema_hash"] == entry.schema_hash
         assert stored[name]["param_schema"] == entry.param_schema
+        assert stored[name]["version"] == entry.version == STRATEGY_VERSIONS[name]
 
 
 def test_resync_is_a_no_op(conn):
@@ -70,6 +73,24 @@ def test_schema_change_adds_a_new_current_row(conn):
     assert "extra_knob" in current(conn)["momentum"]["param_schema"]["properties"]
 
     # Rolling back to the old code makes the old row current again; no third row.
+    assert sync_catalog(conn) == old_ids
+    assert len([r for r in rows(conn) if r["name"] == "momentum"]) == 2
+
+
+def test_version_bump_adds_a_new_current_row_with_the_same_schema(conn):
+    old_ids = sync_catalog(conn)
+    bumped = {**STRATEGY_VERSIONS, "momentum": STRATEGY_VERSIONS["momentum"] + 1}
+    new_ids = sync_catalog(conn, build_catalog(versions=bumped))
+
+    assert new_ids["momentum"] != old_ids["momentum"]
+    momentum_rows = [r for r in rows(conn) if r["name"] == "momentum"]
+    assert [(r["id"], r["version"], r["is_current"]) for r in momentum_rows] == [
+        (old_ids["momentum"], STRATEGY_VERSIONS["momentum"], False),
+        (new_ids["momentum"], STRATEGY_VERSIONS["momentum"] + 1, True)]
+    # Same parameters, different behaviour: the schema alone couldn't tell them apart.
+    assert momentum_rows[0]["schema_hash"] == momentum_rows[1]["schema_hash"]
+
+    # Rolling back makes the old version current again; no third row.
     assert sync_catalog(conn) == old_ids
     assert len([r for r in rows(conn) if r["name"] == "momentum"]) == 2
 

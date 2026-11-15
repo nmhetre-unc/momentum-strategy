@@ -1,0 +1,172 @@
+{
+  "audit": "scripts/audit_daily_ml.py",
+  "before": {
+    "source": "pre-fix code: git archive of 1a51dc6 (src/), imported in place of the editable install",
+    "recorded_at": "2026-11-15T16:28:34+00:00",
+    "data": {
+      "ticker": "SPY",
+      "first_date": "2008-01-02",
+      "last_date": "2024-12-31",
+      "n_trading_days": 4279
+    },
+    "parameters": {
+      "train_frac": 0.7,
+      "rolling_train_days": 756,
+      "rolling_test_days": 126
+    },
+    "1_in_sample_signal": {
+      "first_out_of_sample_date": "2019-12-03",
+      "in_sample_signal_days": 2982,
+      "in_sample_share_of_all_days": 0.6968917971488665,
+      "days_long_before_split": 2937
+    },
+    "2_evaluate_out_of_sample": {
+      "evaluate_out_of_sample_split": "2019-11-22",
+      "model_split": "2019-12-03",
+      "evaluate_out_of_sample_overlap_days": 6
+    },
+    "3_rolling_refit_per_fold": {
+      "n_folds": 27,
+      "per_fold": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "rolling_refit_overlap_days": 54
+    },
+    "4_regime_fit_window": {
+      "ml_split": "2019-12-03",
+      "regime_fit_end": "2020-04-07",
+      "regime_fit_overlap_days": 87,
+      "causal_flag": true,
+      "causal_truth": false,
+      "causal_flag_truthful": false,
+      "causal_from": null
+    },
+    "5_last_label": {
+      "last_label": 0.0,
+      "last_row_in_training_data": true
+    },
+    "6_model_report": {
+      "train_rows_scored": 2983,
+      "test_rows_scored": 1278,
+      "model_report_overlap_rows": 1
+    },
+    "7_regime_dummy_columns": {
+      "probe": "regime 0 on every row before the ML split, regime 1 on every row after",
+      "regime_columns": [
+        "regime_0",
+        "regime_1"
+      ],
+      "dummy_columns_from_test_only_regimes": 1
+    }
+  },
+  "after": {
+    "source": "git 1a51dc6 + uncommitted changes",
+    "recorded_at": "2026-11-15T16:26:05+00:00",
+    "data": {
+      "ticker": "SPY",
+      "first_date": "2008-01-02",
+      "last_date": "2024-12-31",
+      "n_trading_days": 4279
+    },
+    "parameters": {
+      "train_frac": 0.7,
+      "rolling_train_days": 756,
+      "rolling_test_days": 126
+    },
+    "1_in_sample_signal": {
+      "first_out_of_sample_date": "2019-11-22",
+      "in_sample_signal_days": 0,
+      "in_sample_share_of_all_days": 0.0,
+      "days_long_before_split": 0
+    },
+    "2_evaluate_out_of_sample": {
+      "evaluate_out_of_sample_split": "2019-11-22",
+      "model_split": "2019-11-22",
+      "evaluate_out_of_sample_overlap_days": 0
+    },
+    "3_rolling_refit_per_fold": {
+      "n_folds": 27,
+      "per_fold": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "rolling_refit_overlap_days": 0
+    },
+    "4_regime_fit_window": {
+      "ml_split": "2019-11-22",
+      "regime_fit_end": "2019-11-21",
+      "regime_fit_overlap_days": 0,
+      "causal_flag": false,
+      "causal_truth": false,
+      "causal_flag_truthful": true,
+      "causal_from": "2019-11-22"
+    },
+    "5_last_label": {
+      "last_label": null,
+      "last_row_in_training_data": false
+    },
+    "6_model_report": {
+      "train_rows_scored": 2975,
+      "test_rows_scored": 1283,
+      "model_report_overlap_rows": 0
+    },
+    "7_regime_dummy_columns": {
+      "probe": "regime 0 on every row before the ML split, regime 1 on every row after",
+      "regime_columns": [
+        "regime_0"
+      ],
+      "dummy_columns_from_test_only_regimes": 0
+    }
+  }
+}

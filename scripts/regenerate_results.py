@@ -1,7 +1,17 @@
 """
-Full strategy comparison table for SPY: every strategy in STRATEGIES and
-ADAPTIVE_STRATEGIES, plus buy-and-hold as the first row and the benchmark
-every "vs benchmark" column below is measured against.
+Strategy comparison tables for SPY: every strategy in STRATEGIES and
+ADAPTIVE_STRATEGIES, against buy-and-hold, the benchmark every "vs
+benchmark" column below is measured against.
+
+No strategy is scored on data it learned from. A strategy that learns
+anything (a fitted model, a regime model, a choice selected on past
+performance) marks its first out-of-sample day on its signal
+(qbt.timesplit.out_of_sample_start) and is scored only from that day,
+against buy-and-hold over the identical window, in its own table. The
+full-period table holds only the strategies that learn nothing. Both
+tables use the same n_trials (N_TRIALS) for the deflated Sharpe,
+whichever table a strategy lands in; results/ml/
+learning_strategies_audit.json lists what each strategy learns.
 
 Uses the 17-year cached SPY file (2008-01-01 to 2025-01-01) rather than
 the 10-year one: several adaptive wrappers only learn their rules from
@@ -39,6 +49,7 @@ from qbt.bootstrap import stationary_bootstrap_indices
 from qbt.data import fetch_ohlcv
 from qbt.stats import EULER_MASCHERONI, deflated_sharpe_ratio, stationary_bootstrap_sharpe
 from qbt.strategies import STRATEGIES
+from qbt.timesplit import out_of_sample_start
 from qbt.walk_forward import rolling_walk_forward
 
 TICKER = "SPY"
@@ -52,6 +63,9 @@ SENSITIVITY_STRATEGIES = ("sma_crossover", "adaptive_ensemble")
 PASSIVE_EQUIVALENT_STRATEGY = "volatility_targeted"
 ROLLING_TRAIN_DAYS = 756
 ROLLING_TEST_DAYS = 126
+
+TRIAL_SWEEP = (1, 5, 11)  # 11: every strategy in both tables
+TRIAL_SWEEP_STRATEGIES = ("sma_crossover", "adaptive_ensemble")
 
 RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
 RESULTS_PATH = RESULTS_DIR / "summary.md"
@@ -197,11 +211,19 @@ def format_cell(key, value):
         return f"{point:+.2f} [{lo:+.2f}, {hi:+.2f}]"
     if key == "strategy":
         return value
-    if key in ("gross_sharpe", "net_sharpe", "skew"):
+    if key == "bench_sharpe_ci":
+        lo, hi = value
+        return f"[{lo:.2f}, {hi:.2f}]"
+    if key in ("oos_from",):
+        return value
+    if key == "days":
+        return f"{value:d}"
+    if key in ("gross_sharpe", "net_sharpe", "skew", "bench_sharpe"):
         return f"{value:.2f}"
     if key in ("dsr_zero", "dsr_bench"):
         return f"{value:.3f}"
-    if key in ("annualized_return", "annualized_volatility", "net_return", "max_drawdown"):
+    if key in ("annualized_return", "annualized_volatility", "net_return", "max_drawdown",
+               "bench_annualized_return", "bench_max_drawdown", "exposure"):
         return f"{value:.1%}"
     if key == "turnover":
         return f"{value:.1f}"
@@ -210,6 +232,108 @@ def format_cell(key, value):
     if key == "num_trades":
         return f"{value:d}"
     raise KeyError(key)
+
+
+OOS_COLUMNS = [
+    ("strategy", "Strategy"),
+    ("oos_from", "Out of sample from"),
+    ("days", "Days"),
+    ("net_sharpe", "Net Sharpe"),
+    ("net_sharpe_ci", "Net Sharpe 90% CI"),
+    ("bench_sharpe", "buy_and_hold Sharpe, same window"),
+    ("bench_sharpe_ci", "buy_and_hold 90% CI"),
+    ("diff_vs_bh", "Diff vs buy_and_hold (90% CI)"),
+    ("dsr_zero", "DSR vs 0"),
+    ("dsr_bench", "DSR vs bench"),
+    ("annualized_return", "Ann. Return"),
+    ("bench_annualized_return", "buy_and_hold Ann. Return"),
+    ("max_drawdown", "Max DD"),
+    ("bench_max_drawdown", "buy_and_hold Max DD"),
+    ("exposure", "Exposure"),
+    ("num_trades", "Trades"),
+]
+
+
+def all_strategies():
+    return {**STRATEGIES, **ADAPTIVE_STRATEGIES}
+
+
+def out_of_sample_window(df, fn):
+    """(first out-of-sample day or None, net result, net returns) for one
+    strategy, restricted to its out-of-sample window when it has one."""
+    signal = fn(df)
+    start = out_of_sample_start(signal)
+    net_result = run_backtest(df, signal, cost_bps=COST_BPS)
+    if start is not None:
+        net_result = net_result.loc[start:]
+    return start, net_result, net_result["strategy_return"].dropna()
+
+
+def build_oos_row(name, start, net_result, net_returns, bench_full):
+    """A learning strategy against buy-and-hold over the identical window."""
+    bench_window = bench_full.loc[start:]
+    bench_returns = bench_window["strategy_return"].dropna()
+    row = build_row(name, net_result, net_returns, bench_returns, gross_sharpe=None,
+                    is_benchmark=False)
+    bench_report = full_report(bench_window, n_boot=0)
+    _, bench_lo, bench_hi = stationary_bootstrap_sharpe(
+        bench_returns, n_boot=N_BOOT, mean_block=MEAN_BLOCK, seed=0,
+    )
+    return {
+        **row,
+        "oos_from": start.date().isoformat(),
+        "days": len(net_returns),
+        "bench_sharpe": bench_report["sharpe_ratio"],
+        "bench_sharpe_ci": (bench_lo, bench_hi),
+        "bench_annualized_return": bench_report["cagr"],
+        "bench_max_drawdown": bench_report["max_drawdown"],
+        "exposure": full_report(net_result, n_boot=0)["exposure"],
+    }
+
+
+def render_oos_table(rows):
+    headers = [label for _, label in OOS_COLUMNS]
+    lines = ["| " + " | ".join(headers) + " |", "|" + "|".join(["---"] * len(headers)) + "|"]
+    for row in rows:
+        cells = [format_cell(key, row[key]) for key, _ in OOS_COLUMNS]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def render_trial_sweep(df, bench_full):
+    """
+    Deflated Sharpe at several trial counts, from each strategy's scored
+    window: the full period for a strategy that learns nothing, its
+    out-of-sample window otherwise (against buy-and-hold over the same
+    window).
+    """
+    lines = [
+        "## Deflated Sharpe by trial count",
+        "",
+        f"n_trials in {TRIAL_SWEEP}. 11 is every strategy in both tables above. Each "
+        "strategy is scored on the window it appears in above.",
+        "",
+        "| Strategy | Window | "
+        + " | ".join(f"DSR vs 0 @{n}" for n in TRIAL_SWEEP) + " | "
+        + " | ".join(f"DSR vs bench @{n}" for n in TRIAL_SWEEP) + " |",
+        "|---|---|" + "|".join(["---"] * (2 * len(TRIAL_SWEEP))) + "|",
+    ]
+    strategies = all_strategies()
+    for name in TRIAL_SWEEP_STRATEGIES:
+        start, net_result, returns = out_of_sample_window(df, strategies[name])
+        bench_window = bench_full if start is None else bench_full.loc[start:]
+        bench_returns = bench_window["strategy_return"].dropna()
+        sharpe_pp = per_period(full_report(net_result, n_boot=0)["sharpe_ratio"])
+        skew_, kurt_ = float(_skew(returns)), float(_kurtosis(returns, fisher=False))
+        zero = [deflated_sharpe_ratio(sharpe_pp, n, skew_, kurt_, len(returns))
+                for n in TRIAL_SWEEP]
+        bench = [dsr_vs_benchmark(sharpe_pp, per_period(sharpe_ratio(bench_returns)), n,
+                                  skew_, kurt_, len(returns)) for n in TRIAL_SWEEP]
+        window = ("full period" if start is None
+                  else f"{start.date()} to {returns.index[-1].date()}")
+        lines.append(f"| {name} | {window} | " + " | ".join(f"{v:.3f}" for v in zero + bench)
+                     + " |")
+    return "\n".join(lines)
 
 
 def render_markdown_table(rows):
@@ -227,16 +351,14 @@ def render_mean_block_sensitivity(df, bench_returns):
         "",
         f"Net Sharpe 90% CI at n_boot={N_BOOT}, for mean_block in {MEAN_BLOCK_SWEEP}. "
         "A CI that moves a lot with mean_block means the width itself isn't trustworthy "
-        "at any single block length.",
+        "at any single block length. Each strategy on the window it is scored on above.",
         "",
         "| Strategy | " + " | ".join(f"mean_block={mb}" for mb in MEAN_BLOCK_SWEEP) + " |",
         "|---|" + "|".join(["---"] * len(MEAN_BLOCK_SWEEP)) + "|",
     ]
-    all_strategies = {**STRATEGIES, **ADAPTIVE_STRATEGIES}
+    strategies = all_strategies()
     for name in SENSITIVITY_STRATEGIES:
-        signal = all_strategies[name](df)
-        result = run_backtest(df, signal, cost_bps=COST_BPS)
-        returns = result["strategy_return"].dropna()
+        _start, _result, returns = out_of_sample_window(df, strategies[name])
         cells = []
         for mean_block in MEAN_BLOCK_SWEEP:
             _, lo, hi = stationary_bootstrap_sharpe(
@@ -257,8 +379,8 @@ def render_passive_equivalent(df):
     level.
     """
     name = PASSIVE_EQUIVALENT_STRATEGY
-    all_strategies = {**STRATEGIES, **ADAPTIVE_STRATEGIES}
-    signal = all_strategies[name](df)
+    signal = all_strategies()[name](df)
+    assert out_of_sample_start(signal) is None, f"{name} learns; compare it out of sample"
     result = run_backtest(df, signal, cost_bps=COST_BPS)
     report = full_report(result, n_boot=0)
     avg_exposure = report["exposure"]
@@ -288,40 +410,60 @@ def render_rolling_comparison(df):
     """
     Mean out-of-sample FOLD Sharpe under genuine per-fold refitting versus
     the old fixed-model approach (one fit on the whole series, reused
-    across every fold) -- a separate question from the main table above.
-    The main table's numbers (Net Sharpe, its 90% CI, the paired
-    difference against buy_and_hold, DSR) all come from a single
-    full-period backtest and never touch rolling_walk_forward(), so none
-    of them move because of this section; this section exists precisely
-    because a fold-averaged Sharpe is a different statistic, only
-    computable by sliding a train/test window through history, which the
-    main table doesn't do.
+    across every fold) -- a separate question from the tables above,
+    which come from single backtests and never touch
+    rolling_walk_forward(). A fold is averaged only if the strategy can
+    hold a position on every day of its test window: a learning strategy
+    fitted once on the whole series is flat until its first
+    out-of-sample day, so the fixed-model pass scores only the folds
+    after it. The "same folds" column restricts refit-per-fold to those
+    folds too, so the change compares like with like.
     """
     lines = [
         "## Rolling walk-forward: refit-per-fold vs fixed-model",
         "",
         f"train_days={ROLLING_TRAIN_DAYS}, test_days={ROLLING_TEST_DAYS}, "
         f"cost_bps={COST_BPS:.0f}. Mean Sharpe across out-of-sample folds -- not the "
-        "full-period Sharpe in the table above, and not affected by it either way. "
+        "Sharpe in the tables above, and not affected by them either way. "
         "'Fixed-model' reuses one fit across every fold (the old default); 'refit "
         "per fold' refits fresh on each fold's own training window, which is honest "
-        "but n_folds times more expensive.",
+        "but n_folds times more expensive. Only folds where the strategy can hold a "
+        "position on every test day are averaged; the fold columns count them. "
+        "'Change' is refit minus fixed-model over the same folds.",
         "",
-        "| Strategy | Fixed-model mean fold Sharpe | Refit-per-fold mean fold Sharpe | Change |",
-        "|---|---|---|---|",
+        "| Strategy | Fixed-model folds | Fixed-model mean fold Sharpe | "
+        "Refit-per-fold, same folds | Change | Refit-per-fold folds | "
+        "Refit-per-fold mean fold Sharpe |",
+        "|---|---|---|---|---|---|---|",
     ]
     rows = []
-    for name, fn in {**STRATEGIES, **ADAPTIVE_STRATEGIES}.items():
+    for name, fn in all_strategies().items():
         result = rolling_walk_forward(
             df, fn, train_days=ROLLING_TRAIN_DAYS, test_days=ROLLING_TEST_DAYS,
             cost_bps=COST_BPS, refit_per_fold=True,
         )
-        rows.append((name, result["mean_sharpe_fixed_model"], result["mean_sharpe"]))
+        refit_folds, fixed_folds = result["folds"], result["fixed_model_folds"]
+        same = fixed_folds.loc[fixed_folds["can_hold_position"], "fold"]
+        refit_same = float(refit_folds.loc[refit_folds["fold"].isin(same) &
+                                           refit_folds["can_hold_position"],
+                                           "sharpe_ratio"].mean())
+        rows.append({
+            "name": name,
+            "fixed_n": len(same), "n": len(fixed_folds),
+            "fixed": result["mean_sharpe_fixed_model"],
+            "refit_same": refit_same,
+            "refit_n": result["n_folds_scored"],
+            "refit": result["mean_sharpe"],
+        })
 
     # Most overstated by the fixed-model approach (largest drop) first.
-    rows.sort(key=lambda r: r[2] - r[1])
-    for name, fixed, refit in rows:
-        lines.append(f"| {name} | {fixed:.2f} | {refit:.2f} | {refit - fixed:+.2f} |")
+    rows.sort(key=lambda r: r["refit_same"] - r["fixed"])
+    for r in rows:
+        lines.append(
+            f"| {r['name']} | {r['fixed_n']} of {r['n']} | {r['fixed']:.2f} | "
+            f"{r['refit_same']:.2f} | {r['refit_same'] - r['fixed']:+.2f} | "
+            f"{r['refit_n']} of {r['n']} | {r['refit']:.2f} |"
+        )
 
     return "\n".join(lines), rows
 
@@ -335,9 +477,15 @@ def main():
 
     rows = [build_row("buy_and_hold", bench_result, bench_returns, bench_returns,
                       gross_sharpe=bench_gross_sharpe, is_benchmark=True)]
+    oos_rows = []
 
-    for name, fn in {**STRATEGIES, **ADAPTIVE_STRATEGIES}.items():
+    for name, fn in all_strategies().items():
         signal = fn(df)
+        start = out_of_sample_start(signal)
+        if start is not None:
+            _start, net_result, net_returns = out_of_sample_window(df, fn)
+            oos_rows.append(build_oos_row(name, start, net_result, net_returns, bench_result))
+            continue
         gross_sharpe = full_report(run_backtest(df, signal, cost_bps=0), n_boot=0)["sharpe_ratio"]
         net_result = run_backtest(df, signal, cost_bps=COST_BPS)
         net_returns = net_result["strategy_return"].dropna()
@@ -350,13 +498,30 @@ def main():
         f"Cost: {COST_BPS:.0f}bps one-way (buy_and_hold at 0bps) · "
         f"n_boot={N_BOOT} · n_trials={N_TRIALS} · mean_block={MEAN_BLOCK}\n"
     )
+    full_heading = (
+        "## Full period: strategies that learn nothing\n\n"
+        "Rules with fixed parameters, scored on every day.\n"
+    )
+    oos_heading = (
+        "## Out of sample only: strategies that learn\n\n"
+        "Each strategy scored only from its first out-of-sample day, the day after "
+        "everything it learned from (a fitted model, a regime model's fit window, a "
+        "choice learned on past performance; see "
+        "results/ml/learning_strategies_audit.json). buy_and_hold is measured over the "
+        "identical window, and the difference and DSR vs bench are against it. Same "
+        f"n_trials={N_TRIALS}. The first day's return is zero by construction (a position "
+        "decided that day earns from the next).\n"
+    )
     table = render_markdown_table(rows)
+    oos_table = render_oos_table(oos_rows)
+    trial_sweep = render_trial_sweep(df, bench_result)
     sensitivity = render_mean_block_sensitivity(df, bench_returns)
     passive_equivalent = render_passive_equivalent(df)
     rolling_comparison, rolling_rows = render_rolling_comparison(df)
 
     document = (
-        f"{header}\n{table}\n\n{sensitivity}\n\n{passive_equivalent}\n\n{rolling_comparison}\n"
+        f"{header}\n{full_heading}\n{table}\n\n{oos_heading}\n{oos_table}\n\n"
+        f"{trial_sweep}\n\n{sensitivity}\n\n{passive_equivalent}\n\n{rolling_comparison}\n"
     )
 
     print(document)
@@ -366,8 +531,9 @@ def main():
     print(f"\nWrote {RESULTS_PATH}")
 
     print("\nMost overstated by the fixed-model approach (largest drop first):")
-    for name, fixed, refit in rolling_rows[:3]:
-        print(f"  {name}: {fixed:.2f} -> {refit:.2f} ({refit - fixed:+.2f})")
+    for r in rolling_rows[:3]:
+        print(f"  {r['name']}: {r['fixed']:.2f} -> {r['refit_same']:.2f} "
+              f"({r['refit_same'] - r['fixed']:+.2f}) over {r['fixed_n']} folds")
 
 
 if __name__ == "__main__":

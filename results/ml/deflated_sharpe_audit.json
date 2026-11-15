@@ -1,0 +1,37 @@
+{
+  "audit": "Audit: adaptive_ensemble's deflated Sharpe against buy-and-hold, before",
+  "before": {
+    "source": "pre-fix code: git archive of 7b5bb84 (src/), imported in place of the editable install",
+    "strategy": "adaptive_ensemble",
+    "window": {
+      "first": "2008-01-03",
+      "last": "2024-12-31",
+      "days": 4278,
+      "scored_from_first_out_of_sample_day": false
+    },
+    "sharpe": 0.9306202364969434,
+    "buy_and_hold_sharpe_same_window": 0.6070518018940513,
+    "dsr_vs_buy_and_hold": {
+      "1": 0.9060411919768279,
+      "5": 0.5494098125381286,
+      "11": 0.3800170650304943
+    }
+  },
+  "after": {
+    "source": "git f294931 + working tree",
+    "strategy": "adaptive_ensemble",
+    "window": {
+      "first": "2020-04-08",
+      "last": "2024-12-31",
+      "days": 1191,
+      "scored_from_first_out_of_sample_day": true
+    },
+    "sharpe": 0.9019667663335017,
+    "buy_and_hold_sharpe_same_window": 1.1509264906171583,
+    "dsr_vs_buy_and_hold": {
+      "1": 0.29521559454357954,
+      "5": 0.04174324928053297,
+      "11": 0.015370408740267762
+    }
+  }
+}

@@ -140,6 +140,27 @@ STRATEGIES: dict[str, Callable[..., pd.Series]] = {
     "ml_direction": ml_direction_signal,
 }
 
+# Behaviour version of each strategy in STRATEGIES, recorded by the
+# service's catalog alongside the parameter schema. The rules are those
+# of database migrations: a published version is never changed. Any
+# change to the positions a strategy produces for the same prices and
+# params gets a new version number here, and every stored backtest keeps
+# pointing at the version it ran. tests/test_strategy_versions.py pins a
+# fingerprint of every published version and fails if the current code
+# no longer reproduces the current version's pin, so a behaviour change
+# without a bump can't pass CI.
+#
+# ml_direction 2: predicts out of sample only (flat in its training
+# period), shares its split date with evaluate_out_of_sample(), purges
+# the training row whose label ends on that date, and never trains on
+# the unknown last-day label. See results/ml/daily_ml_audit.json.
+STRATEGY_VERSIONS: dict[str, int] = {
+    "sma_crossover": 1,
+    "momentum": 1,
+    "mean_reversion": 1,
+    "ml_direction": 2,
+}
+
 
 # --------------------------------------------------------------------------
 # Dashboard copy

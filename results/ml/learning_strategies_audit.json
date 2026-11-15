@@ -1,0 +1,447 @@
+{
+  "audit": "Audit: is any strategy scored on data it learned from?",
+  "before": {
+    "source": "pre-fix code: git archive of 7b5bb84 (src/), imported in place of the editable install",
+    "recorded_at": "2026-11-15T16:47:51+00:00",
+    "data": {
+      "ticker": "SPY",
+      "first_date": "2008-01-02",
+      "last_date": "2024-12-31",
+      "n_trading_days": 4279
+    },
+    "windows": {
+      "ml_split_first_out_of_sample_day": "2019-11-22",
+      "regime_fit_end": "2020-04-07",
+      "regime_causal_from": "2020-04-08",
+      "learn_end": "2018-03-13",
+      "rewrite_from": "2022-01-03"
+    },
+    "strategies": {
+      "sma_crossover": {
+        "learns": [],
+        "positions_returned_at": "qbt/strategies.py:19",
+        "first_out_of_sample_day": null,
+        "days_changed_by_later_prices": 0
+      },
+      "momentum": {
+        "learns": [],
+        "positions_returned_at": "qbt/strategies.py:26",
+        "first_out_of_sample_day": null,
+        "days_changed_by_later_prices": 0
+      },
+      "mean_reversion": {
+        "learns": [],
+        "positions_returned_at": "qbt/strategies.py:55",
+        "first_out_of_sample_day": null,
+        "days_changed_by_later_prices": 0
+      },
+      "ml_direction": {
+        "learns": [
+          {
+            "what": "logistic regression on next-day direction",
+            "where": "qbt/ml/__init__.py:115",
+            "learns_from_rows_through": "2019-11-21"
+          }
+        ],
+        "positions_returned_at": "qbt/ml/__init__.py:236",
+        "first_out_of_sample_day": "2019-11-22",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 2995,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2019-11-21"
+        ],
+        "in_sample_days_with_position": 0,
+        "evaluate_out_of_sample_split": "2019-11-22",
+        "evaluate_out_of_sample_in_sample_days": 0,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 18
+      },
+      "regime_filtered": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          },
+          {
+            "what": "allow-list: regimes where the base had Sharpe > 0",
+            "where": "qbt/adaptive.py:176",
+            "learns_from_rows_through": "2018-03-13"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:186",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 2335,
+        "evaluate_out_of_sample_split": "2019-11-22",
+        "evaluate_out_of_sample_in_sample_days": 93,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 19
+      },
+      "regime_switch": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          },
+          {
+            "what": "strategy per regime: best learning-window Sharpe",
+            "where": "qbt/adaptive.py:208",
+            "learns_from_rows_through": "2018-03-13"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:216",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 846,
+        "evaluate_out_of_sample_split": "2019-11-22",
+        "evaluate_out_of_sample_in_sample_days": 93,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 19
+      },
+      "regime_parameters": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:242",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 2221,
+        "evaluate_out_of_sample_split": "2019-11-22",
+        "evaluate_out_of_sample_in_sample_days": 93,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 19
+      },
+      "volatility_targeted": {
+        "learns": [],
+        "positions_returned_at": "qbt/adaptive.py:297",
+        "first_out_of_sample_day": null,
+        "days_changed_by_later_prices": 0
+      },
+      "regime_sized": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          },
+          {
+            "what": "size per regime: inverse of that regime's volatility",
+            "where": "qbt/adaptive.py:316",
+            "learns_from_rows_through": "2018-03-13"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:327",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 1494,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 2335,
+        "evaluate_out_of_sample_split": "2019-11-22",
+        "evaluate_out_of_sample_in_sample_days": 93,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 19
+      },
+      "adaptive_ensemble": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          },
+          {
+            "what": "strategy per regime: best learning-window Sharpe",
+            "where": "qbt/adaptive.py:347",
+            "learns_from_rows_through": "2018-03-13"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:358",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 846,
+        "evaluate_out_of_sample_split": "2019-11-22",
+        "evaluate_out_of_sample_in_sample_days": 93,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 19
+      },
+      "ml_regime_conditional": {
+        "learns": [
+          {
+            "what": "logistic regression on next-day direction",
+            "where": "qbt/ml/__init__.py:115",
+            "learns_from_rows_through": "2019-11-21"
+          },
+          {
+            "what": "HMM regime model, fit capped before the ML split",
+            "where": "qbt/adaptive.py:378",
+            "learns_from_rows_through": "2019-11-21"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:380",
+        "first_out_of_sample_day": "2019-11-22",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 2995,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2019-11-21"
+        ],
+        "in_sample_days_with_position": 0,
+        "evaluate_out_of_sample_split": "2019-11-22",
+        "evaluate_out_of_sample_in_sample_days": 0,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 18
+      }
+    }
+  },
+  "after": {
+    "source": "git 7b5bb84 + working tree",
+    "recorded_at": "2026-11-15T16:58:04+00:00",
+    "data": {
+      "ticker": "SPY",
+      "first_date": "2008-01-02",
+      "last_date": "2024-12-31",
+      "n_trading_days": 4279
+    },
+    "windows": {
+      "ml_split_first_out_of_sample_day": "2019-11-22",
+      "regime_fit_end": "2020-04-07",
+      "regime_causal_from": "2020-04-08",
+      "learn_end": "2018-03-13",
+      "rewrite_from": "2022-01-03"
+    },
+    "strategies": {
+      "sma_crossover": {
+        "learns": [],
+        "positions_returned_at": "qbt/strategies.py:19",
+        "first_out_of_sample_day": null,
+        "days_changed_by_later_prices": 0
+      },
+      "momentum": {
+        "learns": [],
+        "positions_returned_at": "qbt/strategies.py:26",
+        "first_out_of_sample_day": null,
+        "days_changed_by_later_prices": 0
+      },
+      "mean_reversion": {
+        "learns": [],
+        "positions_returned_at": "qbt/strategies.py:55",
+        "first_out_of_sample_day": null,
+        "days_changed_by_later_prices": 0
+      },
+      "ml_direction": {
+        "learns": [
+          {
+            "what": "logistic regression on next-day direction",
+            "where": "qbt/ml/__init__.py:116",
+            "learns_from_rows_through": "2019-11-21"
+          }
+        ],
+        "positions_returned_at": "qbt/ml/__init__.py:239",
+        "first_out_of_sample_day": "2019-11-22",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 2995,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2019-11-21"
+        ],
+        "in_sample_days_with_position": 0,
+        "evaluate_out_of_sample_split": "2019-11-22",
+        "evaluate_out_of_sample_in_sample_days": 0,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 0
+      },
+      "regime_filtered": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          },
+          {
+            "what": "allow-list: regimes where the base had Sharpe > 0",
+            "where": "qbt/adaptive.py:230",
+            "learns_from_rows_through": "2018-03-13"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:240",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 0,
+        "evaluate_out_of_sample_split": "2020-04-08",
+        "evaluate_out_of_sample_in_sample_days": 0,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 0
+      },
+      "regime_switch": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          },
+          {
+            "what": "strategy per regime: best learning-window Sharpe",
+            "where": "qbt/adaptive.py:264",
+            "learns_from_rows_through": "2018-03-13"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:273",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 0,
+        "evaluate_out_of_sample_split": "2020-04-08",
+        "evaluate_out_of_sample_in_sample_days": 0,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 0
+      },
+      "regime_parameters": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:301",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 0,
+        "evaluate_out_of_sample_split": "2020-04-08",
+        "evaluate_out_of_sample_in_sample_days": 0,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 0
+      },
+      "volatility_targeted": {
+        "learns": [],
+        "positions_returned_at": "qbt/adaptive.py:357",
+        "first_out_of_sample_day": null,
+        "days_changed_by_later_prices": 0
+      },
+      "regime_sized": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          },
+          {
+            "what": "size per regime: inverse of that regime's volatility",
+            "where": "qbt/adaptive.py:383",
+            "learns_from_rows_through": "2018-03-13"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:394",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 0,
+        "evaluate_out_of_sample_split": "2020-04-08",
+        "evaluate_out_of_sample_in_sample_days": 0,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 0
+      },
+      "adaptive_ensemble": {
+        "learns": [
+          {
+            "what": "HMM regime model (fit on the first 70% of post-warm-up rows)",
+            "where": "qbt/regime.py:642",
+            "learns_from_rows_through": "2020-04-07"
+          },
+          {
+            "what": "strategy per regime: best learning-window Sharpe",
+            "where": "qbt/adaptive.py:415",
+            "learns_from_rows_through": "2018-03-13"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:426",
+        "first_out_of_sample_day": "2020-04-08",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 3088,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2020-04-07"
+        ],
+        "in_sample_days_with_position": 0,
+        "evaluate_out_of_sample_split": "2020-04-08",
+        "evaluate_out_of_sample_in_sample_days": 0,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 0
+      },
+      "ml_regime_conditional": {
+        "learns": [
+          {
+            "what": "logistic regression on next-day direction",
+            "where": "qbt/ml/__init__.py:116",
+            "learns_from_rows_through": "2019-11-21"
+          },
+          {
+            "what": "HMM regime model, fit capped before the ML split",
+            "where": "qbt/adaptive.py:447",
+            "learns_from_rows_through": "2019-11-21"
+          }
+        ],
+        "positions_returned_at": "qbt/adaptive.py:455",
+        "first_out_of_sample_day": "2019-11-22",
+        "days_changed_by_later_prices": 0,
+        "in_sample_rows": 2995,
+        "in_sample_first_last": [
+          "2008-01-02",
+          "2019-11-21"
+        ],
+        "in_sample_days_with_position": 0,
+        "evaluate_out_of_sample_split": "2019-11-22",
+        "evaluate_out_of_sample_in_sample_days": 0,
+        "rolling_fixed_model_folds": 27,
+        "rolling_fixed_model_folds_scored_in_sample": 0
+      }
+    }
+  }
+}

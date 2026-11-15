@@ -40,6 +40,7 @@ def test_list_strategies(client):
         assert item["params_schema"] == PARAMS_MODELS[item["name"]].model_json_schema()
         assert item["defaults"] == PARAMS_MODELS[item["name"]]().model_dump()
         assert item["schema_hash"] == entry.schema_hash.hex()
+        assert item["version"] == entry.version
         assert item["family"] and item["description"]
 
 

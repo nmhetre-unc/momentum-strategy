@@ -31,7 +31,7 @@ from sqlalchemy import func, select, text, update
 
 import qbt.bootstrap as qb
 from qbt.runner import metrics_equal, run
-from qbt_service.catalog import sync_catalog
+from qbt_service.catalog import CATALOG, sync_catalog
 from qbt_service.compute import Handshake, Task, compute
 from qbt_service.db import jobs, metrics, results
 from qbt_service.models import parse_request, request_hash
@@ -41,7 +41,7 @@ from qbt_service.settings import Settings
 from qbt_service.worker import StartupError, Worker
 
 from .conftest import base_url, migrate, temporary_database
-from .factories import store_synthetic_series, synthetic_frame
+from .factories import add_strategy, store_synthetic_series, synthetic_frame
 
 pytestmark = pytest.mark.db
 
@@ -179,8 +179,22 @@ def test_compute_outcomes():
     assert payload["numpy_version"] == np.__version__
     assert len(payload["dates"]) == len(payload["equity"]) == len(payload["position"]) == 600
     assert compute(Task(frame, "nope", {}, 5.0, 0, 0))[0] == "invalid"
-    kind, trace = compute(Task(frame.iloc[:5], "ml_direction", {}, 5.0, 0, 0))
-    assert kind == "error" and "Traceback" in trace
+    # Five bars leave ml_direction nothing to train on: bad input, not a crash.
+    kind, message = compute(Task(frame.iloc[:5], "ml_direction", {}, 5.0, 0, 0))
+    assert kind == "invalid" and "No training rows" in message
+
+
+def test_compute_reports_an_unexpected_exception_with_its_traceback(monkeypatch):
+    # No served strategy raises anything but ValueError on valid input, so
+    # an unexpected exception (a bug) is simulated with a broken strategy.
+    import qbt.runner
+
+    def broken(df):
+        raise KeyError("bug")
+
+    monkeypatch.setitem(qbt.runner.STRATEGIES, "broken", broken)
+    kind, trace = compute(Task(synthetic_frame(), "broken", {}, 5.0, 0, 0))
+    assert kind == "error" and "Traceback" in trace and "KeyError" in trace
 
 
 # ---- the in-process worker ----
@@ -224,13 +238,74 @@ def test_range_without_prices_fails_without_retry(db, worker):
     assert "has no bars" in job(db, job_id)["last_error"]
 
 
-def test_backtest_exception_fails_without_retry(db, worker):
-    # Valid request, but five bars are too few for the model: it raises.
+def test_too_short_a_range_for_the_model_fails_as_invalid_input(db, worker):
+    # Valid request, but five bars are too few for the model to train on.
     job_id = submit(db, strategy="ml_direction", start="2018-01-01", end="2018-01-06")
     assert worker.run_once().label == "failed"
     row = job(db, job_id)
     assert row["status"] == "failed" and row["attempts"] == 1
+    assert row["last_error"].startswith("invalid input:")
+
+
+def test_backtest_exception_fails_without_retry(db, monkeypatch):
+    # The compute child reports an unexpected exception (see
+    # test_compute_reports_an_unexpected_exception_with_its_traceback);
+    # the supervisor must fail the job for good with that traceback.
+    w = Worker(settings(db))
+    w.start()
+    try:
+        monkeypatch.setattr(w.compute, "submit", lambda task: None)
+        monkeypatch.setattr(w.compute, "poll", lambda timeout: (
+            "error", "Traceback (most recent call last):\nKeyError: 'bug'"))
+        job_id = submit(db)
+        assert w.run_once().label == "failed"
+    finally:
+        w.stop()
+    row = job(db, job_id)
+    assert row["status"] == "failed" and row["attempts"] == 1
     assert row["last_error"].startswith("backtest raised:\nTraceback")
+
+
+def _job_on_strategy_row(db, strategy: str, **row) -> uuid.UUID:
+    """A valid `strategy` request, enqueued against a strategy row made from `row`."""
+    request = parse_request({"strategy": strategy, "ticker": "SPY", "start": START,
+                             "end": END, "n_boot": 0})
+    with db.begin() as conn:
+        strategy_id = add_strategy(conn, name=strategy, is_current=False, **row)
+        return enqueue(conn, strategy_id=strategy_id, price_series_id=db.info["series_id"],
+                       request=request.model_dump(mode="json"),
+                       request_hash=request_hash(request)).job_id
+
+
+def test_a_retired_strategy_version_fails_without_running(db, worker):
+    entry = CATALOG["ml_direction"]
+    job_id = _job_on_strategy_row(db, "ml_direction", version=entry.version - 1,
+                                  schema_hash=entry.schema_hash, param_schema=entry.param_schema)
+    assert worker.run_once().label == "failed"
+    row = job(db, job_id)
+    assert (row["status"], row["attempts"]) == ("failed", 1)
+    assert row["last_error"] == (
+        f"ml_direction version {entry.version - 1} is retired: this worker runs version "
+        f"{entry.version}. Resubmit the request to run version {entry.version}.")
+    with db.connect() as conn:
+        assert conn.execute(select(results).where(results.c.job_id == job_id)).first() is None
+
+
+def test_a_newer_strategy_version_is_left_for_a_newer_worker(db, worker):
+    entry = CATALOG["momentum"]
+    job_id = _job_on_strategy_row(db, "momentum", version=entry.version + 1,
+                                  schema_hash=entry.schema_hash, param_schema=entry.param_schema)
+    assert worker.run_once().label == "retrying"
+    row = job(db, job_id)
+    assert (row["status"], row["attempts"]) == ("queued", 1)
+    assert "is newer than this worker's version" in row["last_error"]
+
+
+def test_a_changed_parameter_schema_fails_without_running(db, worker):
+    entry = CATALOG["momentum"]
+    job_id = _job_on_strategy_row(db, "momentum", version=entry.version)  # random schema hash
+    assert worker.run_once().label == "failed"
+    assert "parameter schema has changed" in job(db, job_id)["last_error"]
 
 
 def test_compute_crash_is_retried_and_the_retry_matches(db):
@@ -673,7 +748,7 @@ def test_connection_lost_while_recording_a_failure(db, worker):
     w = Worker(settings(db, test_compute_delay_seconds=1.5))
     w.start()
     try:
-        # Five bars are too few for the model: the backtest raises.
+        # Five bars are too few for the model: a deterministic failure.
         job_id = submit(db, strategy="ml_direction", start="2018-01-01", end="2018-01-06")
         join = run_in_thread(w)
         wait_until_running(db, job_id, seconds_in=0)
@@ -682,7 +757,7 @@ def test_connection_lost_while_recording_a_failure(db, worker):
             terminate_when_blocked(db, "%last_error=%")
         outcome = join()
         assert outcome.label == "db_error"
-        assert outcome.detail.startswith("could not record failure (backtest raised")
+        assert outcome.detail.startswith("could not record failure (invalid input")
         assert job(db, job_id)["status"] == "running"
     finally:
         w.stop()
@@ -691,7 +766,7 @@ def test_connection_lost_while_recording_a_failure(db, worker):
     assert recover(db, worker, job_id).label == "failed"
     row = job(db, job_id)
     assert (row["status"], row["attempts"]) == ("failed", 2)
-    assert row["last_error"].startswith("backtest raised:")
+    assert row["last_error"].startswith("invalid input:")
     assert result_count(db, job_id) == 0
 
 
@@ -737,7 +812,7 @@ def test_connection_lost_loading_prices_is_retried(db, worker):
 
 @pytest.mark.parametrize(("fields", "detail"), [
     ({}, "result discarded: the lease was lost"),
-    ({"strategy": "ml_direction", "start": "2018-01-01", "end": "2018-01-06"}, "backtest raised"),
+    ({"strategy": "ml_direction", "start": "2018-01-01", "end": "2018-01-06"}, "invalid input"),
 ])
 def test_lease_taken_before_the_outcome_is_written(db, fields, detail):
     # Heartbeats 10 s apart: none notices the lease moving during the 1.5 s

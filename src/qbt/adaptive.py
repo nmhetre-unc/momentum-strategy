@@ -13,6 +13,15 @@ Every `auto` choice (which regimes to allow, which strategy to run
 where, how big to size) is learned only from data up to `learn_frac` of
 the sample (default 0.6) and applied unchanged thereafter;
 describe_choices() exposes what was learned.
+
+No wrapper is scored on data it learned from. Each one holds no position
+until both its learning window and its regime model's fit window are
+behind it: from the later of the day after `learn_end` and the regime
+result's `causal_from` (qbt.timesplit.mark_out_of_sample records that
+day on the returned signal). Full-period metrics therefore count the
+learning period as flat; score these strategies on their out-of-sample
+window only (scripts/regenerate_results.py does). volatility_targeted
+learns nothing and is unaffected.
 """
 
 import numpy as np
@@ -24,6 +33,7 @@ from qbt.ml import ml_direction_signal
 from qbt.regime import UNKNOWN, detect_regimes, detect_regimes_walk_forward
 from qbt.regime_features import realized_volatility
 from qbt.strategies import STRATEGIES
+from qbt.timesplit import OUT_OF_SAMPLE_ATTR, mark_out_of_sample, split_index
 
 # Strategies the `auto` selectors choose between. ml_direction is
 # excluded since it would be refit inside every candidate evaluation;
@@ -40,20 +50,27 @@ MIN_LEARN_DAYS = 60
 def _resolve_regimes(df: pd.DataFrame, regimes=None, regime_method: str = "hmm",
                      n_regimes: int = 3, regime_fit_frac: float = 0.7,
                      regime_smooth: str = "min_duration", min_duration: int = 5,
-                     regime_walk_forward: bool = False):
+                     regime_walk_forward: bool = False,
+                     regime_fit_end_max: pd.Timestamp | None = None):
     """
     Accepts either a precomputed RegimeResult / label Series, or the
     parameters needed to detect regimes from scratch. The dashboard
     passes a precomputed result; the CLI and walk_forward.py let it be
     computed here, which keeps these wrappers usable as plain
-    strategy_fn(df, **params).
+    strategy_fn(df, **params). `regime_fit_end_max` caps a single fit's
+    window (detect_regimes(fit_end_max=...)); walk-forward detection is
+    causal already and ignores it.
     """
     if regimes is not None:
         if hasattr(regimes, "labels"):
             return regimes
         labels = pd.Series(regimes).reindex(df.index).fillna(UNKNOWN).astype(int)
         names = {int(r): f"Regime {int(r)}" for r in sorted(labels.unique()) if r >= 0}
-        return type("_Labels", (), {"labels": labels, "names": names, "causal": True})()
+        # Bare labels are taken as causal: out of sample from the first one.
+        labelled = labels.index[labels != UNKNOWN]
+        causal_from = labelled[0] if len(labelled) else None
+        return type("_Labels", (), {"labels": labels, "names": names, "causal": True,
+                                    "causal_from": causal_from})()
 
     if regime_walk_forward:
         return detect_regimes_walk_forward(
@@ -62,7 +79,7 @@ def _resolve_regimes(df: pd.DataFrame, regimes=None, regime_method: str = "hmm",
         )
     return detect_regimes(
         df, method=regime_method, n_regimes=n_regimes, fit_frac=regime_fit_frac,
-        smooth=regime_smooth, min_duration=min_duration,
+        smooth=regime_smooth, min_duration=min_duration, fit_end_max=regime_fit_end_max,
     )
 
 
@@ -83,6 +100,32 @@ def _learn_cutoff(df: pd.DataFrame, learn_frac: float):
     return df.index[max(int(len(df) * learn_frac) - 1, 0)]
 
 
+def _out_of_sample_from(df: pd.DataFrame, regime_result, learn_end=None) -> pd.Timestamp:
+    """
+    The first day a wrapper may hold a position: after the last day its
+    regime model was fitted on (the result's `causal_from`) and, when it
+    learns a choice, after `learn_end`. Before it, the wrapper would be
+    trading, and be scored, on days it learned from.
+    """
+    causal_from = getattr(regime_result, "causal_from", None)
+    if causal_from is None:
+        raise ValueError(
+            "These regime labels are never out of sample: the regime model labels only "
+            "days it was fitted on (fit_frac=1.0, or an HMM decoded with decode != "
+            "'filter'). A strategy trading on them could only be scored on data its "
+            "regime model learned from. Use fit_frac < 1 with decode='filter', or "
+            "regime_walk_forward=True."
+        )
+    start = pd.Timestamp(causal_from)
+    if learn_end is not None:
+        after = int(df.index.searchsorted(learn_end, side="right"))
+        if after >= len(df):
+            raise ValueError(f"learn_end {pd.Timestamp(learn_end).date()} leaves no "
+                             "out-of-sample days. Lower learn_frac.")
+        start = max(start, pd.Timestamp(df.index[after]))
+    return start
+
+
 def _regime_sharpe_table(df: pd.DataFrame, labels: pd.Series, candidates,
                          learn_end, min_days: int = MIN_LEARN_DAYS) -> pd.DataFrame:
     """
@@ -96,6 +139,17 @@ def _regime_sharpe_table(df: pd.DataFrame, labels: pd.Series, candidates,
 
     for name in candidates:
         signal = _base_signal(df, name)
+        if name != "flat" and not (signal[window] != 0).any():
+            # Its Sharpe would be 0 in every regime: no evidence, but it
+            # would read as "never trade this". ml_direction is the usual
+            # case, holding nothing before its own out-of-sample split.
+            raise ValueError(
+                f"{name!r} holds no position on or before learn_end "
+                f"({pd.Timestamp(learn_end).date()}), so there is nothing to learn from: "
+                "every regime would score a Sharpe of 0 and be excluded. Choose a base "
+                "or candidate that trades in the learning window, pass the choice "
+                "explicitly (allowed_regimes / strategy_map), or raise learn_frac."
+            )
         result = run_backtest(df, signal)
         returns = result["strategy_return"].fillna(0)
 
@@ -161,12 +215,16 @@ def regime_filtered(df: pd.DataFrame, base: str = "sma_crossover", base_params: 
     allow-list from the first `learn_frac` of history, keeping any regime
     where the base strategy had a positive Sharpe there; pass an explicit
     tuple to test your own hypothesis instead. Only removes existing
-    positions, never invents new ones.
+    positions, never invents new ones. Flat until the first
+    out-of-sample day (module docstring). Raises if `base` holds no
+    position in the learning window, since there would be nothing to
+    learn the allow-list from.
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
     signal = _base_signal(df, base, base_params)
 
+    learn_end = None
     if allowed_regimes is None:
         learn_end = _learn_cutoff(df, learn_frac)
         table = _regime_sharpe_table(df, labels, [base], learn_end)
@@ -179,7 +237,7 @@ def regime_filtered(df: pd.DataFrame, base: str = "sma_crossover", base_params: 
 
     gated = signal.where(labels.isin(allowed), 0.0)
     gated[labels == UNKNOWN] = 0.0
-    return gated.astype(float)
+    return mark_out_of_sample(gated, _out_of_sample_from(df, regime_result, learn_end))
 
 
 # --------------------------------------------------------------------------
@@ -194,11 +252,13 @@ def regime_switch(df: pd.DataFrame, strategy_map: dict | None = None, candidates
     flips the whole position, both of which cost real money -- run with
     cost_bps=10 before drawing conclusions. strategy_map={0: "momentum",
     ...} pins the mapping explicitly; None learns it from the first
-    `learn_frac` of history.
+    `learn_frac` of history. Flat until the first out-of-sample day
+    (module docstring).
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
 
+    learn_end = None
     if strategy_map is None:
         learn_end = _learn_cutoff(df, learn_frac)
         table = _regime_sharpe_table(df, labels, candidates, learn_end)
@@ -209,7 +269,8 @@ def regime_switch(df: pd.DataFrame, strategy_map: dict | None = None, candidates
         chosen = candidates[0] if name is None else name
         signals[int(regime_id)] = _base_signal(df, chosen)
 
-    return _apply_by_regime(df, labels, signals)
+    switched = _apply_by_regime(df, labels, signals)
+    return mark_out_of_sample(switched, _out_of_sample_from(df, regime_result, learn_end))
 
 
 # --------------------------------------------------------------------------
@@ -222,7 +283,9 @@ def regime_parameters(df: pd.DataFrame, base: str = "sma_crossover", param_map: 
     shortens trend windows as volatility rises. Three regimes times two
     window parameters is six numbers fitted to one price history; the
     equity curve will improve regardless, and walk-forward is how you
-    check whether anything real did.
+    check whether anything real did. The map itself is fixed, but the
+    regime model is fitted, so this is flat until its labels are out of
+    sample (`causal_from`).
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
@@ -235,7 +298,8 @@ def regime_parameters(df: pd.DataFrame, base: str = "sma_crossover", param_map: 
         int(regime_id): _base_signal(df, base, params)
         for regime_id, params in param_map.items()
     }
-    return _apply_by_regime(df, labels, signals)
+    return mark_out_of_sample(_apply_by_regime(df, labels, signals),
+                              _out_of_sample_from(df, regime_result))
 
 
 def _default_param_map(base: str, regime_ids: list) -> dict:
@@ -294,22 +358,29 @@ def volatility_targeted(df: pd.DataFrame, base: str = "sma_crossover",
 
 
 def regime_sized(df: pd.DataFrame, base: str = "sma_crossover", base_params: dict | None = None,
-                 size_map: dict | None = None, **regime_kwargs) -> pd.Series:
+                 size_map: dict | None = None, learn_frac: float = 0.6,
+                 **regime_kwargs) -> pd.Series:
     """
     Keeps the base signal, but sets position size per regime, sized
     inversely to each regime's own volatility and normalized so the
     calmest regime gets a full position. The discrete cousin of
     volatility_targeted(): coarser, but changes size only at regime
-    boundaries, which is cheaper to trade.
+    boundaries, which is cheaper to trade. size_map=None learns each
+    regime's volatility from the first `learn_frac` of history only; a
+    regime not seen there gets size 0. Flat until the first
+    out-of-sample day (module docstring).
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
     signal = _base_signal(df, base, base_params)
 
+    learn_end = None
     if size_map is None:
+        learn_end = _learn_cutoff(df, learn_frac)
+        window = df.index <= learn_end
         returns = df["Close"].pct_change()
         vol_by_regime = {
-            int(r): returns[labels == r].std()
+            int(r): returns[(labels == r).to_numpy() & window].std()
             for r in sorted(x for x in labels.unique() if x != UNKNOWN)
         }
         calmest = min((v for v in vol_by_regime.values() if v and not pd.isna(v)), default=None)
@@ -320,7 +391,8 @@ def regime_sized(df: pd.DataFrame, base: str = "sma_crossover", base_params: dic
         )
 
     sizes = labels.map(size_map).astype(float).fillna(0.0)
-    return (signal * sizes).clip(0.0, 1.0).astype(float)
+    return mark_out_of_sample((signal * sizes).clip(0.0, 1.0),
+                              _out_of_sample_from(df, regime_result, learn_end))
 
 
 # --------------------------------------------------------------------------
@@ -334,7 +406,7 @@ def adaptive_ensemble(df: pd.DataFrame, candidates=AUTO_CANDIDATES, learn_frac: 
     Regime-based strategy switching, with the result volatility-targeted
     on top. Combines the switching and sizing mechanisms; compare against
     each individually, since stacking mechanisms stacks their assumptions
-    too.
+    too. Flat until the first out-of-sample day (module docstring).
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
@@ -351,7 +423,8 @@ def adaptive_ensemble(df: pd.DataFrame, candidates=AUTO_CANDIDATES, learn_frac: 
 
     trailing_vol = realized_volatility(df["Close"], vol_window)
     scale = (target_vol / trailing_vol.replace(0, np.nan)).clip(upper=max_leverage).fillna(0.0)
-    return (switched * scale).clip(0.0, max_leverage).astype(float)
+    return mark_out_of_sample((switched * scale).clip(0.0, max_leverage),
+                              _out_of_sample_from(df, regime_result, learn_end))
 
 
 def ml_regime_conditional(df: pd.DataFrame, train_frac: float = 0.7, model_type: str = "logistic",
@@ -359,14 +432,27 @@ def ml_regime_conditional(df: pd.DataFrame, train_frac: float = 0.7, model_type:
     """
     The ML direction model, told which regime it's in.
     regime_mode="feature" gives one model the regime as an input column;
-    "conditional" fits a separate model per regime -- see qbt/ml.py's
+    "conditional" fits a separate model per regime -- see qbt/ml/__init__.py's
     module docstring for the overfitting tradeoff.
+
+    A regime model detected here is fitted only on days before the ML
+    split (the first out-of-sample day), so every out-of-sample regime
+    label comes from a model that never saw it; regime_fit_frac can
+    shorten that window but not extend it. Precomputed `regimes` are
+    used as given.
     """
-    regime_result = _resolve_regimes(df, **regime_kwargs)
-    return ml_direction_signal(
+    if "regime_fit_end_max" in regime_kwargs:
+        raise ValueError("ml_regime_conditional sets regime_fit_end_max from its own split")
+    first_oos = split_index(len(df), train_frac)
+    regime_result = _resolve_regimes(df, regime_fit_end_max=df.index[first_oos - 1],
+                                     **regime_kwargs)
+    signal = ml_direction_signal(
         df, train_frac=train_frac, model_type=model_type,
         regimes=regime_result.labels, regime_mode=regime_mode,
-    ).astype(float)
+    )
+    out = signal.astype(float)
+    out.attrs[OUT_OF_SAMPLE_ATTR] = signal.attrs[OUT_OF_SAMPLE_ATTR]
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -402,6 +488,8 @@ def describe_filter(df: pd.DataFrame, base: str = "sma_crossover", base_params: 
     the base strategy had a negative Sharpe in every regime during the
     learning window, the allow-list comes back empty and the strategy
     stays flat for the whole period -- this is correct output, not a bug.
+    A base with no position at all in the learning window raises instead
+    (there is no evidence either way).
     """
     regime_result = _resolve_regimes(df, **regime_kwargs)
     labels = regime_result.labels
@@ -431,6 +519,34 @@ ADAPTIVE_STRATEGIES = {
     "regime_sized": regime_sized,
     "adaptive_ensemble": adaptive_ensemble,
     "ml_regime_conditional": ml_regime_conditional,
+}
+
+# Behaviour versions, under the same rules as qbt.strategies.
+# STRATEGY_VERSIONS: a published version never changes, and
+# tests/test_strategy_versions.py pins every one. These strategies aren't
+# served by qbt_service yet, so nothing stored refers to them; the pins
+# are the record.
+#
+# Version 1 of every wrapper is its behaviour before versioning (commits
+# up to 7b5bb84), except ml_regime_conditional, whose version 1 is the
+# behaviour before 7b5bb84 and version 2 that commit's (out of sample
+# only, regime model fitted before the ML split).
+#
+# regime_filtered, regime_switch, regime_parameters, regime_sized,
+# adaptive_ensemble 2: no position until the learning window and the
+# regime model's fit window are behind them (they traded, and were
+# scored, on days they had learned from). regime_sized 2 also learns its
+# per-regime volatility from the learning window only; version 1 used
+# every labelled day, out-of-sample days included. See
+# results/ml/learning_strategies_audit.json.
+ADAPTIVE_STRATEGY_VERSIONS: dict[str, int] = {
+    "regime_filtered": 2,
+    "regime_switch": 2,
+    "regime_parameters": 2,
+    "volatility_targeted": 1,
+    "regime_sized": 2,
+    "adaptive_ensemble": 2,
+    "ml_regime_conditional": 2,
 }
 
 # One registry for the dashboard and CLI. Kept here rather than in

@@ -22,6 +22,8 @@ from components import (
     metric_row,
     position_chart,
     require_regimes,
+    scored_window,
+    scored_window_note,
     show_metric_table,
     table_caption,
 )
@@ -235,13 +237,18 @@ is robust, and why it so often beats the cleverer three.
 # ---------- Run the adaptive strategy and its unadapted base ----------
 signal = ADAPTIVE_STRATEGIES[adaptive_name](df, **params)
 result = run_backtest(df, signal, cost_bps=cost_bps, regimes=regimes.labels)
-stats = full_report(result)
+# Scored from the wrapper's first out-of-sample day only (it holds no
+# position before), and its base over the same window, so the comparison
+# is like for like.
+scored, scored_from = scored_window(signal, result)
+stats = full_report(scored)
 
 base_for_comparison = base if adaptive_name != "ml_regime_conditional" else "ml_direction"
 base_result = run_backtest(df, STRATEGIES[base_for_comparison](df), cost_bps=cost_bps)
-base_stats = full_report(base_result)
+base_stats = full_report(base_result if scored_from is None else base_result.loc[scored_from:])
 
 st.subheader(f"{ticker} · {adaptive_name}", divider="gray")
+scored_window_note(scored_from, "Metrics, and the comparison with the base strategy,")
 metric_row(stats, ["total_return", "sharpe_ratio", "max_drawdown", "exposure"])
 metric_row(
     stats,
@@ -364,7 +371,7 @@ if sharpe_gain <= 0 and extra_turnover > 0:
 elif 0 < sharpe_gain < 0.10:
     caveat(
         f"**Sharpe improved by only {sharpe_gain:+.2f}.** The standard error on a Sharpe ratio "
-        f"over this sample is around ±{np.sqrt(252 / max(len(result), 1)):.2f}, so a gain that "
+        f"over this sample is around ±{np.sqrt(252 / max(len(scored), 1)):.2f}, so a gain that "
         f"small is indistinguishable from noise. Adding a whole mechanism for it is complexity "
         f"you cannot justify from this evidence.",
         level="info",
@@ -487,7 +494,8 @@ if adaptive_name in ("regime_switch", "adaptive_ensemble", "regime_filtered"):
 
 # ---------- Per-regime attribution ----------
 st.subheader("Where the P&L came from", divider="gray")
-table = performance_by_regime(result, regimes.labels, regimes.names)
+scored_window_note(scored_from, "The regime split covers")
+table = performance_by_regime(scored, regimes.labels, regimes.names)
 if table.empty:
     st.info("No labelled days to attribute yet.", icon=":material/info:")
 else:
@@ -498,12 +506,12 @@ else:
     st.dataframe(table.drop(columns=["regime"]), hide_index=True,
                  column_config=PERFORMANCE_CONFIG, key="ad_by_regime")
 
-    base_table = performance_by_regime(
-        run_backtest(
-            df, STRATEGIES[base_for_comparison](df), cost_bps=cost_bps, regimes=regimes.labels
-        ),
-        regimes.labels, regimes.names,
+    base_by_regime = run_backtest(
+        df, STRATEGIES[base_for_comparison](df), cost_bps=cost_bps, regimes=regimes.labels
     )
+    if scored_from is not None:
+        base_by_regime = base_by_regime.loc[scored_from:]
+    base_table = performance_by_regime(base_by_regime, regimes.labels, regimes.names)
     if not base_table.empty:
         merged = table.merge(
             base_table[["regime", "sharpe_ratio", "exposure"]],
@@ -570,17 +578,18 @@ else:
 # ---------- Honest evaluation ----------
 st.subheader("Out-of-sample", divider="gray")
 st.caption(
-    "The adaptive wrappers learn their rules from the first 60% of history; this split holds "
-    "out the last 30%, so the held-out period is genuinely unseen by the rule as well as by "
-    "the strategy."
+    "The adaptive wrappers learn their rules from the first 60% of history and their regime "
+    "model from about the first 70%, and hold no position until both are behind them. The "
+    "split below is that first out-of-sample day, so the held-out period is genuinely unseen "
+    "by the rule, the regime model and the strategy."
 )
 wf = evaluate_out_of_sample(df, ADAPTIVE_STRATEGIES[adaptive_name], **params)
 wf_left, wf_right = st.columns(2)
 with wf_left:
     st.markdown(f"**In-sample** (to {wf['split_date']})")
     show_metric_table(wf["in_sample"], key="ad_is", caption=(
-        "Metrics over the period the adaptive rule learned from.",
-        "The automatic choices were made here, so these numbers already know the answers.",
+        "The period the adaptive rule and its regime model learned from.",
+        "The wrapper holds no position here, so it can't be scored on what it learned from.",
     ))
 with wf_right:
     st.markdown(f"**Out-of-sample** (from {wf['split_date']})")

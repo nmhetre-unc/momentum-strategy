@@ -16,6 +16,11 @@ Design notes the code below relies on:
   to leave room for them.
 - A running job always has a lease_token. Finishing a job is fenced on
   that token, so a worker that lost its lease can't write a result.
+- model_registry rows are immutable, like price snapshots: training
+  again adds a version (or finds the identical one), and each row keeps
+  its out-of-sample accuracy next to the baseline it was compared with,
+  in NOT NULL columns, so no model can be registered without them.
+  predictions logs every POST /predict against the version that served it.
 """
 
 from sqlalchemy import (
@@ -111,13 +116,18 @@ strategies = Table(
     "strategies", metadata,
     Column("id", BigInteger, Identity(always=True), primary_key=True),
     Column("name", Text, nullable=False),
+    # qbt.strategies.STRATEGY_VERSIONS: bumped when the strategy's behaviour
+    # changes for the same params, which the schema hash can't see.
+    Column("version", Integer, nullable=False, server_default=text("1")),
     Column("schema_hash", LargeBinary, nullable=False),
     Column("param_schema", JSONB, nullable=False),
     Column("description", Text),
     Column("is_current", Boolean, nullable=False, server_default=text("true")),
     Column("registered_at", DateTime(timezone=True), nullable=False, server_default=NOW),
-    # A new row per parameter-schema change: old jobs keep the schema they were validated with.
-    UniqueConstraint("name", "schema_hash"),
+    # A new row per behaviour version or parameter-schema change: old jobs
+    # keep the version and schema they were validated and run with.
+    UniqueConstraint("name", "version", "schema_hash"),
+    CheckConstraint("version >= 1", name="version_positive"),
 )
 Index("strategies_one_current", strategies.c.name, unique=True,
       postgresql_where=strategies.c.is_current)
@@ -202,6 +212,80 @@ metrics = Table(
     Column("value", Double),                # NaN allowed; a metric not computed has no row
     PrimaryKeyConstraint("job_id", "name"),
 )
+
+
+MODEL_TYPES = ("lightgbm",)
+MODEL_TARGETS = ("direction", "regime")
+
+model_registry = Table(
+    "model_registry", metadata,
+    # Assigned max + 1 under an advisory lock (qbt_service.registry), so
+    # versions have no gaps.
+    Column("version", Integer, primary_key=True, autoincrement=False),
+    Column("model_type", Text, nullable=False),
+    Column("target", Text, nullable=False),
+    Column("feature_set", Text, nullable=False),
+    Column("features", ARRAY(Text), nullable=False),       # in the model's column order
+    Column("classes", ARRAY(Double), nullable=False),      # probability order
+    Column("hyperparameters", JSONB, nullable=False),
+    Column("training_config", JSONB, nullable=False),
+    Column("seed", BigInteger, nullable=False),
+    # The pinned snapshot, as for a backtest; the training window is the
+    # labelled decision dates in it (each label ends at the next month end).
+    Column("price_series_id", BigInteger,
+           ForeignKey("price_series.id", ondelete="RESTRICT"), nullable=False),
+    Column("train_start", Date, nullable=False),
+    Column("train_end", Date, nullable=False),
+    Column("train_label_end", Date, nullable=False),
+    Column("n_train", Integer, nullable=False),
+    # The honest part, also inside `metrics`: out-of-sample accuracy and
+    # the baseline it is measured against.
+    Column("oos_accuracy", Double, nullable=False),
+    Column("oos_months", Integer, nullable=False),
+    Column("baseline_name", Text, nullable=False),
+    Column("baseline_accuracy", Double, nullable=False),
+    Column("beats_baseline", Boolean, nullable=False),
+    Column("metrics", JSONB, nullable=False),
+    # The input POST /predict scores: the snapshot's latest complete month.
+    Column("serving_as_of", Date, nullable=False),
+    Column("serving_features", JSONB, nullable=False),
+    Column("serving_features_sha256", LargeBinary, nullable=False),
+    Column("artifact_format", Text, nullable=False),
+    Column("artifact", LargeBinary, nullable=False),
+    Column("artifact_sha256", LargeBinary, nullable=False),
+    Column("library_versions", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=NOW),
+    CheckConstraint("version >= 1", name="version_positive"),
+    CheckConstraint("model_type IN ('lightgbm')", name="model_type_known"),
+    CheckConstraint("target IN ('direction', 'regime')", name="target_known"),
+    CheckConstraint("cardinality(features) >= 1", name="has_features"),
+    CheckConstraint("cardinality(classes) >= 2", name="has_classes"),
+    CheckConstraint("train_start <= train_end AND train_end < train_label_end",
+                    name="train_window_order"),
+    CheckConstraint("n_train > 0 AND oos_months > 0", name="counts_positive"),
+    CheckConstraint("oos_accuracy BETWEEN 0 AND 1 AND baseline_accuracy BETWEEN 0 AND 1",
+                    name="accuracies_in_range"),
+    CheckConstraint("serving_as_of >= train_label_end", name="serving_after_training"),
+    CheckConstraint("octet_length(artifact_sha256) = 32", name="artifact_sha256_length"),
+    CheckConstraint("octet_length(serving_features_sha256) = 32",
+                    name="serving_features_sha256_length"),
+    # Training the same thing on the same snapshot again finds this row.
+    UniqueConstraint("price_series_id", "artifact_sha256"),
+)
+
+predictions = Table(
+    "predictions", metadata,
+    Column("id", BigInteger, Identity(always=True), primary_key=True),
+    Column("model_version", Integer,
+           ForeignKey("model_registry.version", ondelete="RESTRICT"), nullable=False),
+    Column("as_of", Date, nullable=False),
+    Column("features_sha256", LargeBinary, nullable=False),
+    Column("prediction", Double, nullable=False),          # a class label
+    Column("probabilities", ARRAY(Double), nullable=False),  # over the model's classes
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=NOW),
+    CheckConstraint("octet_length(features_sha256) = 32", name="features_sha256_length"),
+)
+Index("predictions_by_model", predictions.c.model_version, predictions.c.created_at)
 
 
 def make_engine(url: str, statement_timeout_seconds: float | None = None) -> Engine:

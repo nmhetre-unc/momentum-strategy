@@ -27,6 +27,8 @@ from components import (
     regime_probability_chart,
     regime_ribbon_chart,
     require_regimes,
+    scored_window,
+    scored_window_note,
     show_regime_health,
     table_caption,
     transition_heatmap,
@@ -458,7 +460,9 @@ strategy_name = st.selectbox(
 st.caption(f"**Hypothesis to test:** {STRATEGY_DOCS[strategy_name]['regime_hint']}")
 
 signal = STRATEGIES[strategy_name](df)
-result = run_backtest(df, signal, cost_bps=5, regimes=regimes.labels)
+result, scored_from = scored_window(
+    signal, run_backtest(df, signal, cost_bps=5, regimes=regimes.labels))
+scored_window_note(scored_from, "The regime split covers")
 table = performance_by_regime(result, regimes.labels, regimes.names)
 
 if table.empty:

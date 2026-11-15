@@ -15,11 +15,18 @@ Sharpe ratios following Bailey & López de Prado (2014).
 ## At a glance
 
 - 11 timing strategies tested on SPY (4,278 trading days, 2008-2025): none beats
-  buy-and-hold at 90% confidence.
-- The best of them, `adaptive_ensemble`, has a deflated Sharpe against the
-  benchmark of 0.906 at one trial, 0.549 at five, and 0.380 at eleven.
+  buy-and-hold at 90% confidence. The 7 that learn from history are scored only
+  out of sample, against buy-and-hold over the same window.
+- `adaptive_ensemble` looked best when it was scored on the days it had learned
+  from: a deflated Sharpe against the benchmark of 0.906 at one trial, 0.549 at
+  five, 0.380 at eleven. Out of sample it is 0.295, 0.042 and 0.015.
 - 12-1 momentum on the S&P 100: long-leg Sharpe 1.071 [0.727, 1.441], short leg
   -0.882; 88.7% of the loss traces to a -0.214 net beta mismatch, not the signal.
+- Monthly ML (logistic regression, LightGBM, HMM features) in nested purged
+  walk-forward: no model beats its bar. The best, a regime model, is right
+  80.8% of the time against a lookup table's 82.7%. It is served through the
+  API anyway, with those numbers in every response. See
+  [Machine learning](#machine-learning).
 - The stationary bootstrap, 62% of the full results run, now runs in C++ and
   gives bit-identical output. The bootstrap call is 19.4x faster and the whole
   pipeline 2.4x faster, against a ceiling of about 2.7x.
@@ -28,7 +35,7 @@ Sharpe ratios following Bailey & López de Prado (2014).
   leases and fencing, and Docker Compose. With 4 workers it runs 926
   backtests/min, a job starts 8 ms after it is submitted at 50% load, and a
   SIGKILLed worker loses no jobs. See [Running as a service](#running-as-a-service).
-- 498 tests at 91% line coverage (85% for the engine, 98% for the service).
+- 653 tests at 94% line coverage (91% for the engine, 98% for the service).
   CI runs on every push: it builds the C++ extension, runs the suite against
   Postgres with coverage gates, and runs an end-to-end test of the Compose
   stack.
@@ -46,6 +53,7 @@ twice.
 ```
             curl / client
                  │  POST /backtests  ·  GET /backtests/{id}  ·  GET /strategies
+                 │  GET /models  ·  GET /models/{version}  ·  POST /predict
                  ▼
  ┌─ api ────────────────────────────┐
  │ FastAPI · 2 uvicorn processes    │   validate, pin a price snapshot,
@@ -55,6 +63,7 @@ twice.
  ┌─ db: Postgres 17 ───────────────────────────────────────────────┐
  │ jobs (the queue) · results · metrics · strategies               │
  │ price_series / price_bars (immutable, content-hashed snapshots) │
+ │ model_registry (immutable versions) · predictions (the log)     │
  └───────▲─────────────────────────────────────────────▲───────────┘
          │ claim, heartbeat, complete, reap             │ LISTEN qbt_jobs
  ┌─ worker × N ─────────────────────────────────────────────────────┐
@@ -64,6 +73,7 @@ twice.
 
  one-shots:  migrate (alembic upgrade head, before api and workers start)
              ingest  (download from Yahoo Finance into price_series)
+             train   (fit a model on a pinned snapshot, register a version)
 ```
 
 Each worker is two processes. The **supervisor** owns the database
@@ -138,6 +148,97 @@ Yahoo's adjustment arithmetic isn't stable from one response to the next.
 So in practice almost every ingest creates a new series. On any one
 snapshot, repeated runs of a request agree bit for bit.
 
+### Strategy versions
+
+A strategy's behaviour is versioned the way the schema is migrated:
+`qbt.strategies.STRATEGY_VERSIONS` gives each strategy a version, and a
+published version never changes. The adaptive strategies, which the service
+doesn't serve yet, are versioned the same way in
+`qbt.adaptive.ADAPTIVE_STRATEGY_VERSIONS`. If a code change alters what a strategy
+does, it gets a new version. `tests/test_strategy_versions.py` pins a
+fingerprint of every version's positions and fails until that happens. Each
+version is its own row in `strategies`, keyed by (name, version, parameter
+schema). `GET /backtests/{id}` reports the `strategy_version` a job ran, and
+`GET /strategies` the version that new jobs get.
+
+When a version is retired (`ml_direction` 1 became 2 when it stopped
+predicting its own training period), its stored backtests stay as they were:
+same results, same metrics, still reported as version 1. Jobs still queued
+under the old version fail with a message to resubmit, because this code
+can't reproduce it. A job for a version newer than the worker's own is
+retried with backoff, so a newer worker can take it. Each retry counts as an
+attempt, so it fails after `max_attempts` if none does. An `Idempotency-Key` replay returns the original
+job, whatever version it ran.
+
+### Model serving
+
+No monthly model beat its baselines
+([`results/ml/c2_results.json`](results/ml/c2_results.json)), so the
+service serves one anyway as an engineering demonstration, and the API
+says so. The default model is C2's best: LightGBM predicting next
+month's regime, with the HMM features. Every registry entry and every
+`POST /predict` response carries the model's out-of-sample accuracy next
+to the baseline it had to beat (for regime, the rules-regime lookup
+table), with the paired bootstrap interval, the McNemar p-value and
+`beats: false`.
+
+- **Training** is a one-shot CLI, `python -m qbt_service.train` (Compose:
+  `docker compose run --rm train …`). It pins a snapshot the way a
+  backtest does: the newest stored series covering the range. It then
+  runs the C2 nested purged walk-forward on that snapshot for the
+  out-of-sample numbers. Finally it fits the served model with the same
+  tuning on every labelled month
+  ([`src/qbt/ml/train.py`](src/qbt/ml/train.py)).
+- **The registry** (`model_registry`, migration 0004) keeps one immutable
+  row per version, with the target, feature list, hyperparameters,
+  training window and pinned snapshot. The out-of-sample accuracy, the
+  baseline's name and accuracy, and `beats_baseline` are NOT NULL
+  columns, so no model can be registered without them. The model is a
+  `bytea` artifact with its SHA-256. The artifact is JSON plus LightGBM's
+  own text format, never pickle, so loading it runs no code.
+- **Reproducibility:** the same snapshot and seed give a **byte-identical
+  artifact**, not just identical predictions. LightGBM runs
+  deterministically (`deterministic`, `force_row_wise`, one thread, fixed
+  seed), and its text format holds no timestamps. Training the same model
+  again therefore finds the existing version instead of adding one. A
+  different seed changes only the seed that LightGBM records in the
+  artifact, because bagging is off. That makes a new version whose
+  predictions are identical. Holds on the same library versions, which
+  each row records.
+- **Prediction:** `POST /predict` scores the latest version, or
+  `{"version": n}`, on the latest complete month in that version's
+  snapshot (`as_of`). It forecasts the month after `as_of`, whose label
+  isn't in the snapshot, so the model never trained on it. The HMM
+  features take tens of seconds to build, so they are computed once at
+  training and stored with their SHA-256. A request then loads the model
+  (cached per process after its artifact's SHA-256 is checked), scores
+  the stored input after checking its hash, and logs the prediction in
+  `predictions`. A hash mismatch is a 500 (`model-integrity-error`), and
+  nothing is scored or logged.
+
+```bash
+docker compose run --rm ingest SPY --start 2008-01-01 --end 2025-01-01
+docker compose run --rm train SPY --start 2008-01-01 --end 2025-01-01
+curl -s -X POST localhost:8000/predict
+```
+```
+{"model_version": 1, "as_of": "2024-12-31", "prediction": 0.0,
+ "prediction_name": "Calm Uptrend", "probabilities": [...],
+ "out_of_sample": {"accuracy": 0.808, "n_months": 104, ...},
+ "baseline": {"name": "rules_regime_lookup", "accuracy": 0.827,
+              "difference_ci": [-0.058, 0.019], "mcnemar_p": 0.69, "beats": false},
+ "summary": "Out of sample (104 months, 2016-04-29 to 2024-11-29) this model was
+             right 80.8% of the time; its baseline, rules_regime_lookup, was right
+             82.7% on the same months. It did not beat that baseline: ...", ...}
+```
+
+(Rounded; the numbers are those of `results/ml/c2_results.json` for
+regime / base+hmm / LightGBM. On a fresh Yahoo download they can differ
+in the last digits, since every download is a new snapshot.)
+`GET /models` lists the versions, and `GET /models/{version}` gives the
+full evaluation. Errors are problem details: `no-model-registered` and
+`unknown-model-version` (422), and `model-not-found` (404 on GET).
+
 ### How it's tested
 
 - **Forced-ordering concurrency tests** (`tests/service/test_queue.py`): one
@@ -162,9 +263,15 @@ snapshot, repeated runs of a request agree bit for bit.
   - The stack is built from scratch.
   - A backtest is POSTed, and its metrics are checked against a direct
     `qbt.runner` run.
+  - A model is trained with the one-shot `train` service, and training
+    again finds the same version. `POST /predict` is then checked: the
+    response carries the out-of-sample accuracy and the baseline, the
+    prediction is logged, and the features are rebuilt from the snapshot
+    in a separate container, giving the same input hash and identical
+    probabilities from the registered artifact.
   - A worker is stopped mid-job with SIGTERM, and the job's release and
     hand-over are checked.
-  - CI runs the first half on every push (the `e2e` job).
+  - CI runs everything but the worker stop on every push (the `e2e` job).
 
 ### Run it
 
@@ -225,7 +332,9 @@ Docker Desktop 29.9.3 runs on WSL2 (kernel 6.18), and its VM has 12 CPUs
 and 7.6 GiB, **shared with the load generator**. The job mix is
 `sma_crossover`, `momentum`, `mean_reversion` and `ml_direction`, round
 robin, on SPY 2010-2025 with `n_boot` 2000. Cells are median [min-max].
-Scripts and method are in [bench/README.md](bench/README.md).
+Scripts and method are in [bench/README.md](bench/README.md). These runs used
+`ml_direction` version 1. Version 2 (out of sample only) trains the same model
+once but has not been re-measured.
 
 **Service measurements** (3 runs each). The queue-latency and GET rows
 were measured before the two fixes below:
@@ -238,6 +347,7 @@ were measured before the two fixes below:
 | Queue latency, 75% of capacity (11.6 jobs/s) | **queue grows** in 2 of 3 runs, by +1.93 [0.01-2.38] jobs/s, so no p99 is reported | `bench/results/service/latency.json` |
 | GET /backtests/{id} at 100 req/s, workers idle | p50 5.6 ms, p99 10.5 ms | `bench/results/service/get.json` |
 | GET at 100 req/s, 4 workers draining a backlog | p50 3167 [9-4789] ms, p99 6557 [17-17777] ms | `bench/results/service/get.json` |
+| POST /predict at 100 req/s for 60 s, workers idle (regime LightGBM+HMM, version 1) | p50 7.7 [7.7-8.0] ms, p99 14.0 [13.2-23.0] ms; cold first request after an API restart 46 ms; 0 errors, every prediction logged once | `bench/results/service/predict.json` |
 | `docker kill` a worker mid-job (4 workers, 60% load) | requeued 33 s, finished 38 s after the kill (30 s lease + up to 15 s reaper interval). 0 jobs lost, 0 duplicated; killed jobs' metrics equal a direct run | `bench/results/service/kill.json` |
 
 **Two fixes, before vs after** (2 runs each, interleaved as before, after,
@@ -276,12 +386,18 @@ running both can't provide it.
 
 - **No authentication.** Anyone who can reach the port can submit jobs. The
   ports are bound to 127.0.0.1.
+- **The served model doesn't beat its baseline**, and each model version
+  predicts one month: the month after its snapshot ends. A newer forecast
+  needs a new snapshot and a new version.
 - **Idempotency keys are global and never expire.** With no clients to scope
   them to, two callers who choose the same key share it.
 - **Only the 4 base strategies** (`sma_crossover`, `momentum`,
   `mean_reversion`, `ml_direction`). The adaptive strategies take
   structured arguments, and cross-sectional momentum is a portfolio
   strategy, so neither is exposed yet.
+- **Workers from before strategy versioning don't check versions.** In a
+  rolling deploy, one could run a version-2 job on version-1 code. Stop the
+  old workers before starting new ones.
 - **A `docker kill`ed worker isn't restarted.** Under
   `restart: unless-stopped`, Docker restarts only containers that exit on
   their own. The dead worker's jobs are still requeued by the other
@@ -376,19 +492,28 @@ Full details, scripts and raw JSON are in [benchmarks/](benchmarks/README.md).
 ## Findings
 
 **No timing strategy beats buy-and-hold detectably.** Eleven strategies were
-tested on SPY. Every one produces a 90% confidence interval on the Sharpe
-difference against buy-and-hold that contains zero. The closest are
-`adaptive_ensemble` at +0.324 [-0.045, +0.686] and `ml_direction` at +0.10
-[-0.01, +0.20]. Buy-and-hold's own Sharpe over the period is 0.607.
+tested on SPY, and none is scored on data it learned from. The four that learn
+nothing are scored over the full period. The seven that learn (a fitted model,
+a regime model, or a choice selected on past performance) are scored from
+their first out-of-sample day, 2019-11-22 or 2020-04-08, against buy-and-hold
+over the same window. Every one produces a 90% confidence interval on the
+Sharpe difference against buy-and-hold that contains zero. Over the full
+period the closest is `volatility_targeted` at +0.22 [-0.08, +0.54], against
+buy-and-hold's 0.607. Out of sample it is `regime_filtered` at +0.18 [-0.31,
++0.72], against buy-and-hold's 1.15. (`adaptive_ensemble` used to be closest,
+at +0.324 [-0.045, +0.686], and `ml_direction` second, at +0.10 [-0.01, +0.20].
+Both numbers counted days the strategies had learned from. See
+[FINDINGS.md](FINDINGS.md) section 1.)
 
 **The choice of benchmark inverts the conclusion.** Each strategy's own
-Sharpe interval excludes zero — `sma_crossover` [0.35, 1.17],
-`adaptive_ensemble` [0.59, 1.32] — and read alone both look like clear wins.
-But 0.607 falls inside both, so neither is distinguishable from holding the
-index. The same inversion appears in the deflated Sharpe: against zero both
-stay above 0.90 at any trial count, while against the benchmark
-`adaptive_ensemble` falls to 0.549 at five trials and `sma_crossover` to
-0.236. Reporting only the against-zero number is what a backtest implicitly
+Sharpe interval excludes zero — `sma_crossover` [0.35, 1.17] over the full
+period, `adaptive_ensemble` [0.19, 1.71] out of sample — and read alone both
+look like clear wins. But buy-and-hold's Sharpe over the same window (0.607,
+1.15) falls inside both, so neither is distinguishable from holding the
+index. The same inversion appears in the deflated Sharpe: against zero
+`sma_crossover` stays above 0.90 at any trial count, while against the
+benchmark it falls to 0.236 at five trials and `adaptive_ensemble` to 0.042.
+Reporting only the against-zero number is what a backtest implicitly
 does when it cites a Sharpe ratio and calls it significant.
 
 **Volatility targeting is the one mechanism that survives.** It cut maximum
@@ -423,6 +548,158 @@ fit step.
 
 Full detail, including the regime analysis, is in [FINDINGS.md](FINDINGS.md).
 Generated tables are in [results/summary.md](results/summary.md).
+
+## Machine learning
+
+The question: can a model predict next month's SPY direction (up or not)
+or next month's regime (the most common daily `rules` regime: Calm
+Uptrend, Quiet Range, Volatile Rally, Crisis / Selloff) better than a
+simple rule? **No.** None of the models beats its bar, and the one
+served by the API says so in every response.
+
+### Leakage controls
+
+Monthly samples have a decision date (features known, prediction made)
+and a label end date (the next month end). They overlap in time, so
+plain k-fold leaks. [`src/qbt/ml/splits.py`](src/qbt/ml/splits.py) has
+the details.
+
+- **Purging.** A training sample is dropped when its label interval
+  touches the test block. In walk-forward this removes one boundary month
+  per fold (`n_purged: 1` in each fold of
+  [`results/ml/c1_baselines.json`](results/ml/c1_baselines.json)).
+- **Embargo** (12 months, the longest fixed feature look-back). It drops
+  the samples just *after* a test block, whose features were built from
+  the test block's prices. Walk-forward trains only on samples before
+  the test block, so there is nothing after it to drop. The embargo is a
+  no-op there (`n_embargoed: 0` in every fold), kept so both splitters
+  share one rule. It does real work in the purged k-fold used for inner
+  tuning.
+- **Nested tuning.** Hyperparameters are chosen on purged inner folds of
+  each outer training set only. Every reported month is predicted by a
+  model that never saw it, and never saw a choice made on it.
+- **A lookahead canary for every feature.** `tests/test_ml_monthly.py`
+  cuts the price history at several dates and requires each of the 14
+  features (10 base, 4 HMM) to be unchanged on every day that survives
+  the cut. The canary is proven against three deliberately leaky
+  features (tomorrow's return, a full-sample z-score, a centred moving
+  average), and it catches all three.
+
+### The audit: strategies scored on data they learned from
+
+Before this branch, the seven daily strategies that learn something (a
+fitted classifier, an HMM regime model, or a choice picked by past
+Sharpe) were scored over the full period. That included the years they
+had learned from. Two audits measured this against the old code and the
+fixed code:
+
+| What was counted | Before | After | Source |
+|---|---|---|---|
+| `ml_direction`: days with a signal from its own training period | 2,982 of 4,279 (70%), long on 2,937 | 0 | [`daily_ml_audit.json`](results/ml/daily_ml_audit.json) |
+| `ml_direction`, `ml_regime_conditional`: rolling walk-forward folds scored on training data | 18 of 27 each | 0 | [`learning_strategies_audit.json`](results/ml/learning_strategies_audit.json) |
+| HMM fitted on days the ML model treats as out of sample | 87 days | 0 | [`daily_ml_audit.json`](results/ml/daily_ml_audit.json) |
+| The five regime wrappers: in-sample days holding a position | 846 to 2,335 each | 0 | [`learning_strategies_audit.json`](results/ml/learning_strategies_audit.json) |
+| The five regime wrappers: rolling folds scored on training data | 19 of 27 each | 0 | same |
+| `regime_sized`: positions changed by rewriting *later* prices (lookahead) | 1,494 days | 0 | same |
+
+The fix: every learning strategy marks its first out-of-sample day and
+holds no position before it, and it is scored only from that day,
+against buy-and-hold over the same window. The changed strategies got
+new version numbers (v2 for `ml_direction`, the regime wrappers and
+`ml_regime_conditional`), recorded on
+every backtest the service runs and pinned by fingerprint in the tests.
+See [Strategy versions](#strategy-versions).
+
+What it changed, in plain terms: `adaptive_ensemble` had looked like the
+best strategy. The deflated Sharpe against buy-and-hold estimates the
+chance its true Sharpe beats the index after allowing for how many
+strategies were tried. With the learning period counted, it was 0.906
+at 1 trial, 0.549 at 5 and 0.380 at 11. Scored only on days it hadn't
+learned from, it is **0.295, 0.042 and 0.015**
+([`results/ml/deflated_sharpe_audit.json`](results/ml/deflated_sharpe_audit.json),
+both sections measured by one script, `scripts/audit_deflated_sharpe.py`).
+The apparent edge was mostly the strategy remembering its training data.
+
+### Monthly models (C2) against the real bars
+
+Logistic regression and LightGBM run in nested purged walk-forward on
+SPY 2008-2025, with and without HMM features. Each is compared with its
+**bar**, on the same months:
+
+- **Direction:** majority class (always "up", i.e. buy-and-hold).
+- **Regime:** `rules_regime_lookup`, the most frequent next-month regime
+  among training months that had the same `rules` regime on their
+  decision date. Regimes persist, so this simple table is hard to beat:
+  it beats the majority class and "same as last month" too.
+
+A model "beats" its bar only if the paired 95% stationary-bootstrap
+interval of the accuracy difference is above zero and the exact McNemar
+p < 0.05. All numbers are from
+[`results/ml/c2_results.json`](results/ml/c2_results.json)
+(`verdict.classification`).
+
+| Target | Features | Model | Months | Accuracy | Bar | Bar accuracy | Difference [95% CI] | McNemar p | Beats |
+|---|---|---|---|---|---|---|---|---|---|
+| direction | base | logistic | 128 | 0.656 | majority class | 0.688 | -0.031 [-0.086, +0.008] | 0.22 | no |
+| direction | base | LightGBM | 128 | 0.664 | majority class | 0.688 | -0.023 [-0.094, +0.031] | 0.51 | no |
+| direction | base+hmm | logistic | 104 | 0.721 | majority class | 0.721 | 0.000 [0.000, 0.000] | 1.00 | no (always "up") |
+| direction | base+hmm | LightGBM | 104 | 0.721 | majority class | 0.721 | 0.000 [0.000, 0.000] | 1.00 | no (always "up") |
+| regime | base | logistic | 128 | 0.711 | rules_regime_lookup | 0.805 | -0.094 [-0.180, -0.016] | 0.012 | no (worse) |
+| regime | base | LightGBM | 128 | 0.773 | rules_regime_lookup | 0.805 | -0.031 [-0.078, +0.023] | 0.39 | no |
+| regime | base+hmm | logistic | 104 | 0.779 | rules_regime_lookup | 0.827 | -0.048 [-0.087, -0.010] | 0.18 | no |
+| regime | base+hmm | LightGBM | 104 | 0.808 | rules_regime_lookup | 0.827 | -0.019 [-0.058, +0.019] | 0.69 | no |
+
+(The HMM features start later, so the base+hmm rows cover 104 months,
+2016-04 to 2024-11, rather than 128. The bar is recomputed on those
+months, which is why it differs between the base and base+hmm rows.)
+
+**The economic test.** A direction model trades: long when P(up) > 0.5,
+flat otherwise, 5bps costs. Against buy-and-hold over the same 128
+months, the base logistic model has a Sharpe of 0.833 against 0.910
+(difference -0.077 [-0.202, +0.015]), and LightGBM 0.881 against 0.910
+(-0.029 [-0.209, +0.111]). With HMM features both models are long every
+month, so they *are* buy-and-hold. The deflated Sharpe against
+buy-and-hold counts **116 trials**: every target, feature set, model and
+hyperparameter combination tried. At that count it is 0.002 (logistic)
+and 0.004 (LightGBM); even at a single trial it would be 0.41 and 0.46.
+
+**Disclosure: a discarded first pass.** Before the grids were widened, a
+first pass of 24 configurations (4 logistic and 8 LightGBM, both targets,
+base features) was run and its out-of-sample results were seen. Those
+configurations are also in the final grids, but that pass was a separate
+selection, so it counts as separate trials: 92 + 24 = 116
+(`trials.first_pass` in `c2_results.json`).
+
+**Conclusion.** Nothing beats its bar. The best model, regime LightGBM
+with HMM features, is right 80.8% of the time against the lookup table's
+82.7%, a difference whose interval includes zero. Its errors aren't
+detectably different from the table's. No direction model beats always
+"up", and none trades better than buy-and-hold. With 104 to 128
+out-of-sample months the intervals are a few points wide, so a small
+real edge can't be ruled out either; this data can't establish one.
+
+### Serving it anyway, honestly
+
+The regime LightGBM with HMM features is served through the API as an
+engineering demonstration ([Model serving](#model-serving)):
+
+- **Registry.** Each version is an immutable row (migration 0004) with
+  its training snapshot, window, features, hyperparameters and seed. Its
+  out-of-sample accuracy, its bar and `beats_baseline` are required
+  columns, so a model can't be registered without them.
+- **Reproducible artifacts.** The same snapshot and seed give a
+  byte-identical artifact (JSON wrapping LightGBM's text model, never
+  pickle), stored with its SHA-256. The hash is checked on every load,
+  and the served input is checked against its own hash. Retraining an
+  identical model finds the existing version.
+- **Honest `/predict`.** Every response carries the out-of-sample
+  accuracy (0.808 over 104 months) next to `rules_regime_lookup`'s 0.827,
+  the difference interval, the McNemar p, `beats: false`, and a sentence
+  saying to treat the prediction as a demonstration. Every prediction is
+  logged.
+- **Latency.** At 100 requests/s for 60 s: p50 7.7 ms, p99 14.0 ms, 0
+  errors, every prediction logged once
+  ([`bench/results/service/predict.json`](bench/results/service/predict.json)).
 
 ## What property-based testing found
 
@@ -463,13 +740,12 @@ between 2008 and 2025 are absent. Those are disproportionately the sustained
 underperformers a short leg would have profited from, so the bias runs in the
 strategy's favor and the negative result is if anything understated.
 
-Headline metrics for fitted strategies come from full-period backtests in
-which the model predicts across its own training period — 70% of the equity
-curve for `ml_direction` and the adaptive wrappers. The walk-forward results
-in `results/summary.md` refit each fold and are the honest read for those
-strategies. Since every paired difference against buy-and-hold already
-contains zero, correcting this would strengthen rather than change the
-conclusion.
+The seven learning strategies are scored out of sample only, over 1,191 to
+1,284 days to the end of 2024. That is under a third of the full period and a
+single, mostly rising market, so their intervals are wide. Their rows are
+compared with buy-and-hold over their own window and can't be ranked
+directly against the full-period rows. `results/ml/learning_strategies_audit.json`
+lists what each strategy learns and which rows that makes in-sample.
 
 With 17 years of daily data the standard error on a Sharpe estimate is
 roughly 0.26. Establishing a 0.32 improvement at 90% confidence would require
@@ -517,11 +793,11 @@ Run the CLI:
 python main.py --ticker SPY --strategy momentum --rolling
 ```
 
-Run the tests (498 tests, 91% line coverage). The service's tests need
+Run the tests (653 tests, 94% line coverage). The service's tests need
 Postgres, which Compose provides:
 
 ```bash
-pip install -e ".[dev,api,ui]"
+pip install -e ".[dev,api,ui,ml]"   # ml: LightGBM, for the C2 monthly models
 docker compose up -d db
 export DATABASE_URL=postgresql+psycopg://qbt:qbt@localhost:5432/qbt
 pytest --cov=src/qbt --cov=src/qbt_service
