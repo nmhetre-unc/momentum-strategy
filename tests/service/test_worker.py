@@ -256,18 +256,36 @@ def test_compute_crash_is_retried_and_the_retry_matches(db):
         w.stop()
 
 
-def test_heartbeats_keep_a_slow_job(db):
+def test_heartbeats_keep_a_slow_job(db, tmp_path):
     # Runs 4.5 s against a 3 s lease: only heartbeats keep it.
-    w = Worker(settings(db, test_compute_delay_seconds=4.5))
+    health = tmp_path / "alive"
+    w = Worker(settings(db, test_compute_delay_seconds=4.5, health_file=str(health)))
     w.start()
     try:
+        assert w.run_once() is None  # idle: the claim poll touches the health file
+        assert health.exists()
         job_id = submit(db)
+        started = time.time()
         assert w.run_once().label == "succeeded"
         row = job(db, job_id)
         assert row["attempts"] == 1
         assert (row["heartbeat_at"] - row["started_at"]).total_seconds() >= 3
+        # ... and so do the heartbeats, while the job runs
+        assert health.stat().st_mtime >= started + 3
     finally:
         w.stop()
+
+
+def test_unwritable_health_file_does_not_stop_the_worker(db, worker, tmp_path, caplog):
+    from qbt_service.worker import Liveness
+    worker.liveness = Liveness(str(tmp_path / "missing-dir" / "alive"))
+    try:
+        job_id = submit(db)
+        assert worker.run_once().label == "succeeded"
+        assert job(db, job_id)["status"] == "succeeded"
+        assert "could not touch health file" in caplog.text
+    finally:
+        worker.liveness = Liveness(None)
 
 
 def test_lost_lease_abandons_the_job(db):
@@ -347,7 +365,12 @@ def test_second_stop_request_releases_at_once(db):
         w.request_stop()
         w.request_stop()
         assert join().label == "released"
-        assert time.monotonic() - started < 5
+        assert time.monotonic() - started < 2  # no compute restart before the release
+        assert w.compute.pid is None
+        # A worker that goes on after all starts a new compute process for its next job.
+        w._stopping = w._release_now = False
+        w.compute._delay = 0.0  # the new child needn't be slow
+        assert w.run_once().label == "succeeded"
     finally:
         w.stop()
 

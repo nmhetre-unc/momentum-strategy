@@ -17,6 +17,9 @@ files, so the same image runs in Compose, CI and tests unchanged).
                                   releasing it (default 8: inside Docker's 10 s stop timeout)
     QBT_STATEMENT_TIMEOUT_SECONDS worker's per-query limit, so a stuck query can't hold a
                                   job forever while heartbeats keep its lease alive (default 60)
+    QBT_HEALTH_FILE               worker: a file it touches after every successful claim
+                                  poll and heartbeat, for a container healthcheck (default
+                                  unset: no file; see qbt_service.health)
     QBT_TEST_COMPUTE_DELAY_SECONDS
                                   testing only: the compute process sleeps this long before
                                   each backtest, so tests can interrupt a job mid-run (default 0)
@@ -81,6 +84,7 @@ class Settings:
     shutdown_grace_seconds: float = 8.0
     statement_timeout_seconds: float = 60.0
     test_compute_delay_seconds: float = 0.0
+    health_file: str | None = None
 
     def __post_init__(self) -> None:
         if not self.database_url:
@@ -124,6 +128,8 @@ class Settings:
             )
         if env.get("QBT_WORKER_ID"):
             kwargs["worker_id"] = env["QBT_WORKER_ID"]
+        if env.get("QBT_HEALTH_FILE"):
+            kwargs["health_file"] = env["QBT_HEALTH_FILE"]
         if "QBT_ALLOW_NUMPY_FALLBACK" in env:
             kwargs["allow_numpy_fallback"] = _parse_bool(
                 "QBT_ALLOW_NUMPY_FALLBACK", env["QBT_ALLOW_NUMPY_FALLBACK"]

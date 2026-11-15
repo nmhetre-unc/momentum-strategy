@@ -12,6 +12,7 @@ Endpoints:
     GET  /strategies        the strategies and their parameter schemas
     POST /backtests         validate, enqueue, 202 with the job id
     GET  /backtests/{id}    status, attempts, timestamps, error, metrics
+    GET  /health            200 if the database answers, else 503
 
 Errors are RFC 9457 problem details (application/problem+json), each
 with its own `type`, so a client can tell "this key was used for another
@@ -190,6 +191,10 @@ class StrategyList(BaseModel):
     strategies: list[StrategyInfo]
 
 
+class Health(BaseModel):
+    status: Literal["ok"]
+
+
 class BacktestAccepted(BaseModel):
     id: uuid.UUID = Field(description="The job id. Poll GET /backtests/{id}.")
     status: JobStatus = Field(
@@ -310,6 +315,8 @@ DESCRIPTION_503 = ("The database is unreachable. Retry after `Retry-After` secon
                    "may or may not have created its job; retrying with the same "
                    "Idempotency-Key is safe either way.")
 
+DESCRIPTION_503_HEALTH = "The database is unreachable from this API process."
+
 
 def _job_example(status: str) -> dict[str, Any]:
     base: dict[str, Any] = {
@@ -426,6 +433,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def list_strategies() -> StrategyList:
         """The strategies POST /backtests accepts, with their parameter schemas."""
         return strategy_list
+
+    @app.get(
+        "/health", response_model=Health, tags=["health"], summary="Health check",
+        responses={503: {"model": Problem, "description": DESCRIPTION_503_HEALTH,
+                         "headers": {"Retry-After": {"description": "Seconds to wait.",
+                                                     "schema": {"type": "integer"}}},
+                         "content": _problem_content(
+                             {"database_unavailable": UNAVAILABLE_EXAMPLE})}},
+    )
+    def health() -> Health:
+        """
+        200 if this process can run a query on the database (SELECT 1),
+        else 503. The container healthcheck (python -m qbt_service.health
+        api) calls this.
+        """
+        with _transaction(app.state.engine) as conn:
+            conn.execute(select(1))
+        return Health(status="ok")
 
     @app.post(
         "/backtests", status_code=202, response_model=BacktestAccepted, tags=["backtests"],

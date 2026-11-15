@@ -1,0 +1,7 @@
+# Overlay for scripts/compose_smoke.py only. Lets the smoke test make
+# backtests slow enough to stop a worker in the middle of one. Never use it
+# for real runs.
+services:
+  worker:
+    environment:
+      QBT_TEST_COMPUTE_DELAY_SECONDS: ${QBT_TEST_COMPUTE_DELAY_SECONDS:-0}

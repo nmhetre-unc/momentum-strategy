@@ -56,6 +56,13 @@ def test_worker_settings():
     assert (s.statement_timeout_seconds, s.test_compute_delay_seconds) == (5.0, 2.5)
 
 
+def test_health_file():
+    assert Settings.from_env({"DATABASE_URL": URL}).health_file is None
+    assert Settings.from_env({"DATABASE_URL": URL, "QBT_HEALTH_FILE": ""}).health_file is None
+    s = Settings.from_env({"DATABASE_URL": URL, "QBT_HEALTH_FILE": "/tmp/alive"})
+    assert s.health_file == "/tmp/alive"
+
+
 def test_empty_worker_id_falls_back_to_default():
     assert Settings.from_env({"DATABASE_URL": URL, "QBT_WORKER_ID": ""}).worker_id
 

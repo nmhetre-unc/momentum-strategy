@@ -1,11 +1,41 @@
-# Local development stack for the backtest service. Step 1 has only the
-# database; api, worker and migrate services are added in later steps.
+# The backtest service: Postgres, a one-shot migration, the API and workers.
+#
+#   docker compose up -d --build                  db, migrate, api, 1 worker
+#   docker compose up -d --scale worker=4         more workers
+#   docker compose run --rm ingest SPY --start 2005-01-01 --end 2025-01-01
+#   curl -s localhost:8000/strategies
+#   docker compose down                           stop (add -v to drop the data)
+#
+# Only the database for local development and the tests:
 #
 #   docker compose up -d db
 #   export DATABASE_URL=postgresql+psycopg://qbt:qbt@localhost:5432/qbt
 #
-# The credentials are for local development only. The port is bound to
-# 127.0.0.1 so the database isn't reachable from the network.
+# Start-up order: db healthy -> migrate (alembic upgrade head) exits 0 ->
+# api and workers start. A failed migration keeps them from starting.
+#
+# The credentials are for local development only. Ports are bound to
+# 127.0.0.1 so nothing is reachable from the network; QBT_DB_PORT and
+# QBT_API_PORT move them (scripts/compose_smoke.py runs a second stack).
+
+x-service: &service
+  image: qbt-service:dev
+  build: .
+  environment: &environment
+    DATABASE_URL: postgresql+psycopg://qbt:qbt@db:5432/qbt
+  # Nothing in the image needs to write outside /tmp.
+  read_only: true
+  tmpfs:
+    - /tmp
+  # tini as PID 1: forwards signals and reaps the worker's compute child.
+  init: true
+
+x-after-migrate: &after-migrate
+  db:
+    condition: service_healthy
+  migrate:
+    condition: service_completed_successfully
+
 services:
   db:
     image: postgres:17
@@ -14,7 +44,7 @@ services:
       POSTGRES_PASSWORD: qbt
       POSTGRES_DB: qbt
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${QBT_DB_PORT:-5432}:5432"
     volumes:
       - qbt-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,6 +52,69 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  migrate:
+    <<: *service
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *service
+    command: ["uvicorn", "--factory", "qbt_service.api:create_app",
+              "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:${QBT_API_PORT:-8000}:8000"
+    depends_on: *after-migrate
+    healthcheck:
+      # GET /health, which runs SELECT 1.
+      test: ["CMD", "python", "-m", "qbt_service.health", "api"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+    restart: unless-stopped
+
+  worker:
+    <<: *service
+    command: ["python", "-m", "qbt_service.worker"]
+    environment:
+      <<: *environment
+      # The worker touches this after each claim poll and heartbeat; the
+      # healthcheck fails once it is older than the lease (30 s).
+      QBT_HEALTH_FILE: /tmp/worker-alive
+      # On `docker compose stop` (SIGTERM), the current job gets this long
+      # to finish before it is released for another worker...
+      QBT_SHUTDOWN_GRACE_SECONDS: "8"
+    # ...and Docker waits this long before SIGKILL: the grace, plus time to
+    # release the job and stop the compute process. Keep it above the grace.
+    stop_grace_period: 15s
+    depends_on: *after-migrate
+    healthcheck:
+      test: ["CMD", "python", "-m", "qbt_service.health", "worker"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      # The compute process imports pandas and scikit-learn before the
+      # first claim.
+      start_period: 60s
+      start_interval: 1s
+    restart: unless-stopped
+    # No container_name, so `--scale worker=N` works.
+
+  # One-shot: download prices from Yahoo Finance into the database.
+  #   docker compose run --rm ingest SPY QQQ --start 2005-01-01 --end 2025-01-01
+  # A profile, so `up` doesn't start it; `run` does.
+  ingest:
+    <<: *service
+    entrypoint: ["python", "-m", "qbt_service.ingest"]
+    command: ["--help"]
+    depends_on: *after-migrate
+    restart: "no"
+    profiles: ["tools"]
 
 volumes:
   qbt-pgdata:

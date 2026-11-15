@@ -173,12 +173,36 @@ class ComputeProcess:
         self.kill()
 
 
+class Liveness:
+    """
+    Touches QBT_HEALTH_FILE after each successful claim poll and lease
+    heartbeat. Both talk to the database, so a fresh file means the worker
+    loop is turning and the database answers; `python -m qbt_service.health
+    worker` (the container healthcheck) checks its age.
+    """
+
+    def __init__(self, path: str | None):
+        self.path = path
+
+    def touch(self) -> None:
+        if self.path is None:
+            return
+        try:
+            with open(self.path, "a"):
+                pass
+            os.utime(self.path)
+        except OSError as exc:  # never let the healthcheck file stop the work
+            log.warning("could not touch health file %s: %s", self.path, exc)
+
+
 class Heartbeat(threading.Thread):
     """Renews one job's lease every heartbeat_seconds until stopped or lost."""
 
-    def __init__(self, engine: Engine, job: ClaimedJob, settings: Settings):
+    def __init__(self, engine: Engine, job: ClaimedJob, settings: Settings,
+                 liveness: Liveness | None = None):
         super().__init__(name=f"heartbeat-{job.id}", daemon=True)
         self._engine, self._job, self._settings = engine, job, settings
+        self._liveness = liveness or Liveness(None)
         self._stopped = threading.Event()
         self.lost = threading.Event()
 
@@ -196,6 +220,7 @@ class Heartbeat(threading.Thread):
             if not alive:
                 self.lost.set()
                 return
+            self._liveness.touch()
 
     def stop(self) -> None:
         self._stopped.set()
@@ -214,6 +239,7 @@ class Worker:
         self.engine = engine or make_engine(settings.database_url,
                                             settings.statement_timeout_seconds)
         self.compute = ComputeProcess(settings.test_compute_delay_seconds)
+        self.liveness = Liveness(settings.health_file)
         self.qbt_version = importlib.metadata.version("qbt")
         self._wake = threading.Event()
         self._stopping = False
@@ -274,6 +300,7 @@ class Worker:
         except SQLAlchemyError as exc:
             log.warning("claim failed: %s", exc)
             return None
+        self.liveness.touch()
         if job is None:
             return None
         log.info("claimed job %s (attempt %d)", job.id, job.attempt)
@@ -293,7 +320,7 @@ class Worker:
             log.warning("failed job %s: its lease expired on its last attempt", job_id)
 
     def process(self, job: ClaimedJob) -> Outcome:
-        beat = Heartbeat(self.engine, job, self.settings)
+        beat = Heartbeat(self.engine, job, self.settings, self.liveness)
         beat.start()
         try:
             return self._process(job, beat)
@@ -310,6 +337,8 @@ class Worker:
         except SQLAlchemyError as exc:
             return self._fail(job, f"database error loading prices: {exc}", retry=True)
 
+        if self.compute.pid is None:  # killed at a shutdown that was then not completed
+            self.compute.start()
         self.compute.submit(Task(frame=frame, strategy=request.strategy,
                                  params=request.params.model_dump(), cost_bps=request.cost_bps,
                                  n_boot=request.n_boot, seed=request.seed))
@@ -332,7 +361,11 @@ class Worker:
                     retry=False)
             if self._release_now or (self._stopping
                                      and time.monotonic() > self._grace_deadline):
-                self.compute.restart()
+                # Kill, not restart: the worker is shutting down, and a
+                # restart (re-importing pandas and scikit-learn, seconds)
+                # would hold the job back from other workers and eat into
+                # Docker's stop timeout. A later job starts a new child.
+                self.compute.kill()
                 return self._release(job)
 
         kind, value = outcome

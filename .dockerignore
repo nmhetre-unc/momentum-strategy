@@ -1,0 +1,11 @@
+# Allow-list: the image gets only what building and running the service
+# needs, never the venv, caches, data_cache/ or local build artefacts.
+*
+!pyproject.toml
+!CMakeLists.txt
+!alembic.ini
+!src/
+src/qbt.egg-info
+**/__pycache__
+**/*.so
+**/*.pyc

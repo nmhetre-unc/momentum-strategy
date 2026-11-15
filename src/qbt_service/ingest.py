@@ -5,6 +5,10 @@ ingested here first.
 
     python -m qbt_service.ingest SPY QQQ --start 2008-01-01 --end 2025-01-01
 
+Into the Compose stack's database (a one-shot container of the image):
+
+    docker compose run --rm ingest SPY --start 2005-01-01 --end 2025-01-01
+
 `--end` is exclusive, as in yfinance and the CLI. Ingesting again when
 nothing changed reuses the existing snapshot; after a dividend or split
 (adjusted closes are rewritten) it stores a new one, and new jobs use it.

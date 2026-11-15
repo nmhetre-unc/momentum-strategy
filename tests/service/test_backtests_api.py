@@ -453,6 +453,12 @@ def test_malformed_job_id_is_422(client):
     assert problem["errors"][0]["loc"] == ["path", "job_id"]
 
 
+def test_health(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 # ---- the database going away ----
 
 def admin_engine(db):
@@ -478,7 +484,8 @@ def test_refused_connections_are_503_and_recover(client, db):
             conn.execute(text(f'ALTER DATABASE "{name}" ALLOW_CONNECTIONS false'))
         terminate_app_connections(admin, db)  # pooled ones fail pre-ping and reconnect
 
-        for response in (post(client, body(), key='"down"'), client.get(f"/backtests/{job_id}")):
+        for response in (post(client, body(), key='"down"'), client.get(f"/backtests/{job_id}"),
+                         client.get("/health")):
             problem = assert_problem(response, 503, "database-unavailable")
             assert response.headers["retry-after"] == "5"
             assert "same Idempotency-Key" in problem["detail"]
@@ -488,6 +495,7 @@ def test_refused_connections_are_503_and_recover(client, db):
         admin.dispose()
 
     assert client.get(f"/backtests/{job_id}").status_code == 200
+    assert client.get("/health").json() == {"status": "ok"}
     retried = post(client, body(), key='"down"')
     assert retried.status_code == 202 and "idempotent-replayed" not in retried.headers
     assert job_count(db) == 2
