@@ -1,0 +1,76 @@
+# /opt/qbt/compose.yaml, written by Terraform (infra/templates/compose.yaml.tftpl).
+# The repo's compose.yaml, minus the database (RDS instead) and minus the
+# migrate dependency: nothing runs migrations at API start-up. Run them,
+# and ingest and training, as one-shot commands (`qbt migrate`, `qbt ingest`,
+# `qbt train`), then `qbt up`.
+#
+# DATABASE_URL comes from /run/qbt/env (tmpfs, mode 0600), which `qbt env`
+# fills from SSM Parameter Store before every command.
+
+x-service: &service
+  image: ${image}
+  env_file: /run/qbt/env
+  read_only: true
+  tmpfs:
+    - /tmp
+  init: true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  migrate:
+    <<: *service
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    profiles: ["tools"]
+
+  ingest:
+    <<: *service
+    entrypoint: ["python", "-m", "qbt_service.ingest"]
+    command: ["--help"]
+    restart: "no"
+    profiles: ["tools"]
+
+  train:
+    <<: *service
+    entrypoint: ["python", "-m", "qbt_service.train"]
+    command: ["--help"]
+    restart: "no"
+    profiles: ["tools"]
+
+  api:
+    <<: *service
+    command: ["uvicorn", "--factory", "qbt_service.api:create_app",
+              "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      WEB_CONCURRENCY: "${api_processes}"
+    cpu_shares: 4096
+    ports:
+      - "8000:8000"   # the security group admits only allowed_cidr
+    healthcheck:
+      test: ["CMD", "python", "-m", "qbt_service.health", "api"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+    restart: unless-stopped
+
+  worker:
+    <<: *service
+    command: ["python", "-m", "qbt_service.worker"]
+    environment:
+      QBT_HEALTH_FILE: /tmp/worker-alive
+      QBT_SHUTDOWN_GRACE_SECONDS: "8"
+    stop_grace_period: 15s
+    healthcheck:
+      test: ["CMD", "python", "-m", "qbt_service.health", "worker"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 1s
+    restart: unless-stopped

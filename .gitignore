@@ -13,3 +13,11 @@ build/
 .coverage
 .coverage.*
 htmlcov/
+# Terraform (infra/): local state and plans hold resource IDs and endpoints;
+# tfvars holds your IP. The provider lock file is committed.
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfplan
+infra/*.tfvars
+infra/crash.log
