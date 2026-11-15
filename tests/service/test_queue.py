@@ -203,7 +203,7 @@ def test_complete_stores_the_result(queue_conn):
                                                                      date(2020, 1, 3)]
     values = dict(queue_conn.execute(
         select(metrics.c.name, metrics.c.value).where(metrics.c.job_id == claimed.id)
-    ).tuples().all())
+    ).all())
     assert values["sharpe_ratio"] == 0.61 and math.isnan(values["sortino_ratio"])
 
 
@@ -410,7 +410,7 @@ def test_n_workers_claim_m_jobs_exactly_once(engine):
     assert set(claimed_ids) == set(job_ids)
     with engine.connect() as c:
         states = c.execute(select(jobs.c.status, jobs.c.attempts, func.count())
-                           .group_by(jobs.c.status, jobs.c.attempts)).tuples().all()
+                           .group_by(jobs.c.status, jobs.c.attempts)).all()
     assert states == [("running", 1, m_jobs)]
 
 

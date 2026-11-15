@@ -25,7 +25,7 @@ def test_startup_syncs_the_catalog(client, committed_engine):
     with committed_engine.connect() as conn:
         stored = conn.execute(
             select(strategies.c.name, strategies.c.id).where(strategies.c.is_current)
-        ).tuples().all()
+        ).all()
     assert dict(stored) == client.app.state.strategy_ids
     assert set(client.app.state.strategy_ids) == set(CATALOG)
 

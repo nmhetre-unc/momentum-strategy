@@ -60,11 +60,11 @@ def _schema_objects(engine) -> dict[str, set]:
         constraints = conn.execute(text(
             "SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid) "
             "FROM pg_constraint WHERE conrelid::regclass::text = ANY(:t)"
-        ), {"t": list(names)}).tuples().all()
+        ), {"t": list(names)}).all()
         indexes = conn.execute(text(
             "SELECT tablename, indexname, indexdef FROM pg_indexes "
             "WHERE schemaname = 'public' AND tablename = ANY(:t)"
-        ), {"t": list(names)}).tuples().all()
+        ), {"t": list(names)}).all()
     return {"constraints": set(constraints), "indexes": set(indexes)}
 
 

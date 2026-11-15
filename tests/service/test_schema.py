@@ -229,7 +229,7 @@ def test_metrics_store_nan_and_null(conn):
     ])
     stored = dict(conn.execute(
         select(metrics.c.name, metrics.c.value).where(metrics.c.job_id == job_id)
-    ).tuples().all())
+    ).all())
     assert math.isnan(stored["sortino_ratio"])
     assert stored["sharpe_ratio"] is None
 
@@ -245,7 +245,7 @@ def test_metric_needs_a_result(conn):
 def _index_defs(conn, table: str) -> dict[str, str]:
     return dict(conn.execute(
         text("SELECT indexname, indexdef FROM pg_indexes WHERE tablename = :t"), {"t": table}
-    ).tuples().all())
+    ).all())
 
 
 def test_jobs_indexes_are_exactly_the_planned_ones(conn):

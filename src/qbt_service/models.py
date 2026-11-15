@@ -138,9 +138,13 @@ class BacktestRequestBase(BaseModel):
 
 def _request_model(name: str) -> type[BacktestRequestBase]:
     params_model = PARAMS_MODELS[name]
+    # Literal[name] is built from a runtime string, so it isn't a static type
+    # form and can't match create_model's TypeForm parameter; it is a real
+    # type to pydantic at runtime.
+    strategy_type: Any = Literal[name]
     return create_model(
         _class_name(name, "Request"), __base__=BacktestRequestBase, __module__=__name__,
-        strategy=(Literal[name], ...),
+        strategy=(strategy_type, ...),
         params=(params_model, Field(default_factory=params_model)),
     )
 

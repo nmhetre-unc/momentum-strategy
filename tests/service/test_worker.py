@@ -115,7 +115,7 @@ def stored_result(db, job_id):
     with db.connect() as conn:
         row = conn.execute(select(results).where(results.c.job_id == job_id)).mappings().one()
         values = dict(conn.execute(select(metrics.c.name, metrics.c.value)
-                                   .where(metrics.c.job_id == job_id)).tuples().all())
+                                   .where(metrics.c.job_id == job_id)).all())
     return row, values
 
 
