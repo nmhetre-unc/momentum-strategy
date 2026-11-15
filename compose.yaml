@@ -65,6 +65,19 @@ services:
     <<: *service
     command: ["uvicorn", "--factory", "qbt_service.api:create_app",
               "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *environment
+      # uvicorn's --workers default: 2 API processes behind one port. One
+      # Python process tops out at about 1.4 CPUs (the GIL), and under worker
+      # load GET /backtests/{id} at 100 req/s needed about that (measured,
+      # bench/results/service/get.json), so a single process hit its ceiling
+      # and queued requests for seconds. Two give about 2x that headroom;
+      # more would add memory and database connections without a need.
+      WEB_CONCURRENCY: "2"
+    # CPU weight under contention: 4x a default container's (1024), so a
+    # VM full of backtests can't starve the API. A relative share, not a
+    # cap: it costs the workers nothing while there are idle CPUs.
+    cpu_shares: 4096
     ports:
       - "127.0.0.1:${QBT_API_PORT:-8000}:8000"
     depends_on: *after-migrate
@@ -102,6 +115,11 @@ services:
       # first claim.
       start_period: 60s
       start_interval: 1s
+    # Known limitation: `docker kill` (or any manual stop) leaves a worker
+    # down under unless-stopped; Docker restarts only containers that exit on
+    # their own. Its jobs are still requeued by the other workers' reapers,
+    # but capacity stays reduced until `docker compose up` runs again. An
+    # orchestrator (Swarm, Kubernetes, Nomad) would replace it.
     restart: unless-stopped
     # No container_name, so `--scale worker=N` works.
 
