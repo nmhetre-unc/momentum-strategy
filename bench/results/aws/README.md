@@ -50,8 +50,8 @@ RDS creation was 449 of the 467 s of apply. The steps ran by hand, one after ano
 | POST /backtests | same run, at the laptop | p50 71.5 ms, p99 109.7 ms | RTT p50 37.0 ms (min 30.9) | [`latency.json`](latency.json) |
 | GET /backtests/{id} | 20 req/s for 30 s, workers idle | p50 42.9 ms, p99 78.2 ms, 0 errors | RTT p50 36.2 ms (min 31.0) | [`get.json`](get.json) |
 | POST /predict | 20 req/s for 60 s, workers idle | **p50 46.1 ms, p99 124.0 ms**, max 206.4 ms; cold first request 260 ms; 0 errors; 1301 of 1301 200s logged, each once | RTT p50 37.4 ms (min 30.8) | [`predict.json`](predict.json) |
-| Kill a worker (SIGKILL) | rep 1: 2 workers, 40-job backlog, then Poisson at 60% | job 557138eb requeued 36.1 s, reclaimed 41.1 s, finished 41.4 s after the kill. 73 jobs: lost 0, duplicated 0, completed twice 0 (results discarded), result from the wrong attempt 0, fencing rejections 0; only the killed job took a 2nd attempt | not in it (instance clock, polling the API on localhost) | [`kill.json`](kill.json) |
-| Kill a worker (SIGKILL) | rep 2: 2 workers, 40-job backlog, then Poisson at 60% | job c1e79ac3 requeued 31.5 s, reclaimed 37.6 s, finished 39.5 s after the kill. 75 jobs: lost 0, duplicated 0, completed twice 0 (results discarded), result from the wrong attempt 0, fencing rejections 0; only the killed job took a 2nd attempt | not in it (instance clock, polling the API on localhost) | [`kill.json`](kill.json) |
+| Kill a worker (SIGKILL), attempt 3 | rep 1: 2 workers, 40-job backlog, then Poisson at 60% | job 557138eb requeued 36.1 s, reclaimed 41.1 s, finished 41.4 s after the kill. 73 jobs: lost 0, duplicated 0, completed twice 0 (results discarded), result from the wrong attempt 0, fencing rejections 0; only the killed job took a 2nd attempt | not in it (instance clock, polling the API on localhost) | [`kill.json`](kill.json) |
+| Kill a worker (SIGKILL), attempt 3 | rep 2: 2 workers, 40-job backlog, then Poisson at 60% | job c1e79ac3 requeued 31.5 s, reclaimed 37.6 s, finished 39.5 s after the kill. 75 jobs: lost 0, duplicated 0, completed twice 0 (results discarded), result from the wrong attempt 0, fencing rejections 0; only the killed job took a 2nd attempt | not in it (instance clock, polling the API on localhost) | [`kill.json`](kill.json) |
 
 Subtracting the network p50 from the laptop-side p50s leaves roughly the server's time:
 
@@ -81,11 +81,27 @@ The laptop-measured /predict p50 of 7.7 ms ([`../service/predict.json`](../servi
 | Kill | 4 workers, Poisson at 60% | 2 workers, a 40-job backlog then Poisson at 60%; killed jobs' metrics not re-checked against a direct run |
 | Compute-only control | yes | none |
 
-**Kill test, first attempt:** [`kill_first_attempt_no_job_in_flight.json`](kill_first_attempt_no_job_in_flight.json).
+**Kill test: three attempts, all reported.** The table above shows only attempt 3. Console output for all three is in [`kill_console.log`](kill_console.log).
 
-- At 60% of the throttled capacity alone, jobs of about 0.25 s left the workers idle almost all the time. Ten kill attempts found no job in flight. Its integrity checks passed anyway: 0 lost, 0 duplicated.
-- A second attempt failed on the worker healthcheck. Its Python start-up exceeded the 5 s timeout at the CPU baseline, so Compose `--wait` reported the worker unhealthy while it was processing jobs.
-- The fix: a backlog first, the kill triggered by a worker's own `claimed job` log line (milliseconds between seeing the claim and the SIGKILL), and scaling that waits for the containers to be running rather than healthy.
+| Attempt | Started (UTC) | Outcome | Integrity checks | File |
+|---|---|---|---|---|
+| 1 | 21:25:12 | **No job in flight.** 2 reps × 5 kill attempts never found a worker holding a running job. | Ran: 33 and 35 jobs; 0 lost, 0 duplicated, 0 not succeeded, 0 discarded results. `all_checks_pass` is false only because there was no victim. | [`kill_first_attempt_no_job_in_flight.json`](kill_first_attempt_no_job_in_flight.json) |
+| 2 | 21:30:31 | **Aborted by the harness.** Two SIGKILLs hit an idle worker. Then the benchmark's own rescale with `--wait` failed on a healthcheck timeout. | **Not run.** Lost, duplicated, stuck and completed-twice are unknown; see below. | [`kill_second_attempt_aborted.json`](kill_second_attempt_aborted.json) |
+| 3 | 21:33:34 | **Passed**, 2 of 2 reps. | All pass; the numbers are in the table above. | [`kill.json`](kill.json) |
+
+- **Attempt 1:** the load was 60% of the throttled capacity, with no backlog. Jobs of about 0.25 s left the workers idle almost all the time.
+- **Attempt 2** added a 40-job backlog but kept attempt 1's way of choosing a victim:
+  - It queried the database for a running job's lease owner, SIGKILLed that worker, then queried again. Each query is a `docker compose exec … python`, which took seconds at the CPU baseline.
+  - Both times, worker `d82239faee54` had finished its job before the SIGKILL landed: the second query found no running job leased to it. A job held by a dead worker stays `running` until its 30 s lease expires, so that query would have seen one. Neither kill interrupted a job.
+  - Before the third kill attempt, the script rescaled with `docker compose up --wait`. The worker that had never been killed failed its healthcheck: `python -m qbt_service.health worker`, 5 s timeout, exceeded at the baseline. Compose reported it unhealthy, and `aws_bench.py` raised and exited.
+  - The diagnosis a minute later: both workers running and healthy again, 0 restarts. Their health logs show the timeouts followed by passes, and the 12 log lines shown are all attempt 1 and `succeeded`. The worker itself never failed; the healthcheck's Python start-up did.
+- **What attempt 2 cannot tell us:**
+  - Its checks never ran. Attempt 3 starts by deleting all jobs, which removed attempt 2's, including any still queued or running. The database no longer exists, so lost, duplicated, stuck and completed-twice can't be determined now.
+  - What is known: no kill interrupted a job, so requeueing and fencing were never exercised. Attempt 3's checks count only its own jobs and its own logs, and found 0 extra jobs, 0 fencing rejections and 0 discarded results, so attempt 2 didn't leak into it.
+- **Fixes before attempt 3:**
+  - The kill is triggered by a worker's own `claimed job` log line. Reading the log needs no Python start-up, so the SIGKILL lands milliseconds after the claim. The job is then confirmed still `running`.
+  - `scale()` waits for the containers to be running, not healthy.
+  - Neither fix changed the service.
 
 ## Teardown
 

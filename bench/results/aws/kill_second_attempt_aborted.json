@@ -1,0 +1,42 @@
+{
+ "measurement": "kill, second attempt (aborted; no result)",
+ "started": "2026-11-15T21:30:31Z",
+ "aborted": "2026-11-15T21:31:~30Z (exception; exact second not logged)",
+ "config": {
+  "workers": 2,
+  "backlog_jobs_first": 40,
+  "load": 0.6,
+  "kill_at_seconds": 10,
+  "victim_selection": "the first attempt's script: query jobs WHERE status='running' for lease owners (docker compose exec api python, several seconds under CPU throttling), SIGKILL that worker, then query again for running jobs leased to it",
+  "scale_wait": "docker compose up --wait --wait-timeout 180 (waits for healthy)"
+ },
+ "kill_attempts": [
+  {
+   "victim": "d82239faee54",
+   "killed_at_unix": 1794778251.0772636,
+   "running_jobs_leased_to_victim_after_kill": []
+  },
+  {
+   "victim": "d82239faee54",
+   "killed_at_unix": 1794778272.259787,
+   "running_jobs_leased_to_victim_after_kill": []
+  }
+ ],
+ "what_happened": [
+  "Both SIGKILLs hit worker d82239faee54 (qbt-worker-2) after the job it had been running finished: the query after the kill found no running job leased to it. A job still leased to a dead worker stays 'running' until its 30 s lease expires, so that query would have seen one; no job was interrupted by either kill.",
+  "Before the third kill attempt the script rescaled to 2 workers with `--wait`. The other worker, qbt-worker-1 (never killed), had its healthcheck (a Python start-up inside the container, 5 s timeout) time out at the CPU-credit baseline, so Compose reported it unhealthy and the command failed. aws_bench.py raised and exited.",
+  "The diagnosis a minute later: both workers running, healthy again, restarts=0; health log shows two 'Health check exceeded timeout (5s)' followed by passes; worker logs show jobs claimed at attempt 1 and succeeding (3.4-3.8 s at the baseline). Memory 1,056 of 1,909 MiB used, load average 2.27.",
+  "The process exiting stopped the Poisson submission part-way; the 40-job backlog had been submitted. The workers kept processing what was queued."
+ ],
+ "integrity": {
+  "checked": false,
+  "why": "The run aborted before its checks. The third attempt began with reset() (DELETE FROM jobs) at 21:33:34Z, which removed the second attempt's jobs, including any still queued or running, so lost/duplicated/stuck/completed-twice can't be determined after the fact; the database no longer exists.",
+  "evidence_available": "Neither kill interrupted a job, so requeue and fencing were never exercised in this attempt. Every worker log line in the diagnosis is attempt 1 and 'succeeded'; none shows 'result discarded' or a lease error. That is 12 jobs, not all of them.",
+  "effect_on_attempt_3": "Attempt 3's checks count only jobs submitted after its own reset and read worker logs only from after it; it found 0 extra jobs, 0 fencing rejections and 0 discarded results, so nothing from attempt 2 showed up in it."
+ },
+ "fixes_before_attempt_3": [
+  "kill triggered by a worker's own 'claimed job' log line (no Python start-up between seeing the claim and the SIGKILL), then confirm the job is still running",
+  "scale() waits for the containers to be running, not healthy"
+ ],
+ "raw_output": "kill_console.log, section 'attempt 2'"
+}

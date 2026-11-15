@@ -48,6 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import loadgen  # noqa: E402
 from environment import KeepAwake, environment, on_ac_power  # noqa: E402
+from scrub import scrub  # noqa: E402
 from service_bench import guarded, log, pct  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -98,7 +99,9 @@ def aws(*args: str) -> Any:
 
 
 def remote(script: str, timeout: int = 900) -> str:
-    """Runs a bash script on the instance as root; returns its stdout."""
+    """Runs a bash script on the instance as root; returns its stdout. Both
+    the output and a failure's stderr pass through scrub(): a database error
+    can quote DATABASE_URL, password included."""
     encoded = base64.b64encode(script.encode()).decode()
     params = json.dumps({"commands": [f"echo {encoded} | base64 -d > /tmp/qbt-bench.sh",
                                       "bash /tmp/qbt-bench.sh"],
@@ -117,10 +120,10 @@ def remote(script: str, timeout: int = 900) -> str:
         if inv["Status"] in ("Pending", "InProgress", "Delayed"):
             continue
         if inv["Status"] != "Success":
-            raise RuntimeError(f"remote command {inv['Status']}: "
-                               f"{inv['StandardErrorContent'][-2000:]}\n"
-                               f"{inv['StandardOutputContent'][-2000:]}")
-        return inv["StandardOutputContent"]
+            raise RuntimeError(scrub(f"remote command {inv['Status']}: "
+                                     f"{inv['StandardErrorContent'][-2000:]}\n"
+                                     f"{inv['StandardOutputContent'][-2000:]}"))
+        return scrub(inv["StandardOutputContent"])
     raise RuntimeError(f"remote command {command_id} timed out")
 
 

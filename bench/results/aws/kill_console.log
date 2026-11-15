@@ -1,0 +1,86 @@
+# Console output of the three kill-test attempts, 2026-11-15 (laptop clock, UTC-5).
+# Copied from the session's logs; passed through bench/scrub.py.
+
+## attempt 1 (bench/aws_bench.py all steps; kill step 21:25:12Z) -> kill_first_attempt_no_job_in_flight.json
+=== kill 2026-11-15T21:25:12Z
+16:25:16 kill rep 1/2
+16:25:56   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:26:06   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:26:14   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:26:21   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:26:29   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:27:31   all checks pass: False
+16:27:31 kill rep 2/2
+16:28:10   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:28:18   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:28:27   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:28:34   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:28:42   no job in flight at the kill attempt ({'victim': None}); retrying in 5 s
+16:29:40   all checks pass: False
+
+## attempt 2 (21:30:31Z) -> kill_second_attempt_aborted.json
+16:30:31 kill rep 1/2
+16:30:52   no job in flight at the kill attempt ({'victim': 'd82239faee54', 'killed_at': 1794778251.0772636, 'jobs': ''}); retrying in 5 s
+16:31:14   no job in flight at the kill attempt ({'victim': 'd82239faee54', 'killed_at': 1794778272.259787, 'jobs': ''}); retrying in 5 s
+Traceback (most recent call last):
+  File "/home/neilm/momentum-strategy/bench/aws_bench.py", line 583, in <module>
+    raise SystemExit(main())
+  File "/home/neilm/momentum-strategy/bench/aws_bench.py", line 578, in main
+    globals()[args.step]()
+  File "/home/neilm/momentum-strategy/bench/aws_bench.py", line 513, in kill
+    run = guarded("kill", kill_once, rep)
+  File "/home/neilm/momentum-strategy/bench/service_bench.py", line 302, in guarded
+    result = fn(*args)
+  File "/home/neilm/momentum-strategy/bench/aws_bench.py", line 473, in kill_once
+    scale(KILL_WORKERS)
+  File "/home/neilm/momentum-strategy/bench/aws_bench.py", line 148, in scale
+    remote(f"{COMPOSE} up -d --wait --wait-timeout 180 --scale worker={workers} worker")
+  File "/home/neilm/momentum-strategy/bench/aws_bench.py", line 120, in remote
+    raise RuntimeError(f"remote command {inv['Status']}: "
+RuntimeError: remote command Failed:  Container qbt-worker-1 Running 
+ Container qbt-worker-2 Starting 
+ Container qbt-worker-2 Started 
+ Container qbt-worker-2 Waiting 
+ Container qbt-worker-1 Waiting 
+container qbt-worker-1 is unhealthy
+failed to run commands: exit status 1
+
+### diagnosis on the instance right after, ~21:32:40Z (docker compose ps; per worker: state, health log, last 8 log lines)
+NAME           IMAGE                                                         COMMAND                  SERVICE   CREATED          STATUS                        PORTS
+qbt-api-1      027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:v1   "uvicorn --factory q…"   api       19 minutes ago   Up 8 minutes (healthy)        0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+qbt-worker-1   027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:v1   "python -m qbt_servi…"   worker    19 minutes ago   Up 19 minutes (healthy)       8000/tcp
+qbt-worker-2   027489138922.dkr.ecr.us-east-2.amazonaws.com/qbt-service:v1   "python -m qbt_servi…"   worker    16 minutes ago   Up About a minute (healthy)   8000/tcp
+--- 3172a43a6394ae29858e0cea95028797794eee3ef7aa19f55faad6809d835397
+running healthy restarts=0
+-1 Health check exceeded timeout (5s)-1 Health check exceeded timeout (5s)0 0 0 
+2026-11-15 21:32:11,426 INFO qbt_service.worker: claimed job a96f11f3-d9cf-4093-9e7d-cdde6c09bab9 (attempt 1)
+2026-11-15 21:32:15,912 INFO qbt_service.worker: job a96f11f3-d9cf-4093-9e7d-cdde6c09bab9: succeeded (3523 ms)
+2026-11-15 21:32:15,917 INFO qbt_service.worker: claimed job 26a4af42-0440-458a-98c6-68aaf81bd2fc (attempt 1)
+2026-11-15 21:32:18,784 INFO qbt_service.worker: job 26a4af42-0440-458a-98c6-68aaf81bd2fc: succeeded (1919 ms)
+2026-11-15 21:32:28,819 INFO qbt_service.worker: claimed job 7757b3aa-201d-475f-b0fa-171e782cb664 (attempt 1)
+2026-11-15 21:32:29,100 INFO qbt_service.worker: job 7757b3aa-201d-475f-b0fa-171e782cb664: succeeded (220 ms)
+2026-11-15 21:32:36,377 INFO qbt_service.worker: claimed job a864c129-aeec-4f9c-a1fd-e5e93c079bf7 (attempt 1)
+2026-11-15 21:32:36,629 INFO qbt_service.worker: job a864c129-aeec-4f9c-a1fd-e5e93c079bf7: succeeded (188 ms)
+--- d82239faee5426972f5c8285959653f287972fe3cddca6afe2a56212b67a8cce
+running healthy restarts=0
+-1 Health check exceeded timeout (5s)-1 Health check exceeded timeout (5s)0 0 0 
+2026-11-15 21:32:06,633 INFO qbt_service.worker: claimed job 0dc9aee5-97ef-404c-b513-58448e99ce3c (attempt 1)
+2026-11-15 21:32:11,115 INFO qbt_service.worker: job 0dc9aee5-97ef-404c-b513-58448e99ce3c: succeeded (3428 ms)
+2026-11-15 21:32:11,193 INFO qbt_service.worker: claimed job 5d964b18-a354-43cb-a982-41940b9b0a73 (attempt 1)
+2026-11-15 21:32:15,840 INFO qbt_service.worker: job 5d964b18-a354-43cb-a982-41940b9b0a73: succeeded (3761 ms)
+2026-11-15 21:32:15,990 INFO qbt_service.worker: claimed job c30a494e-0d4f-4818-bab3-806bf7ebd8e9 (attempt 1)
+2026-11-15 21:32:19,201 INFO qbt_service.worker: job c30a494e-0d4f-4818-bab3-806bf7ebd8e9: succeeded (2390 ms)
+2026-11-15 21:32:24,388 INFO qbt_service.worker: claimed job 65c9c8ac-e9b3-4af9-b4e8-10fec7162b4b (attempt 1)
+2026-11-15 21:32:24,665 INFO qbt_service.worker: job 65c9c8ac-e9b3-4af9-b4e8-10fec7162b4b: succeeded (214 ms)
+               total        used        free      shared  buff/cache   available
+Mem:            1909        1056         110           0         741         672
+ 21:32:43 up 26 min,  0 users,  load average: 2.27, 1.68, 1.54
+
+## attempt 3 (21:33:34Z) -> kill.json
+16:33:34 kill rep 1/2
+16:35:51   job 557138eb: requeued 36.1s, reclaimed 41.1s, finished 41.4s after the kill
+16:35:51   all checks pass: True
+16:35:51 kill rep 2/2
+16:38:06   job c1e79ac3: requeued 31.5s, reclaimed 37.6s, finished 39.5s after the kill
+16:38:06   all checks pass: True
+16:38:06 wrote /home/neilm/momentum-strategy/bench/results/aws/kill.json
