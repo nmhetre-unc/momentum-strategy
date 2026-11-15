@@ -8,7 +8,7 @@ reason on stderr (Docker keeps it in `docker inspect`).
 api: GET /health, which answers 200 only if the database does.
 
 worker: the age of QBT_HEALTH_FILE, which the worker touches after each
-successful claim poll (every QBT_POLL_SECONDS when idle) and each lease
+successful claim attempt (at least every QBT_POLL_SECONDS when idle) and each lease
 heartbeat (every QBT_HEARTBEAT_SECONDS while running a job). Both need
 the database, so a fresh file means the loop is turning and the database
 answers. The default limit is the lease length: a worker silent for that

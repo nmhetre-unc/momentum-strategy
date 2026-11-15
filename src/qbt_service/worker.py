@@ -30,6 +30,13 @@ Startup check: the worker refuses to start unless the compute process can
 use the C++ bootstrap, because the NumPy fallback, while bit-identical,
 is about 9x slower; QBT_ALLOW_NUMPY_FALLBACK=1 overrides that.
 
+Idle workers don't poll: they LISTEN on the queue's NOTIFY channel (see
+qbt_service.queue), so a new job is claimed as soon as its transaction
+commits. Before sleeping, an idle worker also asks when the earliest
+queued job becomes due (a retry backing off) and wakes then. A slow
+fallback poll (QBT_POLL_SECONDS) covers a notification lost while the
+LISTEN connection was down; after reconnecting, the worker claims at once.
+
 On SIGTERM or SIGINT the worker stops claiming, gives the current job up
 to QBT_SHUTDOWN_GRACE_SECONDS to finish, then releases it. A second
 signal releases it at once.
@@ -50,8 +57,10 @@ from multiprocessing.process import BaseProcess
 from types import FrameType
 from typing import Any
 
+import psycopg
+from psycopg import sql
 from pydantic import ValidationError
-from sqlalchemy import Engine
+from sqlalchemy import Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from qbt_service.compute import THREAD_VARIABLES, Handshake, Task, child_main
@@ -59,12 +68,14 @@ from qbt_service.db import make_engine
 from qbt_service.models import parse_request
 from qbt_service.prices import load_frame
 from qbt_service.queue import (
+    QUEUE_CHANNEL,
     ClaimedJob,
     JobResult,
     claim,
     complete,
     fail,
     heartbeat,
+    next_due_seconds,
     reap_expired,
     release,
 )
@@ -74,6 +85,9 @@ log = logging.getLogger("qbt_service.worker")
 
 STARTUP_TIMEOUT_SECONDS = 120.0  # the child imports pandas, sklearn, ...
 POLL_INTERVAL_SECONDS = 0.05     # how often a running job checks for news
+STOP_CHECK_SECONDS = 0.5         # longest an idle wait goes without checking for a stop
+CONTENDED_RETRY_SECONDS = 0.05   # a job is due but another worker holds its row
+DUE_MARGIN_SECONDS = 0.01        # wake this long after a job's run_after
 
 
 class StartupError(RuntimeError):
@@ -195,6 +209,72 @@ class Liveness:
             log.warning("could not touch health file %s: %s", self.path, exc)
 
 
+class Listener:
+    """
+    LISTEN on the queue channel over a connection of its own (autocommit,
+    outside the pool). Notifications that arrive while nobody is waiting
+    are buffered by the connection and returned by the next wait(), so
+    none is lost between waits; only a dropped connection can lose one.
+    """
+
+    def __init__(self, database_url: str):
+        url = make_url(database_url).set(drivername="postgresql")
+        self._conninfo = url.render_as_string(hide_password=False)
+        self._conn: psycopg.Connection | None = None
+        self.connects = 0
+
+    @property
+    def backend_pid(self) -> int | None:
+        return self._conn.info.backend_pid if self.connected and self._conn else None
+
+    @property
+    def connected(self) -> bool:
+        return self._conn is not None and not self._conn.closed
+
+    def connect(self) -> bool:
+        """(Re)connects and LISTENs. False, with a warning, if it can't."""
+        self.close()
+        try:
+            conn = psycopg.connect(self._conninfo, autocommit=True, connect_timeout=5)
+            conn.execute(sql.SQL("LISTEN {}").format(sql.Identifier(QUEUE_CHANNEL)))
+        except psycopg.Error as exc:
+            log.warning("LISTEN connection failed, polling instead: %s", exc)
+            return False
+        self._conn = conn
+        self.connects += 1
+        return True
+
+    def wait(self, timeout: float) -> bool:
+        """
+        Blocks until a notification or the timeout. True means "try to
+        claim now": a notification arrived, or the connection was just
+        re-established (one may have been missed while it was down).
+        Never raises; with no connection it just sleeps out the timeout.
+        """
+        if not self.connected:
+            if self.connect():
+                return True
+            time.sleep(timeout)
+            return False
+        assert self._conn is not None
+        try:
+            notified = any(True for _ in self._conn.notifies(timeout=timeout, stop_after=1))
+            if notified:
+                for _ in self._conn.notifies(timeout=0):  # one claim attempt covers them all
+                    pass
+            return notified
+        except psycopg.Error as exc:
+            log.warning("LISTEN connection lost: %s", exc)
+            self.close()
+            return False
+
+    def close(self) -> None:
+        if self._conn is not None:
+            with contextlib.suppress(psycopg.Error):
+                self._conn.close()
+        self._conn = None
+
+
 class Heartbeat(threading.Thread):
     """Renews one job's lease every heartbeat_seconds until stopped or lost."""
 
@@ -240,8 +320,8 @@ class Worker:
                                             settings.statement_timeout_seconds)
         self.compute = ComputeProcess(settings.test_compute_delay_seconds)
         self.liveness = Liveness(settings.health_file)
+        self.listener = Listener(settings.database_url)
         self.qbt_version = importlib.metadata.version("qbt")
-        self._wake = threading.Event()
         self._stopping = False
         self._release_now = False
         self._grace_deadline = 0.0
@@ -261,9 +341,12 @@ class Worker:
                 )
             log.warning("running without the C++ bootstrap: %s",
                         handshake.cpp_unavailable_reason)
+        # Before the first claim, so no job enqueued after it goes unnoticed.
+        self.listener.connect()
 
     def stop(self) -> None:
         self.compute.close()
+        self.listener.close()
         self.engine.dispose()
 
     def request_stop(self) -> None:
@@ -277,7 +360,6 @@ class Worker:
             self._grace_deadline = time.monotonic() + self.settings.shutdown_grace_seconds
             log.info("stop requested: finishing the current job (grace %.0fs)",
                      self.settings.shutdown_grace_seconds)
-        self._wake.set()
 
     @property
     def stopping(self) -> bool:
@@ -286,7 +368,37 @@ class Worker:
     def run(self) -> None:
         while not self._stopping:
             if self.run_once() is None:
-                self._wake.wait(self.settings.poll_seconds)
+                self.wait_for_work()
+
+    def wait_for_work(self) -> str:
+        """
+        Idles until there may be a job to claim: a notification, the
+        earliest queued job becoming due, the next reaper run, or the
+        fallback poll, whichever comes first. Returns which one, for tests
+        and logs: "notified", "due", "reap", "poll" or "stop".
+        """
+        now = time.monotonic()
+        timeout, reason = self.settings.poll_seconds, "poll"
+        if self._next_reap - now < timeout:
+            timeout, reason = max(0.0, self._next_reap - now), "reap"
+        try:
+            with self.engine.connect() as conn:
+                due = next_due_seconds(conn)
+        except SQLAlchemyError:
+            due = None
+        if due is not None and due < timeout:
+            # due <= 0: a job is claimable, but another worker had its row
+            # locked when we tried; look again shortly instead of spinning.
+            # Otherwise wake just after it falls due, never just before.
+            timeout, reason = max(due + DUE_MARGIN_SECONDS, CONTENDED_RETRY_SECONDS), "due"
+        deadline = time.monotonic() + timeout  # from now: `due` was measured after `now`
+        while not self._stopping:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return reason
+            if self.listener.wait(min(remaining, STOP_CHECK_SECONDS)):
+                return "notified"
+        return "stop"
 
     # ---- one job ----
 

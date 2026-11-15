@@ -23,6 +23,16 @@ All times come from the database's now(), never a worker's clock. now()
 is the start time of the current transaction, so callers keep these
 transactions short (each function here is meant to be its own).
 
+Waking workers: every change that makes a job queued (enqueue, a retry,
+a release, a reaper requeue) also sends NOTIFY on QUEUE_CHANNEL, in the
+same transaction, so it is delivered only if and when that transaction
+commits. Idle workers LISTEN and claim when notified. A queued job whose
+run_after is still in the future (a retry backing off) can't be claimed
+yet, so a woken worker asks next_due_seconds() and sleeps until then. A
+notification can still be missed (a worker's LISTEN connection drops and
+reconnects), so workers also poll at a slow fallback interval; no job
+depends on a notification to be run, only to be run promptly.
+
 Execution is at least once: a job whose worker dies runs again. That is
 safe because a backtest has no side effects outside complete(), and is
 deterministic, so whichever attempt commits writes the same numbers.
@@ -42,6 +52,7 @@ from qbt_service.db import job_status, jobs, metrics, results
 BACKOFF_BASE_SECONDS = 5.0
 BACKOFF_MAX_SECONDS = 300.0
 MAX_ERROR_LENGTH = 4000
+QUEUE_CHANNEL = "qbt_jobs"
 
 
 class IdempotencyConflict(Exception):
@@ -112,6 +123,23 @@ def _truncate(error: str) -> str:
     return error if len(error) <= MAX_ERROR_LENGTH else error[:MAX_ERROR_LENGTH - 3] + "..."
 
 
+def _notify(conn: Connection) -> None:
+    """NOTIFY QUEUE_CHANNEL, delivered when the caller's transaction commits
+    (and not at all if it rolls back). Postgres folds identical
+    notifications within one transaction into one."""
+    conn.execute(select(func.pg_notify(QUEUE_CHANNEL, "")))
+
+
+def next_due_seconds(conn: Connection) -> float | None:
+    """Seconds until the earliest queued job may be claimed (<= 0: one is due
+    now), or None if nothing is queued."""
+    seconds = conn.execute(
+        select(func.extract("epoch", func.min(jobs.c.run_after) - func.now()))
+        .where(jobs.c.status == "queued")
+    ).scalar_one_or_none()
+    return None if seconds is None else float(seconds)
+
+
 def enqueue(conn: Connection, *, strategy_id: int, price_series_id: int,
             request: dict[str, Any], request_hash: bytes, idempotency_key: str | None = None,
             max_attempts: int = 3) -> Enqueued:
@@ -133,6 +161,7 @@ def enqueue(conn: Connection, *, strategy_id: int, price_series_id: int,
         )
     job_id = conn.execute(statement.returning(jobs.c.id)).scalar_one_or_none()
     if job_id is not None:
+        _notify(conn)
         return Enqueued(job_id=job_id, created=True)
 
     existing_id, existing_hash = conn.execute(
@@ -232,7 +261,7 @@ def fail(conn: Connection, job_id: uuid.UUID, lease_token: uuid.UUID, error: str
     """
     exhausted = jobs.c.attempts >= jobs.c.max_attempts
     give_up = literal(True) if not retry else exhausted
-    return conn.execute(
+    status = conn.execute(
         update(jobs).where(_fenced(job_id, lease_token))
         .values(
             status=case((give_up, _status("failed")), else_=_status("queued")),
@@ -244,6 +273,9 @@ def fail(conn: Connection, job_id: uuid.UUID, lease_token: uuid.UUID, error: str
         )
         .returning(jobs.c.status)
     ).scalar_one_or_none()
+    if status == "queued":
+        _notify(conn)
+    return status
 
 
 def release(conn: Connection, job_id: uuid.UUID, lease_token: uuid.UUID) -> bool:
@@ -256,7 +288,10 @@ def release(conn: Connection, job_id: uuid.UUID, lease_token: uuid.UUID) -> bool
         .values(status="queued", attempts=jobs.c.attempts - 1, run_after=func.now(),
                 **_clear_lease())
     )
-    return updated.rowcount == 1
+    if updated.rowcount == 1:
+        _notify(conn)
+        return True
+    return False
 
 
 def reap_expired(conn: Connection, *, backoff_base: float = BACKOFF_BASE_SECONDS,
@@ -283,5 +318,8 @@ def reap_expired(conn: Connection, *, backoff_base: float = BACKOFF_BASE_SECONDS
         )
         .returning(jobs.c.id, jobs.c.status)
     ).all()
-    return Reaped(requeued=[r.id for r in rows if r.status == "queued"],
-                  failed=[r.id for r in rows if r.status == "failed"])
+    reaped = Reaped(requeued=[r.id for r in rows if r.status == "queued"],
+                    failed=[r.id for r in rows if r.status == "failed"])
+    if reaped.requeued:
+        _notify(conn)
+    return reaped

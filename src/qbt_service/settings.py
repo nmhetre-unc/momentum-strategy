@@ -6,7 +6,9 @@ files, so the same image runs in Compose, CI and tests unchanged).
     QBT_LEASE_SECONDS             job lease length (default 30)
     QBT_HEARTBEAT_SECONDS         lease renewal interval (default 10)
     QBT_REAPER_SECONDS            expired-lease sweep interval (default 15)
-    QBT_POLL_SECONDS              idle worker poll interval (default 1)
+    QBT_POLL_SECONDS              idle worker fallback poll (default 5); new jobs wake
+                                  workers at once through LISTEN/NOTIFY, so this only
+                                  bounds the delay after a lost notification
     QBT_MAX_ATTEMPTS              claims before a job is failed (default 3)
     QBT_WORKER_ID                 default "<hostname>:<pid>"
     QBT_ALLOW_NUMPY_FALLBACK      let a worker start without the C++ extension (default 0)
@@ -74,7 +76,7 @@ class Settings:
     lease_seconds: float = 30.0
     heartbeat_seconds: float = 10.0
     reaper_seconds: float = 15.0
-    poll_seconds: float = 1.0
+    poll_seconds: float = 5.0
     max_attempts: int = 3
     worker_id: str = field(default_factory=_default_worker_id)
     allow_numpy_fallback: bool = False

@@ -396,6 +396,7 @@ def test_startup_fallback_can_be_allowed(db, monkeypatch, caplog):
     monkeypatch.setattr(w.compute, "start", _fake_start(cpp_available=False))
     w.start()
     assert "running without the C++ bootstrap" in caplog.text
+    w.listener.close()
     w.engine.dispose()
 
 
@@ -756,5 +757,150 @@ def test_lease_taken_before_the_outcome_is_written(db, fields, detail):
         row = job(db, job_id)
         assert (row["status"], row["lease_owner"]) == ("running", "other")
         assert result_count(db, job_id) == 0
+    finally:
+        w.stop()
+
+
+# ---- waking idle workers: LISTEN/NOTIFY, due times and the fallback poll ----
+#
+# Each test uses a fallback poll far longer than the test, so anything
+# picked up promptly was picked up by the mechanism under test.
+
+SLOW_POLL = {"poll_seconds": 30.0, "reaper_seconds": 30.0}
+
+
+def insert_silently(db, run_after_seconds: float = 0.0):
+    """A queued job inserted without enqueue(), so without a NOTIFY."""
+    request = parse_request({"strategy": "sma_crossover", "ticker": "SPY", "start": START,
+                             "end": END, "n_boot": 0})
+    with db.begin() as conn:
+        return conn.execute(jobs.insert().values(
+            strategy_id=db.info["strategy_ids"]["sma_crossover"],
+            price_series_id=db.info["series_id"], request=request.model_dump(mode="json"),
+            request_hash=request_hash(request),
+            run_after=func.now() + text(f"interval '{run_after_seconds} seconds'"),
+        ).returning(jobs.c.id)).scalar_one()
+
+
+def timed_wait(w):
+    w._next_reap = time.monotonic() + 60  # keep the reaper deadline out of these waits
+    while w.listener.wait(0.05):  # drop notifications left over from earlier tests
+        pass
+    box = {}
+
+    def target():
+        started = time.monotonic()
+        box["reason"] = w.wait_for_work()
+        box["seconds"] = time.monotonic() - started
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    return thread, box
+
+
+def test_notification_wakes_an_idle_worker(db, worker):
+    old = worker.settings
+    worker.settings = settings(db, **SLOW_POLL)
+    try:
+        thread, box = timed_wait(worker)
+        time.sleep(0.3)
+        submit(db)
+        thread.join(10)
+        assert box["reason"] == "notified"
+        assert box["seconds"] < 1.5
+    finally:
+        worker.settings = old
+
+
+def test_a_job_due_later_wakes_the_worker_when_due(db, worker):
+    # A retry backing off: queued, no notification when it falls due.
+    old = worker.settings
+    worker.settings = settings(db, **SLOW_POLL)
+    try:
+        insert_silently(db, run_after_seconds=1.5)
+        thread, box = timed_wait(worker)
+        thread.join(10)
+        assert box["reason"] == "due"
+        assert 1.2 < box["seconds"] < 3
+        assert worker.run_once().label == "succeeded"
+    finally:
+        worker.settings = old
+
+
+def test_a_job_queued_without_notification_is_found_by_the_fallback_poll(db, worker):
+    old = worker.settings
+    worker.settings = settings(db, poll_seconds=1.5, reaper_seconds=30.0)
+    try:
+        thread, box = timed_wait(worker)
+        time.sleep(0.3)
+        job_id = insert_silently(db)  # appears mid-wait, and nothing announces it
+        thread.join(10)
+        assert box["reason"] == "poll"
+        assert box["seconds"] < 3
+        assert worker.run_once().label == "succeeded"
+        assert job(db, job_id)["status"] == "succeeded"
+    finally:
+        worker.settings = old
+
+
+def test_requeued_job_is_run_promptly_without_polling(db):
+    """Another worker died holding a job: the reaper requeues it with a 1 s
+    backoff; the idle worker wakes when it falls due, not at its 30 s poll."""
+    w = Worker(settings(db, poll_seconds=30.0, reaper_seconds=0.5, retry_backoff_seconds=1.0))
+    w.start()
+    thread = threading.Thread(target=w.run)
+    try:
+        job_id = submit(db)
+        with db.begin() as conn:
+            from qbt_service.queue import claim
+            claim(conn, "dead-worker", 0.5)  # lease runs out in 0.5 s
+        started = time.monotonic()
+        thread.start()
+        wait_for(lambda: job(db, job_id)["status"] == "succeeded", timeout=15,
+                 what="the requeued job to finish")
+        assert time.monotonic() - started < 6
+        assert job(db, job_id)["attempts"] == 2
+    finally:
+        w.request_stop()
+        thread.join(10)
+        w.stop()
+
+
+def test_lost_listen_connection_reconnects_and_claims(db, worker, caplog):
+    while worker.listener.wait(0.05):  # nothing buffered, so the next wait meets the loss
+        pass
+    before = worker.listener.connects
+    pid = worker.listener.backend_pid
+    assert pid is not None
+    with db.connect() as conn:
+        conn.execute(text("SELECT pg_terminate_backend(:pid)"), {"pid": pid})
+    assert worker.listener.wait(1.0) is False  # notices the loss
+    assert "LISTEN connection lost" in caplog.text
+    assert worker.listener.wait(1.0) is True   # reconnected: "claim now, one may be missed"
+    assert worker.listener.connects == before + 1
+    old = worker.settings
+    worker.settings = settings(db, **SLOW_POLL)
+    try:
+        thread, box = timed_wait(worker)
+        time.sleep(0.3)
+        submit(db)
+        thread.join(10)
+        assert box["reason"] == "notified"  # and the new connection hears enqueues
+    finally:
+        worker.settings = old
+
+
+def test_stop_interrupts_an_idle_wait(db):
+    w = Worker(settings(db, **SLOW_POLL))
+    w.start()
+    thread = threading.Thread(target=w.run)
+    try:
+        thread.start()
+        time.sleep(0.5)
+        stopped = time.monotonic()
+        w.request_stop()
+        thread.join(5)
+        assert not thread.is_alive()
+        assert time.monotonic() - stopped < 1.5
     finally:
         w.stop()

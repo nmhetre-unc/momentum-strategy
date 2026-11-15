@@ -14,7 +14,7 @@ def test_defaults():
     s = Settings.from_env({"DATABASE_URL": URL})
     assert s.database_url == URL
     assert (s.lease_seconds, s.heartbeat_seconds, s.reaper_seconds, s.poll_seconds) == (
-        30.0, 10.0, 15.0, 1.0,
+        30.0, 10.0, 15.0, 5.0,
     )
     assert s.max_attempts == 3
     assert s.allow_numpy_fallback is False
