@@ -13,10 +13,14 @@
 # /run/qbt/env (tmpfs, root only), so a rotated password is picked up.
 set -euo pipefail
 
-source /opt/qbt/qbt.conf   # QBT_REGION, QBT_PARAMETER
+source /opt/qbt/qbt.conf   # QBT_REGION, QBT_PARAMETER, QBT_RDS_CA
 compose=(docker compose --project-name qbt --file /opt/qbt/compose.yaml)
 
 refresh_env() {
+    if [ ! -s "$QBT_RDS_CA" ]; then
+        echo "qbt: no verified RDS CA bundle at $QBT_RDS_CA (see cloud-init output); refusing to start" >&2
+        exit 1
+    fi
     install -d -m 0700 /run/qbt
     local url
     url=$(aws ssm get-parameter --region "$QBT_REGION" --name "$QBT_PARAMETER" \

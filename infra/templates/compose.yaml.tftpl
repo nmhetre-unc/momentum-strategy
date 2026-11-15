@@ -13,6 +13,16 @@ x-service: &service
   read_only: true
   tmpfs:
     - /tmp
+  # The RDS CA bundle, read-only; DATABASE_URL has sslmode=verify-full and
+  # sslrootcert pointing here. create_host_path: false, so a missing bundle
+  # fails the container instead of mounting an empty directory.
+  volumes:
+    - type: bind
+      source: ${rds_ca_host_path}
+      target: ${rds_ca_container_path}
+      read_only: true
+      bind:
+        create_host_path: false
   init: true
   logging:
     driver: json-file

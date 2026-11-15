@@ -76,9 +76,66 @@ keys are created.
 public IPv4 address to reach ECR, SSM and Yahoo over HTTPS. Its security
 group allows 8000/tcp from `allowed_cidr` only, and egress on 443 and on
 5432 to the database. RDS is not publicly accessible and admits only the
-instance's security group. Connections use TLS (`sslmode=require`; RDS
-PostgreSQL 17 enforces SSL by default). The certificate is not verified
-against the RDS CA, because the image doesn't ship the CA bundle.
+instance's security group. Database connections use TLS with full
+verification; see below.
+
+**TLS to RDS: `sslmode=verify-full`.**
+1. **Download at boot.** cloud-init downloads AWS's global RDS CA bundle
+   ([`global-bundle.pem`](https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem),
+   the "any commercial Region" bundle in
+   [Using SSL/TLS to encrypt a connection](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html)).
+   It downloads over HTTPS only (`curl --proto =https --tlsv1.2`), so the
+   source, `truststore.pki.rds.amazonaws.com`, is authenticated by the
+   host's CA store.
+2. **Check the pinned checksum.** The file must match the SHA-256 in
+   `rds_ca_bundle_sha256`. AWS publishes no checksum, so that value is the
+   hash of the bundle downloaded on 2026-11-15: 114 certificates, all
+   self-signed root CAs. AWS asks clients to trust roots only, not
+   intermediates. Among them is "Amazon RDS us-east-2 Root CA RSA2048 G1",
+   valid to 2061, the CA the database is pinned to
+   (`ca_cert_identifier = "rds-ca-rsa2048-g1"`).
+3. **Install, or refuse to start.** On a match, the bundle is installed at
+   `/opt/qbt/rds-global-bundle.pem` (root-owned, 0644). On a mismatch it is
+   discarded, and `qbt` refuses to run anything rather than connect
+   unverified.
+4. **Mount into every container.** Each container gets the bundle
+   read-only at `/etc/ssl/rds/global-bundle.pem`, with `create_host_path:
+   false`, so a missing file fails the container instead of mounting an
+   empty directory.
+5. **Point the URL at it.** `DATABASE_URL` carries
+   `sslmode=verify-full&sslrootcert=/etc/ssl/rds/global-bundle.pem`. libpq
+   then requires the server certificate to chain to one of those roots and
+   to name the endpoint's hostname.
+
+Checked locally with the image as it ships: non-root user, read-only root,
+bundle bind-mounted read-only. Against a Postgres with a self-signed
+certificate, `verify-full` failed with "certificate verify failed" and
+`require` connected. The success path against a real RDS certificate is
+only exercised after an apply.
+
+When AWS adds CAs to the bundle, the boot check fails on purpose.
+Download the new bundle, inspect it (`openssl` or `keytool -printcert`),
+put its SHA-256 in `rds_ca_bundle_sha256`, and apply.
+
+**The API is plain HTTP on port 8000, reachable from one IP address.**
+There is no TLS termination and no domain: no load balancer, no
+certificate, no Route 53. That is acceptable for this deployment because
+it is a short-lived, measured demo:
+- The security group admits a single `/32`, yours, so nothing else on the
+  internet can connect at all.
+- The API has no authentication, sessions or cookies, and carries no
+  credentials or personal data. Requests and responses are backtest
+  parameters, public SPY prices, and model metadata that is already in
+  this repository.
+- Adding TLS would mean an ALB (about $16/month plus LCU charges, and
+  billed while idle) or a domain and certificate on the instance. That is
+  cost and moving parts out of proportion to a session of a few hours.
+
+The consequence is that traffic between your machine and the instance is
+readable and alterable by anyone on the network path. Don't send anything
+over it that you wouldn't put in this repo. Before any wider use, put TLS
+in front: an ALB with an ACM certificate, or Caddy on the instance with a
+domain. Add authentication too, since the API has none.
 
 **Smallest sizes that work.**
 - *Instance:* t3.small (2 vCPU, 2 GiB, x86_64; the image is built for
@@ -115,6 +172,13 @@ second with a 10-minute minimum.
 | Session Manager | no charge | $0 | $0 | No |
 | Data transfer (ECR pulls in-Region, API responses) | in: free; out: first 100 GB/month free | ~$0 | ~$0 | No |
 | **Total** | | **≈ $33.8** | **≈ $0.09** | |
+
+**This account** is on the Free plan, with $100 in credits, expiring
+2027-05-15, and cannot be charged. Every figure above draws down those
+credits: a 2-hour session uses about $0.09 of them, and leaving everything
+running uses about $33.80 a month, which would exhaust $100 in about three
+months. The Free plan ends when the credits run out, and the account closes
+with it.
 
 **Not created, deliberately:** no NAT gateway (~$32.85/month idle plus data
 processing), no Elastic IP (billed while unattached too), no load balancer,

@@ -8,11 +8,19 @@ data "aws_ssm_parameter" "al2023" {
 }
 
 locals {
+  # The RDS CA bundle: downloaded and verified at boot on the host, mounted
+  # read-only into every container at the path DATABASE_URL names.
+  rds_ca_url            = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
+  rds_ca_host_path      = "/opt/qbt/rds-global-bundle.pem"
+  rds_ca_container_path = "/etc/ssl/rds/global-bundle.pem"
+
   image = "${aws_ecr_repository.service.repository_url}:${var.image_tag}"
 
   compose_yaml = templatefile("${path.module}/templates/compose.yaml.tftpl", {
-    image         = local.image
-    api_processes = var.api_processes
+    image                 = local.image
+    api_processes         = var.api_processes
+    rds_ca_host_path      = local.rds_ca_host_path
+    rds_ca_container_path = local.rds_ca_container_path
   })
 
   registry = split("/", aws_ecr_repository.service.repository_url)[0]
@@ -23,7 +31,7 @@ locals {
       {
         path        = "/opt/qbt/qbt.conf"
         permissions = "0644"
-        content     = "QBT_REGION=${var.region}\nQBT_PARAMETER=${aws_ssm_parameter.database_url.name}\n"
+        content     = "QBT_REGION=${var.region}\nQBT_PARAMETER=${aws_ssm_parameter.database_url.name}\nQBT_RDS_CA=${local.rds_ca_host_path}\n"
       },
       { path = "/usr/local/bin/qbt", permissions = "0755", content = file("${path.module}/templates/qbt.sh") },
       {
@@ -58,6 +66,12 @@ locals {
       },
     ]
     runcmd = [
+      # RDS CA bundle: HTTPS only (TLS 1.2+, the host's own CA store
+      # authenticates truststore.pki.rds.amazonaws.com), then the pinned
+      # SHA-256. On a mismatch the file is removed, and `qbt` refuses to
+      # start anything, rather than connecting without verification.
+      ["curl", "--proto", "=https", "--tlsv1.2", "-fsSL", "-o", "${local.rds_ca_host_path}.new", local.rds_ca_url],
+      ["sh", "-c", "echo '${var.rds_ca_bundle_sha256}  ${local.rds_ca_host_path}.new' | sha256sum -c - && install -m 0644 -o root -g root ${local.rds_ca_host_path}.new ${local.rds_ca_host_path}; rm -f ${local.rds_ca_host_path}.new"],
       ["dnf", "install", "-y", "docker", "amazon-ecr-credential-helper"],
       ["systemctl", "enable", "--now", "docker"],
       ["mkdir", "-p", "/usr/local/lib/docker/cli-plugins"],

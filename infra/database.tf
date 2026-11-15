@@ -35,14 +35,19 @@ resource "aws_db_instance" "db" {
   multi_az               = false
   port                   = 5432
 
-  # PostgreSQL 15+ on RDS defaults to rds.force_ssl = 1: the URL below uses
-  # sslmode=require.
+  # The server certificate's CA, pinned rather than left to the default, so
+  # it is one the CA bundle on the instance is known to contain ("Amazon RDS
+  # us-east-2 Root CA RSA2048 G1"). PostgreSQL 15+ on RDS also defaults to
+  # rds.force_ssl = 1, so unencrypted connections are refused.
+  ca_cert_identifier = "rds-ca-rsa2048-g1"
 
   # Backups: 1 day. Backup storage up to the provisioned size (20 GB) is
   # included, so this costs nothing extra while the instance exists.
   backup_retention_period = 1
-  # No final snapshot on destroy: a snapshot would keep billing after the
-  # instance is gone. Export the data first if you want it.
+  # Intentional, for short sessions torn down with `terraform destroy`:
+  # deletion protection off so destroy succeeds in one step, and no final
+  # snapshot, which would keep billing after the instance is gone. The data
+  # is re-creatable (migrate, ingest, train); export it first if you need it.
   skip_final_snapshot      = true
   delete_automated_backups = true
   deletion_protection      = false
@@ -63,11 +68,14 @@ resource "aws_ssm_parameter" "database_url" {
   type        = "SecureString"
   tier        = "Standard"
   value_wo = format(
-    "postgresql+psycopg://%s:%s@%s/%s?sslmode=require",
+    # verify-full: TLS, the server certificate must chain to a CA in the RDS
+    # bundle, and its name must match the endpoint's hostname.
+    "postgresql+psycopg://%s:%s@%s/%s?sslmode=verify-full&sslrootcert=%s",
     aws_db_instance.db.username,
     ephemeral.random_password.db.result,
     aws_db_instance.db.endpoint,
     aws_db_instance.db.db_name,
+    local.rds_ca_container_path,
   )
   value_wo_version = var.db_password_version
 }

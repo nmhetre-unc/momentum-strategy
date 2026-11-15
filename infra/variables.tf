@@ -62,6 +62,12 @@ variable "api_processes" {
   default     = 1
 }
 
+variable "rds_ca_bundle_sha256" {
+  description = "SHA-256 of the RDS global CA bundle (https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem) as downloaded 2026-11-15: 114 self-signed root CAs. AWS publishes no checksum; when AWS adds CAs the instance's boot check fails and this value must be updated after inspecting the new bundle (infra/README.md)."
+  type        = string
+  default     = "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
+}
+
 variable "compose_version" {
   description = "Docker Compose plugin release installed on the instance, verified by SHA-256."
   type        = string
