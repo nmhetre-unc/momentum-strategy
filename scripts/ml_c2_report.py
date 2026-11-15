@@ -23,13 +23,30 @@ Every number is deterministic for a given cache file (fixed seeds,
 deterministic LightGBM, seeded bootstrap); the environment block and
 timings change between runs.
 
+Trial count. The deflated Sharpe counts every configuration tried,
+including a first pass run before the grids were widened (FIRST_PASS:
+both targets, base features, the narrower grids). That pass was a
+separate nested selection whose out-of-sample accuracy was seen, so it
+counts as separate trials even though each of its configurations is
+also in the final grids. It is re-run here from the same code and
+logged to c2_trials.jsonl as "first_pass_*" records.
+
+The bar. For regime, the bar a model has to clear is
+rules_regime_lookup: for each test month, the most frequent next-month
+regime among training months that had the same rules regime on their
+decision date (ties to the lower class). It fits a 4x4 table and beats
+the raw rules regime. For direction, the bar is majority_class (always
+up, i.e. buy-and-hold).
+
 Run with: python scripts/ml_c2_report.py   (needs the `ml` extra)
 """
 
 import json
 import sys
 import time
+from itertools import product
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 
@@ -89,6 +106,7 @@ from qbt.ml.models import (  # noqa: E402
     LIGHTGBM_FIXED,
     MODELS,
     PROB_FLOOR,
+    REGIME_CLASSES,
     SEED,
     WalkForwardPredictions,
     classes_for,
@@ -104,6 +122,18 @@ C1_FILE = OUT_DIR / "c1_baselines.json"
 TARGETS = ("direction", "regime")
 FEATURE_SETS = {"base": False, "base+hmm": True}
 ALPHA = 0.05
+BAR = {"direction": "majority_class", "regime": "rules_regime_lookup"}
+# The grids before they were widened (see qbt.ml.models): run on the base
+# features for both targets, then discarded. Counted as trials.
+FIRST_PASS: dict[str, Any] = {
+    "targets": ("direction", "regime"),
+    "feature_sets": ("base",),
+    "grids": {
+        "logistic": [{"C": c} for c in (0.01, 0.1, 1.0, 10.0)],
+        "lightgbm": [{"num_leaves": leaves, "min_child_samples": child, "n_estimators": trees}
+                     for leaves, child, trees in product((3, 7), (5, 15), (50, 200))],
+    },
+}
 SERIES_COLORS = {"logistic": "#2a78d6", "lightgbm": "#eb6834"}   # categorical slots 1, 2
 LINESTYLES = {"base": "-", "base+hmm": "--"}
 
@@ -117,6 +147,10 @@ def _baseline_predictions(ds: MonthlyDataset, folds: list[Fold]) -> pd.DataFrame
                 "previous_label": predict_previous(ds.previous, fold)}
         if ds.target == "regime":
             cols["rules_regime_at_decision"] = predict_rules_regime(ds.X, fold)
+            rules = ds.X["regime_rules"]
+            lookup = conditional_prior_proba(ds.y.iloc[fold.train], rules.iloc[fold.train],
+                                             rules.iloc[fold.test], REGIME_CLASSES, PROB_FLOOR)
+            cols["rules_regime_lookup"] = np.asarray(REGIME_CLASSES)[lookup.argmax(axis=1)]
         pieces.append(pd.DataFrame(cols, index=ds.y.index[fold.test]))
     return pd.concat(pieces)
 
@@ -290,9 +324,15 @@ def _verdict(runs: list[dict], economic: list[dict]) -> dict:
             beaten = [b for b, v in vs.items()
                       if v["difference_ci"][0] > 0 and v["mcnemar_p"] < ALPHA]
             loss = rep["log_loss_vs_references"]["vs"]
+            bar = BAR[run["target"]]
             classification.append({
                 "target": run["target"], "feature_set": run["feature_set"], "model": model,
                 "accuracy": rep["pooled"]["accuracy"],
+                "bar": bar, "bar_accuracy": vs[bar]["other_mean"],
+                "difference_vs_bar": vs[bar]["difference"],
+                "difference_vs_bar_ci": vs[bar]["difference_ci"],
+                "mcnemar_p_vs_bar": vs[bar]["mcnemar_p"],
+                "beats_bar": bar in beaten,
                 "best_baseline": max(vs, key=lambda b: vs[b]["other_mean"]),
                 "best_baseline_accuracy": max(v["other_mean"] for v in vs.values()),
                 "baselines_beaten": beaten,
@@ -308,19 +348,21 @@ def _verdict(runs: list[dict], economic: list[dict]) -> dict:
         "beats_buy_and_hold": e["sharpe_bootstrap"]["difference_ci"][0] > 0,
         "deflated_sharpe_vs_buy_and_hold": e["deflated_sharpe"]["vs_buy_and_hold"],
     } for e in economic]
-    any_cls = [c for c in classification if c["beats_every_baseline"]]
+    any_cls = [c for c in classification if c["beats_bar"]]
     any_trd = [t for t in trading if t["beats_buy_and_hold"]]
     statement = []
     statement.append(
-        "No model beats every baseline on accuracy." if not any_cls else
-        "Beats every baseline on accuracy: " + ", ".join(
+        "No model beats its bar on accuracy (direction: majority_class; regime: "
+        "rules_regime_lookup)." if not any_cls else
+        "Beats its bar on accuracy: " + ", ".join(
             f"{c['target']}/{c['feature_set']}/{c['model']}" for c in any_cls) + ".")
     statement.append(
         "No direction strategy beats buy-and-hold on Sharpe (paired interval includes or is "
         "below 0)." if not any_trd else
         "Beats buy-and-hold on Sharpe: " + ", ".join(
             f"{t['feature_set']}/{t['model']}" for t in any_trd) + ".")
-    return {"rule": f"beats = paired {CI_LEVEL:.0%} stationary-bootstrap interval of the "
+    return {"bar": BAR,
+            "rule": f"beats = paired {CI_LEVEL:.0%} stationary-bootstrap interval of the "
                     f"difference above 0 and exact McNemar p < {ALPHA} (classification); "
                     "paired Sharpe-difference interval above 0 (trading)",
             "statement": " ".join(statement),
@@ -390,7 +432,10 @@ def main() -> None:
     df = fetch_ohlcv(TICKER, START, END)
     c1 = json.loads(C1_FILE.read_text())
     n_configs = {m: len(grid_for(m)) for m in MODELS}
-    n_trials = len(TARGETS) * len(FEATURE_SETS) * sum(n_configs.values())
+    n_final = len(TARGETS) * len(FEATURE_SETS) * sum(n_configs.values())
+    n_first_pass = (len(FIRST_PASS["targets"]) * len(FIRST_PASS["feature_sets"])
+                    * sum(len(g) for g in FIRST_PASS["grids"].values()))
+    n_trials = n_final + n_first_pass
 
     clear_hmm_cache()
     datasets: dict[tuple[str, str], MonthlyDataset] = {}
@@ -404,6 +449,26 @@ def main() -> None:
     assert cache["computed"] == 1, cache
 
     trial_lines: list[dict] = []
+    first_pass_accuracy = []
+    for target in FIRST_PASS["targets"]:
+        for feature_set in FIRST_PASS["feature_sets"]:
+            ds = datasets[(target, feature_set)]
+            folds = walk_forward_splits(ds.t0, ds.t1, min_train=MIN_TRAIN,
+                                        test_size=TEST_SIZE, embargo=EMBARGO)
+            for model, grid in FIRST_PASS["grids"].items():
+                wf = walk_forward_predict(model, ds.X, ds.y, ds.t1, folds, target, grid=grid)
+                for trial in wf.trials:
+                    trial_lines.append({"record": "first_pass_inner_tuning", "target": target,
+                                        "feature_set": feature_set, "model": model, **trial})
+                y = ds.y.loc[wf.proba.index].to_numpy()
+                accuracy = float(np.mean(
+                    predicted_class(wf.proba.to_numpy(), classes_for(target)) == y))
+                first_pass_accuracy.append({"target": target, "feature_set": feature_set,
+                                            "model": model, "accuracy": accuracy})
+                trial_lines.append({"record": "first_pass_outer_test", "target": target,
+                                    "feature_set": feature_set, "model": model,
+                                    "selected_per_fold": [x["config"] for x in wf.selected],
+                                    "accuracy": accuracy, "n": len(y)})
     preds: dict[tuple[str, str, str], WalkForwardPredictions] = {}
     runs, economic, curves = [], [], {}
     fit_seconds = {}
@@ -477,10 +542,25 @@ def main() -> None:
         "trials": {
             "configurations_per_model": n_configs,
             "targets": list(TARGETS), "feature_sets": list(FEATURE_SETS),
+            "final_grid_configurations": n_final,
+            "first_pass": {
+                "targets": list(FIRST_PASS["targets"]),
+                "feature_sets": list(FIRST_PASS["feature_sets"]),
+                "configurations_per_model": {m: len(g) for m, g in
+                                             FIRST_PASS["grids"].items()},
+                "grids": FIRST_PASS["grids"],
+                "configurations": n_first_pass,
+                "out_of_sample_accuracy": first_pass_accuracy,
+                "note": "run before the grids were widened, then discarded; each of these "
+                        "configurations is also in the final grids, but the pass was a "
+                        "separate selection whose out-of-sample results were seen, so it "
+                        "counts as separate trials",
+            },
             "total_configurations": n_trials,
+            "previous_total_without_first_pass": n_final,
             "note": "the deflated Sharpe counts every (target, feature set, model, "
-                    "hyperparameter configuration) combination, including the regime "
-                    "target's, which trades nothing",
+                    "hyperparameter configuration) combination tried, including the "
+                    "first pass and the regime target's, which trades nothing",
         },
         "hmm_cache": {**cache, "build_dataset_wall_seconds": build_seconds},
         "runs": runs,

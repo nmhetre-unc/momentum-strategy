@@ -176,18 +176,119 @@
       "base",
       "base+hmm"
     ],
-    "total_configurations": 92,
-    "note": "the deflated Sharpe counts every (target, feature set, model, hyperparameter configuration) combination, including the regime target's, which trades nothing"
+    "final_grid_configurations": 92,
+    "first_pass": {
+      "targets": [
+        "direction",
+        "regime"
+      ],
+      "feature_sets": [
+        "base"
+      ],
+      "configurations_per_model": {
+        "logistic": 4,
+        "lightgbm": 8
+      },
+      "grids": {
+        "logistic": [
+          {
+            "C": 0.01
+          },
+          {
+            "C": 0.1
+          },
+          {
+            "C": 1.0
+          },
+          {
+            "C": 10.0
+          }
+        ],
+        "lightgbm": [
+          {
+            "num_leaves": 3,
+            "min_child_samples": 5,
+            "n_estimators": 50
+          },
+          {
+            "num_leaves": 3,
+            "min_child_samples": 5,
+            "n_estimators": 200
+          },
+          {
+            "num_leaves": 3,
+            "min_child_samples": 15,
+            "n_estimators": 50
+          },
+          {
+            "num_leaves": 3,
+            "min_child_samples": 15,
+            "n_estimators": 200
+          },
+          {
+            "num_leaves": 7,
+            "min_child_samples": 5,
+            "n_estimators": 50
+          },
+          {
+            "num_leaves": 7,
+            "min_child_samples": 5,
+            "n_estimators": 200
+          },
+          {
+            "num_leaves": 7,
+            "min_child_samples": 15,
+            "n_estimators": 50
+          },
+          {
+            "num_leaves": 7,
+            "min_child_samples": 15,
+            "n_estimators": 200
+          }
+        ]
+      },
+      "configurations": 24,
+      "out_of_sample_accuracy": [
+        {
+          "target": "direction",
+          "feature_set": "base",
+          "model": "logistic",
+          "accuracy": 0.65625
+        },
+        {
+          "target": "direction",
+          "feature_set": "base",
+          "model": "lightgbm",
+          "accuracy": 0.6640625
+        },
+        {
+          "target": "regime",
+          "feature_set": "base",
+          "model": "logistic",
+          "accuracy": 0.71875
+        },
+        {
+          "target": "regime",
+          "feature_set": "base",
+          "model": "lightgbm",
+          "accuracy": 0.765625
+        }
+      ],
+      "note": "run before the grids were widened, then discarded; each of these configurations is also in the final grids, but the pass was a separate selection whose out-of-sample results were seen, so it counts as separate trials"
+    },
+    "total_configurations": 116,
+    "previous_total_without_first_pass": 92,
+    "note": "the deflated Sharpe counts every (target, feature set, model, hyperparameter configuration) combination tried, including the first pass and the regime target's, which trades nothing"
   },
   "hmm_cache": {
     "hits": 1,
     "computed": 1,
     "entries": 1,
     "build_dataset_wall_seconds": {
-      "direction/base": 0.030758449000131804,
-      "regime/base": 0.04506197499722475,
-      "direction/base+hmm": 22.434701835998567,
-      "regime/base+hmm": 0.055611493000469636
+      "direction/base": 0.01780410400533583,
+      "regime/base": 0.0270698500025901,
+      "direction/base+hmm": 19.310175778002304,
+      "regime/base+hmm": 0.039879614996607415
     }
   },
   "runs": [
@@ -751,7 +852,8 @@
       "baseline_accuracy": {
         "majority_class": 0.6875,
         "previous_label": 0.6796875,
-        "rules_regime_at_decision": 0.7734375
+        "rules_regime_at_decision": 0.7734375,
+        "rules_regime_lookup": 0.8046875
       },
       "models": {
         "logistic": {
@@ -815,7 +917,8 @@
               "prior_given_rules_regime_brier": 0.38531229383425547,
               "acc_majority_class": 0.7083333333333334,
               "acc_previous_label": 0.625,
-              "acc_rules_regime_at_decision": 0.7083333333333334
+              "acc_rules_regime_at_decision": 0.7083333333333334,
+              "acc_rules_regime_lookup": 0.7083333333333334
             },
             {
               "fold": 1,
@@ -832,7 +935,8 @@
               "prior_given_rules_regime_brier": 0.25334206712220836,
               "acc_majority_class": 0.8333333333333334,
               "acc_previous_label": 0.7083333333333334,
-              "acc_rules_regime_at_decision": 0.8333333333333334
+              "acc_rules_regime_at_decision": 0.8333333333333334,
+              "acc_rules_regime_lookup": 0.875
             },
             {
               "fold": 2,
@@ -849,7 +953,8 @@
               "prior_given_rules_regime_brier": 0.39345406302967006,
               "acc_majority_class": 0.6666666666666666,
               "acc_previous_label": 0.6666666666666666,
-              "acc_rules_regime_at_decision": 0.7083333333333334
+              "acc_rules_regime_at_decision": 0.7083333333333334,
+              "acc_rules_regime_lookup": 0.8333333333333334
             },
             {
               "fold": 3,
@@ -866,7 +971,8 @@
               "prior_given_rules_regime_brier": 0.4581598757643781,
               "acc_majority_class": 0.5416666666666666,
               "acc_previous_label": 0.625,
-              "acc_rules_regime_at_decision": 0.75
+              "acc_rules_regime_at_decision": 0.75,
+              "acc_rules_regime_lookup": 0.7083333333333334
             },
             {
               "fold": 4,
@@ -883,7 +989,8 @@
               "prior_given_rules_regime_brier": 0.20609624350255898,
               "acc_majority_class": 0.625,
               "acc_previous_label": 0.75,
-              "acc_rules_regime_at_decision": 0.8333333333333334
+              "acc_rules_regime_at_decision": 0.8333333333333334,
+              "acc_rules_regime_lookup": 0.875
             },
             {
               "fold": 5,
@@ -900,7 +1007,8 @@
               "prior_given_rules_regime_brier": 0.23029396462018734,
               "acc_majority_class": 0.875,
               "acc_previous_label": 0.75,
-              "acc_rules_regime_at_decision": 0.875
+              "acc_rules_regime_at_decision": 0.875,
+              "acc_rules_regime_lookup": 0.875
             }
           ],
           "pooled": {
@@ -979,6 +1087,20 @@
                 "difference_ci_mean_block_12": [
                   -0.1640625,
                   0.03125
+                ]
+              },
+              "rules_regime_lookup": {
+                "other_mean": 0.8046875,
+                "difference": -0.09375,
+                "difference_ci": [
+                  -0.1796875,
+                  -0.015625
+                ],
+                "share_of_replicates_not_better": 0.9925,
+                "mcnemar_p": 0.01181793212890625,
+                "difference_ci_mean_block_12": [
+                  -0.17207031249999966,
+                  -0.015625
                 ]
               }
             }
@@ -1120,7 +1242,8 @@
               "prior_given_rules_regime_brier": 0.38531229383425547,
               "acc_majority_class": 0.7083333333333334,
               "acc_previous_label": 0.625,
-              "acc_rules_regime_at_decision": 0.7083333333333334
+              "acc_rules_regime_at_decision": 0.7083333333333334,
+              "acc_rules_regime_lookup": 0.7083333333333334
             },
             {
               "fold": 1,
@@ -1137,7 +1260,8 @@
               "prior_given_rules_regime_brier": 0.25334206712220836,
               "acc_majority_class": 0.8333333333333334,
               "acc_previous_label": 0.7083333333333334,
-              "acc_rules_regime_at_decision": 0.8333333333333334
+              "acc_rules_regime_at_decision": 0.8333333333333334,
+              "acc_rules_regime_lookup": 0.875
             },
             {
               "fold": 2,
@@ -1154,7 +1278,8 @@
               "prior_given_rules_regime_brier": 0.39345406302967006,
               "acc_majority_class": 0.6666666666666666,
               "acc_previous_label": 0.6666666666666666,
-              "acc_rules_regime_at_decision": 0.7083333333333334
+              "acc_rules_regime_at_decision": 0.7083333333333334,
+              "acc_rules_regime_lookup": 0.8333333333333334
             },
             {
               "fold": 3,
@@ -1171,7 +1296,8 @@
               "prior_given_rules_regime_brier": 0.4581598757643781,
               "acc_majority_class": 0.5416666666666666,
               "acc_previous_label": 0.625,
-              "acc_rules_regime_at_decision": 0.75
+              "acc_rules_regime_at_decision": 0.75,
+              "acc_rules_regime_lookup": 0.7083333333333334
             },
             {
               "fold": 4,
@@ -1188,7 +1314,8 @@
               "prior_given_rules_regime_brier": 0.20609624350255898,
               "acc_majority_class": 0.625,
               "acc_previous_label": 0.75,
-              "acc_rules_regime_at_decision": 0.8333333333333334
+              "acc_rules_regime_at_decision": 0.8333333333333334,
+              "acc_rules_regime_lookup": 0.875
             },
             {
               "fold": 5,
@@ -1205,7 +1332,8 @@
               "prior_given_rules_regime_brier": 0.23029396462018734,
               "acc_majority_class": 0.875,
               "acc_previous_label": 0.75,
-              "acc_rules_regime_at_decision": 0.875
+              "acc_rules_regime_at_decision": 0.875,
+              "acc_rules_regime_lookup": 0.875
             }
           ],
           "pooled": {
@@ -1284,6 +1412,20 @@
                 "difference_ci_mean_block_12": [
                   -0.0703125,
                   0.0625
+                ]
+              },
+              "rules_regime_lookup": {
+                "other_mean": 0.8046875,
+                "difference": -0.03125,
+                "difference_ci": [
+                  -0.078125,
+                  0.0234375
+                ],
+                "share_of_replicates_not_better": 0.91,
+                "mcnemar_p": 0.3876953125,
+                "difference_ci_mean_block_12": [
+                  -0.078125,
+                  0.0234375
                 ]
               }
             }
@@ -1876,7 +2018,8 @@
       "baseline_accuracy": {
         "majority_class": 0.6826923076923077,
         "previous_label": 0.6923076923076923,
-        "rules_regime_at_decision": 0.7884615384615384
+        "rules_regime_at_decision": 0.7884615384615384,
+        "rules_regime_lookup": 0.8269230769230769
       },
       "models": {
         "logistic": {
@@ -1933,7 +2076,8 @@
               "prior_given_rules_regime_brier": 0.24028836699215061,
               "acc_majority_class": 0.8333333333333334,
               "acc_previous_label": 0.7083333333333334,
-              "acc_rules_regime_at_decision": 0.8333333333333334
+              "acc_rules_regime_at_decision": 0.8333333333333334,
+              "acc_rules_regime_lookup": 0.875
             },
             {
               "fold": 1,
@@ -1950,7 +2094,8 @@
               "prior_given_rules_regime_brier": 0.36162165621701275,
               "acc_majority_class": 0.6666666666666666,
               "acc_previous_label": 0.6666666666666666,
-              "acc_rules_regime_at_decision": 0.7083333333333334
+              "acc_rules_regime_at_decision": 0.7083333333333334,
+              "acc_rules_regime_lookup": 0.8333333333333334
             },
             {
               "fold": 2,
@@ -1967,7 +2112,8 @@
               "prior_given_rules_regime_brier": 0.4443513618591474,
               "acc_majority_class": 0.5416666666666666,
               "acc_previous_label": 0.625,
-              "acc_rules_regime_at_decision": 0.75
+              "acc_rules_regime_at_decision": 0.75,
+              "acc_rules_regime_lookup": 0.7083333333333334
             },
             {
               "fold": 3,
@@ -1984,7 +2130,8 @@
               "prior_given_rules_regime_brier": 0.19760226366880249,
               "acc_majority_class": 0.625,
               "acc_previous_label": 0.75,
-              "acc_rules_regime_at_decision": 0.8333333333333334
+              "acc_rules_regime_at_decision": 0.8333333333333334,
+              "acc_rules_regime_lookup": 0.875
             },
             {
               "fold": 4,
@@ -2001,7 +2148,8 @@
               "prior_given_rules_regime_brier": 0.22928994082840234,
               "acc_majority_class": 0.875,
               "acc_previous_label": 0.75,
-              "acc_rules_regime_at_decision": 0.875
+              "acc_rules_regime_at_decision": 0.875,
+              "acc_rules_regime_lookup": 0.875
             }
           ],
           "pooled": {
@@ -2080,6 +2228,20 @@
                 "difference_ci_mean_block_12": [
                   -0.07716346153846117,
                   0.05769230769230771
+                ]
+              },
+              "rules_regime_lookup": {
+                "other_mean": 0.8269230769230769,
+                "difference": -0.04807692307692302,
+                "difference_ci": [
+                  -0.08653846153846156,
+                  -0.009615384615384581
+                ],
+                "share_of_replicates_not_better": 0.9995,
+                "mcnemar_p": 0.1796875,
+                "difference_ci_mean_block_12": [
+                  -0.08653846153846145,
+                  -0.019230769230769162
                 ]
               }
             }
@@ -2212,7 +2374,8 @@
               "prior_given_rules_regime_brier": 0.24028836699215061,
               "acc_majority_class": 0.8333333333333334,
               "acc_previous_label": 0.7083333333333334,
-              "acc_rules_regime_at_decision": 0.8333333333333334
+              "acc_rules_regime_at_decision": 0.8333333333333334,
+              "acc_rules_regime_lookup": 0.875
             },
             {
               "fold": 1,
@@ -2229,7 +2392,8 @@
               "prior_given_rules_regime_brier": 0.36162165621701275,
               "acc_majority_class": 0.6666666666666666,
               "acc_previous_label": 0.6666666666666666,
-              "acc_rules_regime_at_decision": 0.7083333333333334
+              "acc_rules_regime_at_decision": 0.7083333333333334,
+              "acc_rules_regime_lookup": 0.8333333333333334
             },
             {
               "fold": 2,
@@ -2246,7 +2410,8 @@
               "prior_given_rules_regime_brier": 0.4443513618591474,
               "acc_majority_class": 0.5416666666666666,
               "acc_previous_label": 0.625,
-              "acc_rules_regime_at_decision": 0.75
+              "acc_rules_regime_at_decision": 0.75,
+              "acc_rules_regime_lookup": 0.7083333333333334
             },
             {
               "fold": 3,
@@ -2263,7 +2428,8 @@
               "prior_given_rules_regime_brier": 0.19760226366880249,
               "acc_majority_class": 0.625,
               "acc_previous_label": 0.75,
-              "acc_rules_regime_at_decision": 0.8333333333333334
+              "acc_rules_regime_at_decision": 0.8333333333333334,
+              "acc_rules_regime_lookup": 0.875
             },
             {
               "fold": 4,
@@ -2280,7 +2446,8 @@
               "prior_given_rules_regime_brier": 0.22928994082840234,
               "acc_majority_class": 0.875,
               "acc_previous_label": 0.75,
-              "acc_rules_regime_at_decision": 0.875
+              "acc_rules_regime_at_decision": 0.875,
+              "acc_rules_regime_lookup": 0.875
             }
           ],
           "pooled": {
@@ -2359,6 +2526,20 @@
                 "difference_ci_mean_block_12": [
                   -0.038461538461538436,
                   0.07692307692307698
+                ]
+              },
+              "rules_regime_lookup": {
+                "other_mean": 0.8269230769230769,
+                "difference": -0.019230769230769162,
+                "difference_ci": [
+                  -0.05769230769230771,
+                  0.019230769230769162
+                ],
+                "share_of_replicates_not_better": 0.921,
+                "mcnemar_p": 0.6875,
+                "difference_ci_mean_block_12": [
+                  -0.04831730769230732,
+                  0.009615384615384581
                 ]
               }
             }
@@ -2562,12 +2743,12 @@
         "n_degenerate_replicates": 0
       },
       "deflated_sharpe": {
-        "n_trials": 92,
+        "n_trials": 116,
         "per_period_sharpe": 0.24049784589483103,
         "skew": -0.353364448443376,
         "kurtosis_pearson": 3.665621582046808,
-        "vs_zero": 0.5222565079679546,
-        "vs_buy_and_hold": 0.0030989709939129796,
+        "vs_zero": 0.48985018435300304,
+        "vs_buy_and_hold": 0.002413304620588528,
         "single_trial_vs_buy_and_hold": 0.40671806528162624,
         "note": "P(true Sharpe > threshold) after deflating for n_trials; per-period (monthly) Sharpe, Pearson kurtosis"
       }
@@ -2617,12 +2798,12 @@
         "n_degenerate_replicates": 0
       },
       "deflated_sharpe": {
-        "n_trials": 92,
+        "n_trials": 116,
         "per_period_sharpe": 0.2543301365669901,
         "skew": -0.34994897688418614,
         "kurtosis_pearson": 3.806660881040756,
-        "vs_zero": 0.5753082497303992,
-        "vs_buy_and_hold": 0.004803937408511993,
+        "vs_zero": 0.543257082354841,
+        "vs_buy_and_hold": 0.003782479753732265,
         "single_trial_vs_buy_and_hold": 0.46473743371956316,
         "note": "P(true Sharpe > threshold) after deflating for n_trials; per-period (monthly) Sharpe, Pearson kurtosis"
       }
@@ -2672,11 +2853,11 @@
         "n_degenerate_replicates": 0
       },
       "deflated_sharpe": {
-        "n_trials": 92,
+        "n_trials": 116,
         "per_period_sharpe": 0.2792716551405127,
         "skew": -0.5030152819181584,
         "kurtosis_pearson": 3.5858369748859276,
-        "vs_zero": 0.5382762388271117,
+        "vs_zero": 0.5059159594647794,
         "vs_buy_and_hold": null,
         "single_trial_vs_buy_and_hold": null,
         "note": "unset vs buy-and-hold: the strategy's returns are buy-and-hold's (always long), so there is no hypothesis to deflate"
@@ -2727,11 +2908,11 @@
         "n_degenerate_replicates": 0
       },
       "deflated_sharpe": {
-        "n_trials": 92,
+        "n_trials": 116,
         "per_period_sharpe": 0.2792716551405127,
         "skew": -0.5030152819181584,
         "kurtosis_pearson": 3.5858369748859276,
-        "vs_zero": 0.5382762388271117,
+        "vs_zero": 0.5059159594647794,
         "vs_buy_and_hold": null,
         "single_trial_vs_buy_and_hold": null,
         "note": "unset vs buy-and-hold: the strategy's returns are buy-and-hold's (always long), so there is no hypothesis to deflate"
@@ -2739,14 +2920,27 @@
     }
   ],
   "verdict": {
+    "bar": {
+      "direction": "majority_class",
+      "regime": "rules_regime_lookup"
+    },
     "rule": "beats = paired 95% stationary-bootstrap interval of the difference above 0 and exact McNemar p < 0.05 (classification); paired Sharpe-difference interval above 0 (trading)",
-    "statement": "No model beats every baseline on accuracy. No direction strategy beats buy-and-hold on Sharpe (paired interval includes or is below 0).",
+    "statement": "No model beats its bar on accuracy (direction: majority_class; regime: rules_regime_lookup). No direction strategy beats buy-and-hold on Sharpe (paired interval includes or is below 0).",
     "classification": [
       {
         "target": "direction",
         "feature_set": "base",
         "model": "logistic",
         "accuracy": 0.65625,
+        "bar": "majority_class",
+        "bar_accuracy": 0.6875,
+        "difference_vs_bar": -0.03125,
+        "difference_vs_bar_ci": [
+          -0.0859375,
+          0.0078125
+        ],
+        "mcnemar_p_vs_bar": 0.21875,
+        "beats_bar": false,
         "best_baseline": "majority_class",
         "best_baseline_accuracy": 0.6875,
         "baselines_beaten": [],
@@ -2761,6 +2955,15 @@
         "feature_set": "base",
         "model": "lightgbm",
         "accuracy": 0.6640625,
+        "bar": "majority_class",
+        "bar_accuracy": 0.6875,
+        "difference_vs_bar": -0.0234375,
+        "difference_vs_bar_ci": [
+          -0.09375,
+          0.03125
+        ],
+        "mcnemar_p_vs_bar": 0.5078125,
+        "beats_bar": false,
         "best_baseline": "majority_class",
         "best_baseline_accuracy": 0.6875,
         "baselines_beaten": [],
@@ -2775,8 +2978,17 @@
         "feature_set": "base",
         "model": "logistic",
         "accuracy": 0.7109375,
-        "best_baseline": "rules_regime_at_decision",
-        "best_baseline_accuracy": 0.7734375,
+        "bar": "rules_regime_lookup",
+        "bar_accuracy": 0.8046875,
+        "difference_vs_bar": -0.09375,
+        "difference_vs_bar_ci": [
+          -0.1796875,
+          -0.015625
+        ],
+        "mcnemar_p_vs_bar": 0.01181793212890625,
+        "beats_bar": false,
+        "best_baseline": "rules_regime_lookup",
+        "best_baseline_accuracy": 0.8046875,
         "baselines_beaten": [],
         "beats_every_baseline": false,
         "log_loss_better_than": [
@@ -2792,8 +3004,17 @@
         "feature_set": "base",
         "model": "lightgbm",
         "accuracy": 0.7734375,
-        "best_baseline": "rules_regime_at_decision",
-        "best_baseline_accuracy": 0.7734375,
+        "bar": "rules_regime_lookup",
+        "bar_accuracy": 0.8046875,
+        "difference_vs_bar": -0.03125,
+        "difference_vs_bar_ci": [
+          -0.078125,
+          0.0234375
+        ],
+        "mcnemar_p_vs_bar": 0.3876953125,
+        "beats_bar": false,
+        "best_baseline": "rules_regime_lookup",
+        "best_baseline_accuracy": 0.8046875,
         "baselines_beaten": [
           "majority_class",
           "previous_label"
@@ -2812,6 +3033,15 @@
         "feature_set": "base+hmm",
         "model": "logistic",
         "accuracy": 0.7211538461538461,
+        "bar": "majority_class",
+        "bar_accuracy": 0.7211538461538461,
+        "difference_vs_bar": 0.0,
+        "difference_vs_bar_ci": [
+          0.0,
+          0.0
+        ],
+        "mcnemar_p_vs_bar": 1.0,
+        "beats_bar": false,
         "best_baseline": "majority_class",
         "best_baseline_accuracy": 0.7211538461538461,
         "baselines_beaten": [
@@ -2828,6 +3058,15 @@
         "feature_set": "base+hmm",
         "model": "lightgbm",
         "accuracy": 0.7211538461538461,
+        "bar": "majority_class",
+        "bar_accuracy": 0.7211538461538461,
+        "difference_vs_bar": 0.0,
+        "difference_vs_bar_ci": [
+          0.0,
+          0.0
+        ],
+        "mcnemar_p_vs_bar": 1.0,
+        "beats_bar": false,
         "best_baseline": "majority_class",
         "best_baseline_accuracy": 0.7211538461538461,
         "baselines_beaten": [
@@ -2844,8 +3083,17 @@
         "feature_set": "base+hmm",
         "model": "logistic",
         "accuracy": 0.7788461538461539,
-        "best_baseline": "rules_regime_at_decision",
-        "best_baseline_accuracy": 0.7884615384615384,
+        "bar": "rules_regime_lookup",
+        "bar_accuracy": 0.8269230769230769,
+        "difference_vs_bar": -0.04807692307692302,
+        "difference_vs_bar_ci": [
+          -0.08653846153846156,
+          -0.009615384615384581
+        ],
+        "mcnemar_p_vs_bar": 0.1796875,
+        "beats_bar": false,
+        "best_baseline": "rules_regime_lookup",
+        "best_baseline_accuracy": 0.8269230769230769,
         "baselines_beaten": [],
         "beats_every_baseline": false,
         "log_loss_better_than": [
@@ -2861,8 +3109,17 @@
         "feature_set": "base+hmm",
         "model": "lightgbm",
         "accuracy": 0.8076923076923077,
-        "best_baseline": "rules_regime_at_decision",
-        "best_baseline_accuracy": 0.7884615384615384,
+        "bar": "rules_regime_lookup",
+        "bar_accuracy": 0.8269230769230769,
+        "difference_vs_bar": -0.019230769230769162,
+        "difference_vs_bar_ci": [
+          -0.05769230769230771,
+          0.019230769230769162
+        ],
+        "mcnemar_p_vs_bar": 0.6875,
+        "beats_bar": false,
+        "best_baseline": "rules_regime_lookup",
+        "best_baseline_accuracy": 0.8269230769230769,
         "baselines_beaten": [
           "majority_class",
           "previous_label"
@@ -2884,7 +3141,7 @@
         "sharpe": 0.8331089764014349,
         "buy_and_hold_sharpe": 0.9100015613979444,
         "beats_buy_and_hold": false,
-        "deflated_sharpe_vs_buy_and_hold": 0.0030989709939129796
+        "deflated_sharpe_vs_buy_and_hold": 0.002413304620588528
       },
       {
         "feature_set": "base",
@@ -2892,7 +3149,7 @@
         "sharpe": 0.8810254368599161,
         "buy_and_hold_sharpe": 0.9100015613979444,
         "beats_buy_and_hold": false,
-        "deflated_sharpe_vs_buy_and_hold": 0.004803937408511993
+        "deflated_sharpe_vs_buy_and_hold": 0.003782479753732265
       },
       {
         "feature_set": "base+hmm",
@@ -2918,24 +3175,24 @@
   ],
   "timings": {
     "walk_forward_wall_seconds": {
-      "direction/base/logistic": 2.3392130079955678,
-      "direction/base/lightgbm": 3.4155418459995417,
-      "regime/base/logistic": 3.88523903600435,
-      "regime/base/lightgbm": 7.5717739709944,
-      "direction/base+hmm/logistic": 2.1506502219999675,
-      "direction/base+hmm/lightgbm": 3.1834796730036032,
-      "regime/base+hmm/logistic": 3.5185370199978934,
-      "regime/base+hmm/lightgbm": 7.24892819699744
+      "direction/base/logistic": 2.5081149820034625,
+      "direction/base/lightgbm": 3.3757262810031534,
+      "regime/base/logistic": 3.087795127998106,
+      "regime/base/lightgbm": 7.59072054799617,
+      "direction/base+hmm/logistic": 2.0140580169972964,
+      "direction/base+hmm/lightgbm": 2.821166396002809,
+      "regime/base+hmm/logistic": 3.3359603059943765,
+      "regime/base+hmm/lightgbm": 5.954097861998889
     }
   },
   "environment": {
-    "recorded_at": "2026-11-15T17:17:54+00:00",
+    "recorded_at": "2026-11-15T17:34:45+00:00",
     "cpu_model": "Intel(R) Core(TM) 7 150U",
     "logical_cpus": 12,
     "loadavg_1_5_15_at_start": [
-      3.7685546875,
-      2.1796875,
-      1.58251953125
+      2.19970703125,
+      1.46875,
+      1.49365234375
     ],
     "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
     "python": "3.12.16",

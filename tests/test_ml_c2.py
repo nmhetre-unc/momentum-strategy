@@ -289,3 +289,12 @@ def test_paired_sharpe_bootstrap():
     assert monthly_sharpe(np.zeros(5)) != monthly_sharpe(np.zeros(5))   # NaN, not 0
     with pytest.raises(ValueError):
         paired_sharpe_bootstrap(r, r[:-1])
+
+
+def test_tuning_accepts_an_explicit_grid():
+    X, y, t1 = _toy()
+    t0 = pd.Series(X.index, index=X.index)
+    grid = [{"C": 0.5}, {"C": 5.0}]
+    result = tune("logistic", X, y, t0, t1, (0.0, 1.0), n_splits=4, embargo=2, grid=grid)
+    assert [t["params"] for t in result.trials] == grid
+    assert result.params in grid

@@ -138,18 +138,21 @@ class TuningResult:
 
 def tune(model: str, X: pd.DataFrame, y: pd.Series, t0: pd.Series, t1: pd.Series,
          classes: tuple[float, ...], n_splits: int = INNER_SPLITS,
-         embargo: int = EMBARGO_MONTHS) -> TuningResult:
+         embargo: int = EMBARGO_MONTHS,
+         grid: list[dict[str, Any]] | None = None) -> TuningResult:
     """
-    Scores every configuration of `model`'s grid on purged k-fold splits
-    of (X, y) -- which must be one outer fold's training set only -- and
-    returns the one with the lowest pooled inner log loss.
+    Scores every configuration of `grid` (default: `model`'s grid) on
+    purged k-fold splits of (X, y) -- which must be one outer fold's
+    training set only -- and returns the one with the lowest pooled
+    inner log loss.
     """
+    grid = grid_for(model) if grid is None else grid
     inner = purged_kfold_splits(t0, t1, n_splits=n_splits, embargo=embargo)
     inner = [f for f in inner if len(f.train) > 0]
     if not inner:
         raise ValueError("no inner fold has training data")
     trials = []
-    for params in grid_for(model):
+    for params in grid:
         y_true, probas = [], []
         for fold in inner:
             probas.append(fit_predict_proba(model, params, X.iloc[fold.train],
@@ -165,7 +168,7 @@ def tune(model: str, X: pd.DataFrame, y: pd.Series, t0: pd.Series, t1: pd.Series
     best = min(range(len(trials)), key=lambda i: (trials[i]["inner_log_loss"], i))
     for i, trial in enumerate(trials):
         trial["selected"] = i == best
-    return TuningResult(params=dict(grid_for(model)[best]), trials=trials)
+    return TuningResult(params=dict(grid[best]), trials=trials)
 
 
 @dataclass
@@ -178,15 +181,19 @@ class WalkForwardPredictions:
 
 
 def walk_forward_predict(model: str, X: pd.DataFrame, y: pd.Series, t1: pd.Series,
-                         folds: list[Fold], target: str) -> WalkForwardPredictions:
-    """Nested walk-forward: tune on inner folds of each outer training set, refit, predict."""
+                         folds: list[Fold], target: str,
+                         grid: list[dict[str, Any]] | None = None) -> WalkForwardPredictions:
+    """
+    Nested walk-forward: tune on inner folds of each outer training set,
+    refit, predict. `grid` overrides `model`'s grid.
+    """
     classes = classes_for(target)
     t0 = pd.Series(X.index, index=X.index)
     pieces, fold_numbers, selected, trials = [], [], [], []
     for fold in folds:
         train = fold.train
         tuned = tune(model, X.iloc[train], y.iloc[train], t0.iloc[train], t1.iloc[train],
-                     classes)
+                     classes, grid=grid)
         proba = fit_predict_proba(model, tuned.params, X.iloc[train], y.iloc[train],
                                   X.iloc[fold.test], classes)
         index = X.index[fold.test]
