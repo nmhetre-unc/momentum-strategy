@@ -14,6 +14,17 @@ to know when each label became known in order to purge it.
   make the target itself depend on which window it was fitted on, so
   the "answer" would move between folds.
 
+  Much of this label is already determined at t. Each daily `rules`
+  regime classifies on a 60-day trend and a 20-day volatility ranked
+  against its expanding history, so on day k of month t+1, 60-k of the
+  trend's daily returns and 20-k of the volatility's are known at the
+  decision date. The label therefore often equals the regime already
+  observable at t: the regime_rules feature, or previous_labels(). A
+  model has to beat that persistence, not the majority class, before it
+  can claim to predict regime changes. scripts/ml_c1_report.py measures
+  how often the label equals each (results/ml/c1_baselines.json,
+  "regime_label_determinacy").
+
 The last decision date has no next month, so its label is NaN, never
 filled.
 
