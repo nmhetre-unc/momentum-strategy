@@ -15,6 +15,12 @@ per regime, which increases flexibility but also overfitting risk since
 each model sees a fraction of the data at the same parameter count;
 regimes with too little history fall back to a model fitted on
 everything, and model_report() reports which did.
+
+Monthly SPY prediction (next-month direction and regime) lives in the
+submodules, separate from this daily strategy: qbt.ml.features and
+qbt.ml.labels build the point-in-time dataset, qbt.ml.splits the purged
+walk-forward folds, qbt.ml.baselines and qbt.ml.evaluate the baselines
+and their out-of-sample scoring.
 """
 
 import numpy as np
