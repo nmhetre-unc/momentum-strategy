@@ -1,0 +1,127 @@
+{
+  "measurement": "cloudwatch",
+  "instance": "i-0b77a0a58d5db16e9",
+  "period_seconds": 300,
+  "series": {
+    "CPUUtilization": [
+      {
+        "Timestamp": "2026-11-15T16:03:00-05:00",
+        "Average": 16.153670430833046,
+        "Maximum": 24.45783735955525,
+        "Unit": "Percent"
+      },
+      {
+        "Timestamp": "2026-11-15T16:08:00-05:00",
+        "Average": 19.143539156801108,
+        "Maximum": 20.008681280154928,
+        "Unit": "Percent"
+      },
+      {
+        "Timestamp": "2026-11-15T16:13:00-05:00",
+        "Average": 20.8578892124003,
+        "Maximum": 29.856840491308766,
+        "Unit": "Percent"
+      },
+      {
+        "Timestamp": "2026-11-15T16:18:00-05:00",
+        "Average": 17.920767906794453,
+        "Maximum": 20.61580545084565,
+        "Unit": "Percent"
+      },
+      {
+        "Timestamp": "2026-11-15T16:23:00-05:00",
+        "Average": 17.47195392446242,
+        "Maximum": 19.458333333333336,
+        "Unit": "Percent"
+      },
+      {
+        "Timestamp": "2026-11-15T16:28:00-05:00",
+        "Average": 24.27228144439393,
+        "Maximum": 46.432625534188034,
+        "Unit": "Percent"
+      },
+      {
+        "Timestamp": "2026-11-15T16:33:00-05:00",
+        "Average": 20.581501420448486,
+        "Maximum": 28.69371169730882,
+        "Unit": "Percent"
+      }
+    ],
+    "CPUCreditBalance": [
+      {
+        "Timestamp": "2026-11-15T16:08:00-05:00",
+        "Average": 0.0,
+        "Maximum": 0.0,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:13:00-05:00",
+        "Average": 0.30148885,
+        "Maximum": 0.30148885,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:18:00-05:00",
+        "Average": 0.00019828333333333335,
+        "Maximum": 0.00019828333333333335,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:23:00-05:00",
+        "Average": 0.24481426666666667,
+        "Maximum": 0.24481426666666667,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:28:00-05:00",
+        "Average": 0.59315005,
+        "Maximum": 0.59315005,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:33:00-05:00",
+        "Average": 0.1747456,
+        "Maximum": 0.1747456,
+        "Unit": "Count"
+      }
+    ],
+    "CPUCreditUsage": [
+      {
+        "Timestamp": "2026-11-15T16:08:00-05:00",
+        "Average": 1.9051244166666668,
+        "Maximum": 1.9051244166666668,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:13:00-05:00",
+        "Average": 1.70429115,
+        "Maximum": 1.70429115,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:18:00-05:00",
+        "Average": 2.2939705666666668,
+        "Maximum": 2.2939705666666668,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:23:00-05:00",
+        "Average": 1.7563280666666667,
+        "Maximum": 1.7563280666666667,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:28:00-05:00",
+        "Average": 1.65305755,
+        "Maximum": 1.65305755,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-15T16:33:00-05:00",
+        "Average": 2.4153577833333335,
+        "Maximum": 2.4153577833333335,
+        "Unit": "Count"
+      }
+    ]
+  }
+}

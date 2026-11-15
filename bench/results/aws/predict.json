@@ -1,0 +1,70 @@
+{
+  "measurement": "predict",
+  "rtt": {
+    "method": "TCP connect to 8000/tcp, 40 samples",
+    "measured_at": "2026-11-15T21:23:52+00:00",
+    "min_ms": 30.80445600062376,
+    "p50_ms": 37.442990997078596,
+    "p90_ms": 41.392839001491666,
+    "max_ms": 43.6696389951976
+  },
+  "config": {
+    "rate_per_s": 20,
+    "seconds": 60,
+    "warmup_seconds": 5,
+    "workers": "idle",
+    "api_processes": 1,
+    "cold_start": "first request after `docker compose restart api`",
+    "latency_from": "scheduled send time at the laptop (open loop)"
+  },
+  "model": {
+    "version": 1,
+    "model_type": "lightgbm",
+    "target": "regime",
+    "out_of_sample": {
+      "accuracy": 0.8076923076923077,
+      "accuracy_ci": [
+        0.7307692307692307,
+        0.875
+      ],
+      "n_months": 104,
+      "first_test_decision": "2016-04-29",
+      "last_test_decision": "2024-11-29",
+      "auc": 0.7923080807974865,
+      "log_loss": 0.7375943082263869,
+      "brier": 0.3418489778260466
+    },
+    "baseline": {
+      "name": "rules_regime_lookup",
+      "description": "the most frequent next-month regime among training months that had the same rules regime on their decision date",
+      "accuracy": 0.8269230769230769,
+      "difference": -0.019230769230769162,
+      "difference_ci": [
+        -0.05769230769230771,
+        0.019230769230769162
+      ],
+      "mcnemar_p": 0.6875,
+      "beats": false
+    }
+  },
+  "runs": [
+    {
+      "cold_first_request_ms": 259.9576009961311,
+      "cold_status": 200,
+      "requests": 1200,
+      "errors": 0,
+      "p50_ms": 46.063308993325336,
+      "p90_ms": 57.923743501305594,
+      "p99_ms": 124.02797373339124,
+      "max_ms": 206.3952469979995,
+      "max_send_lag_ms": 3.4475369975552894,
+      "responses_200": 1301,
+      "rows_logged": 1301,
+      "every_200_logged_once": true,
+      "started": "2026-11-15T21:23:52+00:00",
+      "ended": "2026-11-15T21:25:12+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    }
+  ]
+}

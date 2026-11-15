@@ -1,0 +1,42 @@
+{
+  "measurement": "latency",
+  "rtt": {
+    "method": "TCP connect to 8000/tcp, 40 samples",
+    "measured_at": "2026-11-15T21:21:34+00:00",
+    "min_ms": 30.93865400296636,
+    "p50_ms": 37.00981650399626,
+    "p90_ms": 39.04096519909217,
+    "max_ms": 43.69971800042549
+  },
+  "config": {
+    "workers": 2,
+    "load": 0.5,
+    "seconds": 90,
+    "warmup_seconds": 20,
+    "queue_times_from": "database timestamps (no network in them)",
+    "post_ms_from": "the laptop (includes the network)",
+    "reps": 1
+  },
+  "runs": [
+    {
+      "target_rate_per_s": 0.23776923089490962,
+      "submitted": 18,
+      "post_errors": 0,
+      "measured_jobs": 15,
+      "backlog_growth_jobs_per_s": 0.002778549597110308,
+      "queue_growing": false,
+      "backlog_max": 1,
+      "submit_to_start_ms_p50": 7.055044174194336,
+      "submit_to_start_ms_p99": 13.391671180725098,
+      "submit_to_done_ms_p50": 246.92296981811523,
+      "submit_to_done_ms_p99": 1035.7210540771482,
+      "post_ms_p50_at_laptop": 71.4631851806189,
+      "post_ms_p99_at_laptop": 109.74075996840837,
+      "max_send_lag_ms": 13.987264661409426,
+      "started": "2026-11-15T21:21:34+00:00",
+      "ended": "2026-11-15T21:23:11+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    }
+  ]
+}

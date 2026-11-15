@@ -193,8 +193,9 @@ class Liveness:
     """
     Touches QBT_HEALTH_FILE after each successful claim poll and lease
     heartbeat. Both talk to the database, so a fresh file means the worker
-    loop is turning and the database answers; `python -m qbt_service.health
-    worker` (the container healthcheck) checks its age.
+    loop is turning and the database answers. The container healthcheck
+    checks its age with a shell command (compose.yaml); `python -m
+    qbt_service.health worker` does the same check by hand.
     """
 
     def __init__(self, path: str | None):

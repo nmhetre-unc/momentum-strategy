@@ -1,0 +1,48 @@
+{
+  "measurement": "throughput",
+  "rtt": {
+    "method": "TCP connect to 8000/tcp, 40 samples",
+    "measured_at": "2026-11-15T21:15:34+00:00",
+    "min_ms": 31.29710299981525,
+    "p50_ms": 37.45063700262108,
+    "p90_ms": 40.118264203192666,
+    "max_ms": 1047.0167639941792
+  },
+  "config": {
+    "workers": [
+      1,
+      2
+    ],
+    "jobs_per_worker": 60,
+    "rate_over": "middle 80% of completions (database finished_at)",
+    "reps": 1
+  },
+  "runs": [
+    {
+      "workers": 1,
+      "jobs": 60,
+      "post_errors": 0,
+      "jobs_per_minute": 158.25754151091368,
+      "backtest_ms_median": 220.0,
+      "backtest_ms_p90": 429.3000000000002,
+      "wall_seconds": 22.956126928329468,
+      "started": "2026-11-15T21:15:34+00:00",
+      "ended": "2026-11-15T21:16:19+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "workers": 2,
+      "jobs": 120,
+      "post_errors": 0,
+      "jobs_per_minute": 28.532307707389155,
+      "backtest_ms_median": 3117.5,
+      "backtest_ms_p90": 4806.800000000001,
+      "wall_seconds": 252.4893581867218,
+      "started": "2026-11-15T21:16:19+00:00",
+      "ended": "2026-11-15T21:21:30+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    }
+  ]
+}

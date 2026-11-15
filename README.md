@@ -404,6 +404,214 @@ running both can't provide it.
   workers' reapers, but capacity stays reduced until `docker compose up`
   runs again. An orchestrator (Kubernetes, Nomad, Swarm) would replace it.
 
+## Deploying to AWS
+
+The service has run on AWS once (D2, 2026-11-15): applied from `infra/`,
+measured from a laptop, then destroyed. Nothing runs there between
+sessions. The pieces that deploy a new build, `.github/workflows/publish.yml`
+and `scripts/deploy.sh`, are new: their failure paths are tested, and the
+first real deploy is verified in a follow-up after this is merged.
+
+### Architecture
+
+```
+GitHub, push to main ──▶ publish.yml (GITHUB_TOKEN: contents read, packages write)
+                          builds the image, pushes ghcr.io/nmhetre-unc/momentum-strategy:<sha>,
+                          records its digest (job summary + artifact image-digest)
+
+your machine, `aws login` ──▶ scripts/deploy.sh <sha>
+   1. GHCR must serve the digest publish.yml recorded, or it stops
+   2. copies that digest into ECR (qbt-service:<sha>), checks ECR's digest
+   3. SSM Run Command on the instance: pull qbt-service@<digest> from ECR,
+      qbt up, wait for GET /health = 200
+
+ your IP ──:8000──▶ EC2 t3.small, us-east-2 (default VPC, public subnet)
+                    ├─ api container ────┐
+                    ├─ worker container ─┼──▶ RDS PostgreSQL 17, db.t4g.micro (private)
+                    └─ one-shots: migrate, ingest, train
+                    pulls only from ECR; DATABASE_URL from SSM Parameter Store
+```
+
+[`infra/README.md`](infra/README.md) covers the Terraform: what each
+resource is, why Compose on one instance, and the Free Tier check.
+
+### Why build and deploy are separate
+
+The plan was a single GitHub Actions workflow: GitHub's OIDC token,
+exchanged for a short-lived AWS role, would push to ECR and redeploy over
+SSM. The account doesn't allow it. It's a project account under an AWS
+Organizations SCP, and that SCP denies the GitHub OIDC identity provider:
+
+- Listing providers is refused by the SCP itself:
+  `iam:ListOpenIDConnectProviders on resource: arn:aws:iam::<account>:oidc-provider/* with an explicit deny in a service control policy`
+  (policy `p-u3fekd1i`).
+- The IAM policy simulator, run against the role I sign in with
+  (`aws iam simulate-principal-policy`, `oidc-provider/token.actions.githubusercontent.com`),
+  gives `iam:CreateOpenIDConnectProvider: explicitDeny`, with
+  `AllowedByOrganizations: False`.
+- The same simulation allows `iam:CreateRole` and `iam:PutRolePolicy` under
+  `role/qbt/`. Only the identity provider is blocked.
+
+Without the provider, nothing in GitHub can obtain AWS credentials, and
+long-lived access keys are ruled out. So the work is split along that line:
+
+- **Building is automatic.** GitHub builds every commit on main and
+  publishes it to GHCR with `GITHUB_TOKEN`, which can't touch AWS.
+- **Deploying is manual.** A person runs `scripts/deploy.sh` with the
+  short-lived credentials `aws login` issues.
+- **The digest connects the two.** `deploy.sh` deploys only an image whose
+  GHCR digest equals the one publish.yml recorded for that commit on main.
+  It copies that exact digest to ECR and checks it there, so the instance
+  runs what CI built. The instance still pulls only from ECR, with its own
+  role.
+
+**On an account that allows OIDC,** `deploy.sh` would become a
+`workflow_dispatch` workflow:
+
+- **Trust:** a role trusting `token.actions.githubusercontent.com` with
+  `aud = sts.amazonaws.com` and
+  `sub = repo:nmhetre-unc/momentum-strategy:ref:refs/heads/main`.
+  The default `sub` doesn't say which event started the run. Limiting the
+  role to `workflow_dispatch` takes GitHub's OIDC subject customization to
+  add `event_name` to `sub`.
+- **Permissions:**
+  - ECR push to `qbt-service` only (plus the unscopable `ecr:GetAuthorizationToken`);
+  - `ec2:DescribeInstances`;
+  - `ssm:SendCommand` only for `AWS-RunShellScript` and only on instances tagged `Project=qbt`;
+  - `ssm:GetCommandInvocation`.
+- **Cost:** IAM roles and OIDC providers are free, so $0.
+- **What stays:** the GHCR hop and the digest check could go. Everything
+  on the instance side would stay the same.
+
+### Security choices
+
+- **No long-lived AWS credentials anywhere.** Deploys use `aws login`
+  sessions. The instance uses its role, through IMDSv2.
+- **GitHub can build but can't deploy.** publish.yml has `contents: read`
+  and `packages: write` only. Its actions are pinned to commit SHAs.
+  `deploy.sh` accepts only images built from main whose digest matches the
+  one recorded.
+- **SSM instead of SSH.** No key pair and no port 22. Commands go through
+  SSM Run Command, and shells through Session Manager.
+- **Only your IP can reach the API.** The security group admits port 8000
+  from one `/32` (`allowed_cidr`). The API is plain HTTP with no
+  authentication, so this is its only protection.
+- **TLS to the database is verified.** `sslmode=verify-full` against the
+  RDS CA bundle, which is pinned by SHA-256 and mounted read-only. D2
+  checked it against the real certificate: connecting by IP address, or
+  with the system CA bundle, is refused.
+- **Containers can't use the instance role.** IMDSv2 is required, with a
+  hop limit of 1, so the instance metadata service is out of reach from
+  inside Docker's network.
+- **The database password is in neither state nor plan.** It's an
+  ephemeral value, sent only through write-only arguments (`password_wo`,
+  `value_wo`), and read at start-up from an SSM SecureString.
+- **Output is scrubbed.** `deploy.sh` and the AWS benchmark pass their
+  output through [`bench/scrub.py`](bench/scrub.py), after a psycopg error
+  once printed the database URL during D2. That credential was destroyed
+  with the database.
+
+### Cost
+
+From [`infra/README.md`](infra/README.md#cost), us-east-2 on-demand prices:
+
+| | Cost |
+|---|---|
+| A 2-hour session (apply, use, destroy) | about $0.09 |
+| The stack left running | about $33.80 a month |
+| D2's 40 minutes | about $0.03 |
+| publish.yml (public repo, so Actions minutes are free), deploy.sh | $0 |
+| GHCR | $0 if the package is public. A private one counts against the free Packages storage, so check its visibility after the first publish |
+
+The account is on the Free plan, so all of this comes out of its credits.
+It can't be billed.
+
+### Runbook
+
+```bash
+# 1. Infrastructure (~8 min, mostly RDS).
+cd infra
+printf 'allowed_cidr = "%s/32"\n' "$(curl -s https://checkip.amazonaws.com)" > terraform.tfvars
+terraform init && terraform plan -out=qbt.tfplan && terraform apply qbt.tfplan
+cd ..
+
+# 2. Deploy a commit that publish.yml has built (its job summary prints this command).
+aws login
+scripts/deploy.sh <full commit sha> --migrate   # --migrate: first deploy, or a commit with a migration
+
+# 3. First time only: data and model, on the instance (Session Manager, or SSM Run Command).
+#    sudo qbt ingest SPY --start 2008-01-01 --end 2025-01-01
+#    sudo qbt train  SPY --start 2008-01-01 --end 2025-01-01
+
+# 4. Later builds: merge to main, wait for publish.yml, then
+scripts/deploy.sh <full commit sha>
+
+# 5. Teardown: everything, including ECR images and RDS backups.
+cd infra && terraform destroy
+```
+
+After `terraform destroy`, D2 confirmed with the AWS CLI that nothing
+billable was left: no instances, EBS volumes or snapshots, RDS instances or
+snapshots, public IPs or ENIs, ECR repositories, or SSM parameters. The
+commands are in [`bench/results/aws/teardown.json`](bench/results/aws/teardown.json).
+
+**What `deploy.sh` stops on, each with its own message:**
+
+- expired or missing AWS credentials;
+- no running instance, more than one, or an SSM agent that isn't online;
+- no ECR repository;
+- no successful publish.yml run on main for the commit;
+- a digest mismatch between GHCR, the recorded digest and ECR;
+- `/health` not returning 200 within 180 s;
+- an api or worker container running a different image.
+
+The first three were run against the destroyed stack: a bad argument, no
+credentials, and real credentials with no instance. Each stopped with its
+message.
+
+**The instance's compose file names one tag,** `image_tag` (default `v1`),
+and ECR tags are immutable. `deploy.sh` therefore pulls the image by digest
+and tags it locally under that name, so `qbt up` and the boot-time
+`qbt.service` run it without changing `infra/`.
+
+### Measured on AWS (D2)
+
+Full results and caveats are in [`bench/results/aws/`](bench/results/aws/README.md).
+The client was a laptop on a home connection, so every latency it measured
+includes the network. The round trip (TCP connect) is shown next to each
+one.
+
+| Measurement | Result | Network round trip, p50 |
+|---|---|---|
+| `terraform apply` start to API healthy | 941.5 s (RDS 449 s of the 467 s apply; ~2.5 min of manual checks) | |
+| GET /backtests/{id}, 20 req/s | p50 42.9 ms, p99 78.2 ms | 36.2 ms |
+| POST /predict, 20 req/s | p50 46.1 ms, p99 124.0 ms | 37.4 ms |
+| Throughput, 1 worker | 158 jobs/min | not included (database timestamps) |
+| Throughput, 2 workers | 29 jobs/min (CPU-credit throttled) | not included |
+| Kill a worker mid-job | passed on the 3rd attempt (2 of 2 reps): 0 lost, 0 duplicated, 0 completed twice; requeued in 31–36 s | not included |
+
+**Caveats:**
+
+- **The t3.small ran in standard credit mode, which can't be billed for
+  bursts.**
+  - Its credit balance stayed between 0.0 and 0.6, and CPU sat at the 20%
+    baseline.
+  - That throttling explains the 2-worker figure: 3.1 s per backtest
+    against 0.22 s. Neither throughput number reflects the service.
+  - The worker healthcheck's Python start-up also ran past its 5 s timeout.
+    That check is now a shell file-age test, which takes 2 ms in the image
+    against 254 ms for the Python check.
+- **The kill test passed once on AWS, on its third attempt.** All three
+  attempts are reported:
+  - **Attempt 1:** no job was in flight to kill.
+  - **Attempt 2:** two kills hit an idle worker, then the benchmark harness
+    failed on that healthcheck timeout. Its integrity checks never ran, and
+    its jobs were deleted, so lost, duplicated and completed-twice are
+    unknown for it.
+  - **Attempt 3:** passed.
+- **Reduced load.** The load was reduced from the laptop benchmarks (step 9)
+  to fit 2 vCPUs, with 1 repetition (2 for kill).
+
 ## Performance
 
 **What was hot.** Profiling the full results run (`scripts/regenerate_results.py`:

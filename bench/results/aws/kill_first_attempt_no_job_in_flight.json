@@ -1,0 +1,113 @@
+{
+  "measurement": "kill",
+  "rtt": {
+    "method": "TCP connect to 8000/tcp, 40 samples",
+    "measured_at": "2026-11-15T21:25:16+00:00",
+    "min_ms": 31.24686399678467,
+    "p50_ms": 34.56483949776157,
+    "p90_ms": 40.45807539951056,
+    "max_ms": 43.86076299851993
+  },
+  "config": {
+    "workers": 2,
+    "load": 0.6,
+    "seconds": 120,
+    "kill_at_seconds": 30,
+    "signal": "SIGKILL (docker kill, on the instance)",
+    "times_from": "the instance's clock: kill to status changes seen polling the API on localhost every 0.1 s",
+    "lease_seconds": 30,
+    "reaper_seconds": 15,
+    "reps": 2
+  },
+  "all_checks_pass": false,
+  "runs": [
+    {
+      "rep": 1,
+      "load_rate_per_s": 0.28532307707389154,
+      "kill_attempts": [
+        {
+          "victim": null
+        },
+        {
+          "victim": null
+        },
+        {
+          "victim": null
+        },
+        {
+          "victim": null
+        },
+        {
+          "victim": null
+        }
+      ],
+      "victims": {},
+      "checks": {
+        "posts_accepted": 33,
+        "post_errors": 0,
+        "jobs_in_db": 33,
+        "lost": 0,
+        "unexpected_extra_jobs": 0,
+        "not_succeeded": 0,
+        "without_result": 0,
+        "result_attempt_mismatch": 0,
+        "jobs_with_more_than_one_attempt": [],
+        "metric_rows_per_job": [
+          12
+        ],
+        "fencing_rejections_in_logs": 0,
+        "results_discarded_in_logs": 0,
+        "reaper_requeues_in_logs": 0
+      },
+      "all_checks_pass": false,
+      "started": "2026-11-15T21:25:16+00:00",
+      "ended": "2026-11-15T21:27:31+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    },
+    {
+      "rep": 2,
+      "load_rate_per_s": 0.28532307707389154,
+      "kill_attempts": [
+        {
+          "victim": null
+        },
+        {
+          "victim": null
+        },
+        {
+          "victim": null
+        },
+        {
+          "victim": null
+        },
+        {
+          "victim": null
+        }
+      ],
+      "victims": {},
+      "checks": {
+        "posts_accepted": 35,
+        "post_errors": 0,
+        "jobs_in_db": 35,
+        "lost": 0,
+        "unexpected_extra_jobs": 0,
+        "not_succeeded": 0,
+        "without_result": 0,
+        "result_attempt_mismatch": 0,
+        "jobs_with_more_than_one_attempt": [],
+        "metric_rows_per_job": [
+          12
+        ],
+        "fencing_rejections_in_logs": 0,
+        "results_discarded_in_logs": 0,
+        "reaper_requeues_in_logs": 0
+      },
+      "all_checks_pass": false,
+      "started": "2026-11-15T21:27:31+00:00",
+      "ended": "2026-11-15T21:29:40+00:00",
+      "power_events": [],
+      "discarded_attempts": 0
+    }
+  ]
+}
