@@ -1,0 +1,340 @@
+{
+  "measurement": "control",
+  "environment": {
+    "recorded_at": "2026-11-15T01:13:47+00:00",
+    "host": {
+      "cpu_model": "Intel(R) Core(TM) 7 150U",
+      "windows": {
+        "physical_cores": 10,
+        "logical_processors": 12,
+        "max_clock_mhz": 1800,
+        "ram_gib": 15.7,
+        "battery_status_code": 2,
+        "power_plan": "Balanced"
+      },
+      "power": {
+        "AC1.online": "1",
+        "BAT1.status": "Charging",
+        "BAT1.capacity": "98"
+      },
+      "on_ac_power": true,
+      "wslconfig": "absent (WSL defaults: all logical CPUs, 50% of host RAM)"
+    },
+    "wsl_distro": {
+      "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+      "logical_cpus": 12,
+      "loadavg_1_5_15": [
+        2.2958984375,
+        3.45556640625,
+        3.95068359375
+      ]
+    },
+    "docker": {
+      "operating_system": "Docker Desktop",
+      "server_version": "29.9.3",
+      "kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "vm_cpus": 12,
+      "vm_memory_bytes": 8162783232,
+      "vm_memory_gib": 7.6,
+      "storage_driver": "overlayfs",
+      "cgroup_version": "2",
+      "compose_version": "5.7.0"
+    },
+    "image": "sha256:50c40783c200323e04e1eb9ecc8d08cbb26956192d3714a6f307875dff3aec31",
+    "git_commit": "42927fa+dirty",
+    "python": "3.12.16"
+  },
+  "config": {
+    "worker_counts": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "seconds": 30,
+    "mix": [
+      "sma_crossover",
+      "momentum",
+      "mean_reversion",
+      "ml_direction"
+    ],
+    "reps": 3,
+    "what": "qbt.runner.run in W parallel containers; no API, queue or DB"
+  },
+  "summary": {
+    "1": {
+      "jobs_per_minute": {
+        "median": 758.0,
+        "min": 756.0,
+        "max": 760.0
+      },
+      "compute_ms_p50": {
+        "median": 76.51209400137304,
+        "min": 76.18412549891218,
+        "max": 77.32181500068691
+      },
+      "cpus_busy": {
+        "vm": {
+          "median": 1.31,
+          "min": 1.29,
+          "max": 1.34
+        },
+        "host_clock_ghz": {
+          "median": 4.08,
+          "min": 3.96,
+          "max": 4.14
+        }
+      }
+    },
+    "2": {
+      "jobs_per_minute": {
+        "median": 1152.0,
+        "min": 1134.0,
+        "max": 1154.0
+      },
+      "compute_ms_p50": {
+        "median": 98.87001350034552,
+        "min": 98.5228974986967,
+        "max": 98.89229750115192
+      },
+      "cpus_busy": {
+        "vm": {
+          "median": 2.58,
+          "min": 2.57,
+          "max": 2.62
+        },
+        "host_clock_ghz": {
+          "median": 3.44,
+          "min": 3.44,
+          "max": 3.45
+        }
+      }
+    },
+    "4": {
+      "jobs_per_minute": {
+        "median": 1274.0,
+        "min": 1248.0,
+        "max": 1286.0
+      },
+      "compute_ms_p50": {
+        "median": 183.54188825014717,
+        "min": 182.68455325051036,
+        "max": 184.54492475029838
+      },
+      "cpus_busy": {
+        "vm": {
+          "median": 4.86,
+          "min": 4.86,
+          "max": 4.92
+        },
+        "host_clock_ghz": {
+          "median": 3.06,
+          "min": 3.02,
+          "max": 3.06
+        }
+      }
+    },
+    "8": {
+      "jobs_per_minute": {
+        "median": 1606.0,
+        "min": 1578.0,
+        "max": 1608.0
+      },
+      "compute_ms_p50": {
+        "median": 289.359839750432,
+        "min": 286.9050415001766,
+        "max": 290.806418250213
+      },
+      "cpus_busy": {
+        "vm": {
+          "median": 8.89,
+          "min": 8.85,
+          "max": 8.9
+        },
+        "host_clock_ghz": {
+          "median": 2.68,
+          "min": 2.67,
+          "max": 2.69
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "workers": 1,
+      "backtests": 378,
+      "jobs_per_minute": 756.0,
+      "compute_ms_p50": 76.18412549891218,
+      "cpus_busy": {
+        "vm": 1.34,
+        "api": 0.03,
+        "db": 0.03,
+        "worker": 0.0,
+        "host_clock_ghz": 4.08
+      },
+      "rep": 1
+    },
+    {
+      "workers": 2,
+      "backtests": 576,
+      "jobs_per_minute": 1152.0,
+      "compute_ms_p50": 98.89229750115192,
+      "cpus_busy": {
+        "vm": 2.62,
+        "api": 0.05,
+        "db": 0.04,
+        "worker": 0.0,
+        "host_clock_ghz": 3.44
+      },
+      "rep": 1
+    },
+    {
+      "workers": 4,
+      "backtests": 643,
+      "jobs_per_minute": 1286.0,
+      "compute_ms_p50": 182.68455325051036,
+      "cpus_busy": {
+        "vm": 4.86,
+        "api": 0.06,
+        "db": 0.04,
+        "worker": 0.0,
+        "host_clock_ghz": 3.06
+      },
+      "rep": 1
+    },
+    {
+      "workers": 8,
+      "backtests": 804,
+      "jobs_per_minute": 1608.0,
+      "compute_ms_p50": 289.359839750432,
+      "cpus_busy": {
+        "vm": 8.9,
+        "api": 0.08,
+        "db": 0.06,
+        "worker": 0.0,
+        "host_clock_ghz": 2.67
+      },
+      "rep": 1
+    },
+    {
+      "workers": 2,
+      "backtests": 567,
+      "jobs_per_minute": 1134.0,
+      "compute_ms_p50": 98.87001350034552,
+      "cpus_busy": {
+        "vm": 2.57,
+        "api": 0.04,
+        "db": 0.04,
+        "worker": 0.0,
+        "host_clock_ghz": 3.45
+      },
+      "rep": 2
+    },
+    {
+      "workers": 4,
+      "backtests": 624,
+      "jobs_per_minute": 1248.0,
+      "compute_ms_p50": 183.54188825014717,
+      "cpus_busy": {
+        "vm": 4.92,
+        "api": 0.06,
+        "db": 0.05,
+        "worker": 0.0,
+        "host_clock_ghz": 3.02
+      },
+      "rep": 2
+    },
+    {
+      "workers": 8,
+      "backtests": 789,
+      "jobs_per_minute": 1578.0,
+      "compute_ms_p50": 290.806418250213,
+      "cpus_busy": {
+        "vm": 8.89,
+        "api": 0.06,
+        "db": 0.06,
+        "worker": 0.0,
+        "host_clock_ghz": 2.69
+      },
+      "rep": 2
+    },
+    {
+      "workers": 1,
+      "backtests": 380,
+      "jobs_per_minute": 760.0,
+      "compute_ms_p50": 77.32181500068691,
+      "cpus_busy": {
+        "vm": 1.29,
+        "api": 0.02,
+        "db": 0.02,
+        "worker": 0.0,
+        "host_clock_ghz": 3.96
+      },
+      "rep": 2
+    },
+    {
+      "workers": 4,
+      "backtests": 637,
+      "jobs_per_minute": 1274.0,
+      "compute_ms_p50": 184.54492475029838,
+      "cpus_busy": {
+        "vm": 4.86,
+        "api": 0.04,
+        "db": 0.04,
+        "worker": 0.0,
+        "host_clock_ghz": 3.06
+      },
+      "rep": 3
+    },
+    {
+      "workers": 8,
+      "backtests": 803,
+      "jobs_per_minute": 1606.0,
+      "compute_ms_p50": 286.9050415001766,
+      "cpus_busy": {
+        "vm": 8.85,
+        "api": 0.07,
+        "db": 0.06,
+        "worker": 0.0,
+        "host_clock_ghz": 2.68
+      },
+      "rep": 3
+    },
+    {
+      "workers": 1,
+      "backtests": 379,
+      "jobs_per_minute": 758.0,
+      "compute_ms_p50": 76.51209400137304,
+      "cpus_busy": {
+        "vm": 1.31,
+        "api": 0.04,
+        "db": 0.03,
+        "worker": 0.0,
+        "host_clock_ghz": 4.14
+      },
+      "rep": 3
+    },
+    {
+      "workers": 2,
+      "backtests": 577,
+      "jobs_per_minute": 1154.0,
+      "compute_ms_p50": 98.5228974986967,
+      "cpus_busy": {
+        "vm": 2.58,
+        "api": 0.04,
+        "db": 0.04,
+        "worker": 0.0,
+        "host_clock_ghz": 3.44
+      },
+      "rep": 3
+    }
+  ],
+  "power_check": {
+    "window": [
+      "2026-11-14T19:40:34-05:00",
+      "2026-11-14T20:13:50-05:00"
+    ],
+    "events_in_window": [],
+    "method": "AC checked before every repetition; Windows System log (sleep 42, wake 1, Modern Standby 506/507, power source 105) queried afterwards for the window"
+  }
+}
