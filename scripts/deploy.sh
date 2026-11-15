@@ -13,9 +13,11 @@
 #    commit and downloads the digest it recorded (artifact image-digest).
 # 3. Resolves ghcr.io/nmhetre-unc/momentum-strategy:<sha> and refuses unless
 #    GHCR serves exactly that digest.
-# 4. Copies that digest, registry to registry, into ECR as qbt-service:<sha>
-#    (docker buildx imagetools create: the manifest is copied as is), and
-#    checks ECR now holds the same digest.
+# 4. Pulls that digest from GHCR, pushes it to ECR as qbt-service:<sha>, and
+#    checks ECR now holds the same digest. (Not `docker buildx imagetools
+#    create`: given a single-platform manifest, as publish.yml produces, it
+#    wraps it in a new manifest list with a different digest. D3b caught
+#    this on its first run.)
 # 5. On the instance, over SSM Run Command: pulls qbt-service@<digest> from
 #    ECR (the instance never pulls from anywhere else), tags it with the
 #    image name its compose file runs (see "Why retag" below), optionally
@@ -58,8 +60,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-die() { echo "deploy: FAILED: $*" >&2; exit 1; }
-say() { echo "deploy: $*"; }
+# UTC timestamps on every message, so each phase can be timed from the output.
+now() { date -u +%Y-%m-%dT%H:%M:%S.%3NZ; }
+die() { echo "$(now) deploy: FAILED: $*" >&2; exit 1; }
+say() { echo "$(now) deploy: $*"; }
 
 usage() { echo "usage: scripts/deploy.sh <40-character commit sha> [--migrate]" >&2; exit 2; }
 
@@ -160,11 +164,17 @@ ecr_digest() {
 }
 if existing=$(ecr_digest); then
     [[ "$existing" == "$published" ]] \
-        || die "ECR already has $ECR_REPOSITORY:$sha with a different digest ($existing); tags are immutable there"
+        || die "ECR already has $ECR_REPOSITORY:$sha with a different digest ($existing); tags are
+immutable there. Remove it, then run this again:
+  aws ecr batch-delete-image --region $REGION --repository-name $ECR_REPOSITORY --image-ids imageTag=$sha"
     say "ECR already has $ECR_REPOSITORY:$sha at that digest"
 else
-    say "copying $GHCR@$published to $ecr_uri:$sha"
-    docker buildx imagetools create --tag "$ecr_uri:$sha" "$GHCR@$published"
+    say "pulling $GHCR@$published"
+    docker pull --quiet --platform linux/amd64 "$GHCR@$published"
+    docker tag "$GHCR@$published" "$ecr_uri:$sha"
+    say "pushing $ecr_uri:$sha"
+    docker push --quiet "$ecr_uri:$sha"
+    docker image rm "$ecr_uri:$sha" >/dev/null   # the local tag only; the pulled image stays
     in_ecr=$(ecr_digest) || die "the copy to ECR did not land"
     [[ "$in_ecr" == "$published" ]] || die "ECR holds $in_ecr after the copy, not $published"
     say "ECR holds $ECR_REPOSITORY:$sha at the same digest"
@@ -174,14 +184,17 @@ fi
 
 remote_script=$(cat <<EOF
 set -euo pipefail
+stamp() { echo "\$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ) instance: \$*"; }
 ref='$ecr_uri@$published'
 target=\$(sed -n 's/^  image: //p' /opt/qbt/compose.yaml | head -n 1)
 [ -n "\$target" ] || { echo "no image line in /opt/qbt/compose.yaml" >&2; exit 1; }
+stamp "pull \$ref"
 docker pull --quiet "\$ref"
 docker tag "\$ref" "\$target"
-echo "tagged \$ref as \$target"
-if [ "$migrate" = yes ]; then /usr/local/bin/qbt migrate; fi
+stamp "tagged \$ref as \$target"
+if [ "$migrate" = yes ]; then /usr/local/bin/qbt migrate; stamp "migrated"; fi
 /usr/local/bin/qbt up
+stamp "qbt up done"
 healthy=no
 for _ in \$(seq $((HEALTH_TIMEOUT_SECONDS / 2))); do
   if curl -fsS --max-time 3 http://127.0.0.1:8000/health; then healthy=yes; echo; break; fi
@@ -195,7 +208,7 @@ for service in api worker; do
     [ "\$have" = "\$want" ] || { echo "\$service container \$c runs \$have, not \$want" >&2; exit 1; }
   done
 done
-echo "api and worker run \$ref"
+stamp "healthy; api and worker run \$ref"
 /usr/local/bin/qbt ps
 EOF
 )

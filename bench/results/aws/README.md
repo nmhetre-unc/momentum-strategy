@@ -103,6 +103,82 @@ The laptop-measured /predict p50 of 7.7 ms ([`../service/predict.json`](../servi
   - `scale()` waits for the containers to be running, not healthy.
   - Neither fix changed the service.
 
+## Deploy verified (D3b)
+
+[`deploy_verify.json`](deploy_verify.json) holds the timestamps and the
+scrubbed output of every command. On 2026-11-15, `infra/` was applied again
+(the same 15 resources; RDS took 10m32s of the 649.2 s apply), and
+`scripts/deploy.sh 07f6f63… --migrate` was run the way a user would run it.
+Then came the first-time one-shots, `qbt ingest` (8.9 s) and `qbt train`
+(78.4 s, OOS 0.808 against 0.827 as before), then the checks, then
+`terraform destroy`.
+
+**Attempt 1 failed, at deploy.sh's own check.**
+
+- **What happened:** the copy from GHCR into ECR used
+  `docker buildx imagetools create`. publish.yml produces a
+  single-platform manifest (`679d45…`). Given one, imagetools doesn't copy
+  it as is: it wraps it in a new manifest list (`729dc0…`). The check
+  "ECR must hold the published digest" stopped the run before anything
+  reached the instance.
+- **Why it wasn't caught earlier:** the local test before merge had copied
+  `hello-world`, which is already a manifest list and so keeps its digest.
+- **The fix:** `deploy.sh` now runs `docker pull` by digest, `docker tag`
+  and `docker push`, with the same check. Before re-running, the wrong ECR
+  image was deleted with `aws ecr batch-delete-image`, because ECR tags are
+  immutable. That deletion was the only AWS change outside `deploy.sh`,
+  Terraform and the one-shots.
+
+**Attempt 2 succeeded: 113.6 s from start to "deployed".**
+
+| Phase | s |
+|---|---|
+| Preflight: credentials, instance and SSM agent, ECR repository | 2.2 |
+| Publish run and its recorded digest (`gh`) | 2.8 |
+| GHCR serves that digest | 1.3 |
+| ECR login | 2.0 |
+| Pull from GHCR to the laptop (home connection) | 75.3 |
+| Push to ECR and digest check | 1.8 |
+| Instance: `docker pull` by digest from ECR | 10.0 |
+| Instance: `qbt migrate` (0001 → 0004) | 3.2 |
+| Instance: `qbt up` until api and worker are healthy | 11.5 |
+| Instance: `/health` = 200 and image check | 0.2 |
+| SSM round trips and summary | 3.5 |
+
+The push is fast only because attempt 1 had already uploaded every layer.
+A first push into an empty repository would upload about 177 MB; D2's took
+8 s.
+
+**Checks after the deploy:**
+
+- **The containers run the published digest.** Both api and worker run
+  image `2894092cd15b`, whose only repo digest is
+  `qbt-service@sha256:679d45…`. That is the digest publish run 43769442391
+  recorded and GHCR served. Locally it is tagged as the compose image name
+  `qbt-service:v1` (the retag).
+- **The healthchecks pass.** Both containers became healthy on the first
+  `qbt up`; the new shell worker check passed every time it ran.
+- **End to end, from the laptop:**
+  - `GET /health` returned 200;
+  - `POST /backtests` (sma_crossover, SPY 2010–2024) returned 202;
+  - the job `succeeded` on attempt 1 with 12 metrics, finishing 0.27 s
+    after it was created;
+  - `POST /predict` returned 200 (model v1, as of 2024-12-31, OOS 0.808
+    against the 0.827 baseline, `beats: false`).
+
+**Teardown:** `terraform destroy` removed all 15 resources in 148.6 s. As
+in D2, one automated RDS snapshot was still listed right after destroy, and
+RDS deleted it by 22:57:58Z. The final check came back empty for:
+
+- EC2 instances, apart from the terminated one;
+- EBS volumes and snapshots;
+- Elastic IPs and network interfaces;
+- RDS instances, snapshots and retained backups;
+- ECR repositories;
+- SSM parameters.
+
+Terraform state has 0 resources.
+
 ## Teardown
 
 [`teardown.json`](teardown.json): `terraform destroy` removed all 15 resources in 2 min 19 s (2026-11-15T21:38:30.812Z to 2026-11-15T21:40:49.680Z). The checks with the AWS CLI in us-east-2 then came back empty for:
