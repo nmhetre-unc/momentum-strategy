@@ -46,6 +46,16 @@ export const LIMITS = {
 const TICKER_PATTERN = /^[A-Z0-9.\-^=]{1,15}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A real calendar date written YYYY-MM-DD: 2023-02-29 has the right shape but isn't one. */
+function isIsoDate(text: string): boolean {
+  if (!ISO_DATE.test(text)) return false;
+  const [y, m, d] = text.split("-").map(Number) as [number, number, number];
+  // setUTCFullYear, not Date.UTC, which reads years 0-99 as 1900-1999.
+  const date = new Date(0);
+  date.setUTCFullYear(y, m - 1, d);
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -155,7 +165,7 @@ export function validate(
     errors["ticker"] = "Use letters, digits and . - ^ = only, at most 15 characters.";
 
   for (const name of ["start", "end"] as const) {
-    if (!ISO_DATE.test(values[name])) errors[name] = "Enter a date.";
+    if (!isIsoDate(values[name])) errors[name] = "Enter a valid date.";
   }
   if (!errors["start"] && !errors["end"] && values.start >= values.end) {
     errors["end"] = "End must be after start (the end date itself is not included).";

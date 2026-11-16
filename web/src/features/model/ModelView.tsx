@@ -1,24 +1,21 @@
 /**
- * The served model: its latest prediction, and, just as prominently,
- * whether it beats the baseline it was measured against. A model that
- * doesn't beat its baseline has no demonstrated skill, so its prediction
- * must never be read without that next to it.
+ * The served model: its registry entry and whether it beats the baseline
+ * it was measured against (both from GET /models, so opening the page
+ * writes nothing), and a "Predict" button for its prediction.
+ *
+ * A prediction is shown at the same size as the baseline verdict, never
+ * larger: a model that doesn't beat its baseline has no demonstrated skill,
+ * so its prediction must not be read without that next to it.
  */
-import type { ReactNode } from "react";
-
-import { useModels, usePrediction } from "../../api/queries";
-import type { ModelInfo, Prediction } from "../../api/types";
+import { useModels, usePredict } from "../../api/queries";
+import type { ModelInfo } from "../../api/types";
 import { Empty, Loading, ProblemView } from "../../components/status";
 import { num, pct, signedPct } from "../../format";
 
 export function ModelView() {
-  // useModels (useQuery): the registered models; the last is the latest.
+  // useModels (useQuery): the registered models, a read; the last is the latest.
   const models = useModels();
   const latest = models.data?.models.at(-1);
-  // usePrediction (useQuery, sent once): POST /predict for that version.
-  // It waits until the latest version is known, so the prediction and the
-  // model shown beside it are always the same version.
-  const prediction = usePrediction(latest?.version);
 
   let content;
   if (models.isPending) {
@@ -41,23 +38,8 @@ export function ModelView() {
       </Empty>
     );
   } else {
-    content = (
-      <ModelCard
-        model={latest}
-        prediction={prediction.data}
-        predictionState={
-          prediction.isError ? (
-            <ProblemView
-              context="Could not get a prediction"
-              problem={prediction.error}
-              onRetry={() => void prediction.refetch()}
-            />
-          ) : prediction.isPending ? (
-            <Loading label="Predicting…" />
-          ) : null
-        }
-      />
-    );
+    // key: a different version is a different card, with no prediction yet.
+    content = <ModelCard key={latest.version} model={latest} />;
   }
 
   return (
@@ -68,46 +50,21 @@ export function ModelView() {
   );
 }
 
-function ModelCard({
-  model,
-  prediction,
-  predictionState,
-}: {
-  model: ModelInfo;
-  prediction: Prediction | undefined;
-  predictionState: ReactNode;
-}) {
+function ModelCard({ model }: { model: ModelInfo }) {
+  // usePredict (useMutation): POST /predict, only when "Predict" is pressed.
+  const predict = usePredict();
+  const prediction = predict.data;
   const { baseline, out_of_sample: oos } = model;
+
   return (
     <article className="model-card" aria-label={`Model version ${String(model.version)}`}>
       <p className="job-header">
         <span className="badge">model version {model.version}</span> {model.model_type} · target{" "}
-        {model.target} · trained on {model.training_window.n_months} months up to{" "}
-        {model.training_window.last_decision}
+        {model.target} · predicts {model.predicts} · trained on {model.training_window.n_months}{" "}
+        months up to {model.training_window.last_decision} · registered {model.created_at}
       </p>
 
       <div className="model-headlines">
-        <section className="headline-panel" aria-labelledby="prediction-heading">
-          <h3 id="prediction-heading">Latest prediction</h3>
-          {predictionState}
-          {prediction && (
-            <>
-              <p className="headline-big">{prediction.prediction_name}</p>
-              <p>
-                For {prediction.predicts}, as of {prediction.as_of} (model version{" "}
-                {prediction.model_version}).
-              </p>
-              <ul className="probabilities" aria-label="Probabilities">
-                {prediction.probabilities.map((p) => (
-                  <li key={p.label}>
-                    {p.name}: {pct(p.probability)}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
-
         <section
           className={`headline-panel ${baseline.beats ? "beats" : "does-not-beat"}`}
           aria-labelledby="baseline-heading"
@@ -135,6 +92,42 @@ function ModelCard({
             {oos.last_test_decision}).
           </p>
           <p className="hint">{baseline.description}</p>
+        </section>
+
+        <section className="headline-panel" aria-labelledby="prediction-heading">
+          <h3 id="prediction-heading">Prediction</h3>
+          <p className="hint">
+            Scores version {model.version} on the latest complete month in its price snapshot (
+            {model.serving.as_of}). The API logs every prediction, so each press records one.
+          </p>
+          <button
+            type="button"
+            disabled={predict.isPending}
+            onClick={() => {
+              predict.mutate(model.version);
+            }}
+          >
+            {predict.isPending ? "Predicting…" : prediction ? "Predict again" : "Predict"}
+          </button>
+          {predict.isError && (
+            <ProblemView context="Could not get a prediction" problem={predict.error} />
+          )}
+          {prediction && (
+            <>
+              <p className="headline-big">{prediction.prediction_name}</p>
+              <p>
+                For {prediction.predicts}, as of {prediction.as_of} (model version{" "}
+                {prediction.model_version}, prediction {prediction.prediction_id}).
+              </p>
+              <ul className="probabilities" aria-label="Probabilities">
+                {prediction.probabilities.map((p) => (
+                  <li key={p.label}>
+                    {p.name}: {pct(p.probability)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </section>
       </div>
 

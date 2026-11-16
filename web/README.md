@@ -3,12 +3,12 @@
 A browser front end for the backtest service (`src/qbt_service`). It has
 four pages:
 
-| Page    | URL               | What it does                                                                                                                                             |
-| ------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Run     | `/`               | Pick a strategy, fill in a parameter form generated from its JSON Schema, submit, and follow the job until it succeeds or fails                          |
-| Results | `/backtests/{id}` | Equity curve, drawdown, the Sharpe ratio with its bootstrap interval, the other metrics, the strategy version                                            |
-| Compare | `/compare?ids=…`  | Two or more succeeded backtests: one metrics table and their equity curves on one chart                                                                  |
-| Model   | `/model`          | The latest model's latest prediction, and next to it, as prominently, whether it beats its baseline (`beats`) and the baseline accuracy it is up against |
+| Page    | URL               | What it does                                                                                                                                                                                                       |
+| ------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Run     | `/`               | Pick a strategy, fill in a parameter form generated from its JSON Schema, submit, and follow the job until it succeeds or fails                                                                                    |
+| Results | `/backtests/{id}` | Equity curve, drawdown, the Sharpe ratio with its bootstrap interval, the other metrics, the strategy version                                                                                                      |
+| Compare | `/compare?ids=…`  | Two or more succeeded backtests: one metrics table and their equity curves on one chart                                                                                                                            |
+| Model   | `/model`          | The latest model's registry entry and whether it beats its baseline (`beats`, and the baseline accuracy it is up against). A prediction is made only when you press Predict, and shown no larger than that verdict |
 
 Underneath:
 
@@ -25,9 +25,16 @@ This README assumes you haven't used React before.
 cd web
 nvm use              # Node 26.13.1, from .nvmrc (install nvm first if needed)
 npm ci               # install exactly what package-lock.json lists
-docker compose up -d api   # from the repo root: the API the dev server talks to
+docker compose up -d --build api   # from the repo root: the API the dev server talks to
 npm run dev          # http://localhost:5173
 ```
+
+**Always pass `--build`.** Without it, Compose reuses whatever `api` image
+it built last. That image silently lacks every route added since, and the
+page gets a generic 404 instead. This happened with `/backtests/{id}/series`.
+`--build` takes seconds when nothing changed, because Docker's layer cache
+is reused. The end-to-end tests and CI use `docker compose up --build` for
+the same reason.
 
 | Command                | What it does                                                                             |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
@@ -291,8 +298,23 @@ id, so its `<label>`, hint and error can point at it.
 - each parameter's type and bounds, from the schema;
 - the rules the schema can't express, mirrored from
   `src/qbt_service/models.py`: short window below long window, the ticker
-  pattern, start before end, and the `cost_bps`, `n_boot` and `seed`
-  bounds.
+  pattern, real calendar dates with start before end, and the `cost_bps`,
+  `n_boot` and `seed` bounds.
+
+**The shared cases.** Copying rules by hand can drift, so both sides are
+tested against one file: `contracts/backtest_requests.json` at the repo
+root. It lists request bodies, valid and invalid, and whether the API
+accepts each one. It covers every strategy's bounds, the cross-field
+rules, the ticker pattern, dates and the request bounds.
+
+- `tests/service/test_request_contract.py` sends every case to the real
+  `POST /backtests` and checks the API agrees.
+- `src/features/run/form.contract.test.ts` checks `validate()` agrees.
+
+To change a rule, add or change a case there first. Both test suites then
+show which side still disagrees. The one known difference is left out of
+the file: seeds above 2^53 − 1, which the API accepts but the form refuses
+(a JavaScript number can't hold them exactly).
 
 It returns either the request body or the errors. Errors are shown only
 after the first submit (`showErrors`), then update as the user types.

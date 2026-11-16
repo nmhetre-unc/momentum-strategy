@@ -112,6 +112,13 @@ stop is ended by killing the child, which can't write anything. Code:
   child, so a multithreaded reduction can't reorder floating-point sums.
   Whichever attempt commits writes the same numbers, bit for bit.
 
+### Request validation
+
+Which request bodies `POST /backtests` accepts is pinned by
+[`contracts/backtest_requests.json`](contracts/backtest_requests.json),
+a list of valid and invalid bodies. The API and the dashboard's form are
+both tested against it (see [web/README.md](web/README.md#5-validation-that-matches-the-api)).
+
 ### Idempotency
 
 `POST /backtests` takes an optional `Idempotency-Key` header, following the

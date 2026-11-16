@@ -21,7 +21,6 @@ export const queryKeys = {
   job: (id: string) => ["backtests", id] as const,
   series: (id: string) => ["backtests", id, "series"] as const,
   models: ["models"] as const,
-  prediction: (version: number) => ["prediction", version] as const,
 };
 
 export function useStrategies() {
@@ -116,26 +115,20 @@ export function useModels() {
 }
 
 /**
- * A prediction from one model version (POST /predict).
+ * POST /predict for one model version, sent only when the user asks.
  *
- * The API logs every prediction it serves, so this is fetched once per
- * version per page load and never refetched behind the user's back: no
- * refetch on focus or reconnect, no retry, and it never goes stale.
+ * The API logs every prediction it serves, so a prediction is a write:
+ * loading the Model page must not create one. Each call to `mutate` is one
+ * POST and one logged prediction; nothing is retried (a 4xx or the 500
+ * integrity error would fail again, and a retry after a lost response
+ * would log a second prediction).
  */
-export function usePrediction(version: number | undefined) {
+export function usePredict() {
   const api = useApi();
-  // useQuery rather than useMutation: the page shows the prediction as soon
-  // as it opens, with loading and error states, like any read. The options
-  // below stop the cache from sending it again on its own.
-  return useQuery({
-    queryKey: queryKeys.prediction(version ?? 0),
-    queryFn: () => unwrap(api.POST("/predict", { body: { version: version ?? null } })),
-    enabled: version !== undefined,
-    staleTime: Infinity,
-    gcTime: Infinity,
-    retry: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+  // useMutation: runs only when the user presses "Predict", and tracks that
+  // request's pending, error and result state.
+  return useMutation({
+    mutationFn: (version: number) => unwrap(api.POST("/predict", { body: { version } })),
   });
 }
 
