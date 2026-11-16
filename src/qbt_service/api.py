@@ -12,6 +12,7 @@ Endpoints:
     GET  /strategies        the strategies and their parameter schemas
     POST /backtests         validate, enqueue, 202 with the job id
     GET  /backtests/{id}    status, attempts, timestamps, error, metrics
+    GET  /backtests/{id}/series   a succeeded job's daily equity, drawdown, position
     GET  /models            the registered model versions
     GET  /models/{version}  one version, with its full evaluation
     POST /predict           score the latest (or a given) version; logged
@@ -37,8 +38,9 @@ Idempotency follows the IETF Idempotency-Key draft
   for a retry that arrives while the original is still being processed;
   that state never exists here, because the job is created in a single
   INSERT, and a concurrent retry waits on the unique index until the
-  first transaction commits and then sees its job. So this API never
-  returns 409.
+  first transaction commits and then sees its job. So POST /backtests
+  never returns 409. (The API's only 409 is GET /backtests/{id}/series
+  for a job that hasn't succeeded: the job exists, but not its series.)
 - A malformed key gets 400.
 
 Keys are global (there is no authentication, so there are no clients to
@@ -54,6 +56,7 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
+import pandas as pd
 from fastapi import Body, FastAPI, Header, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
@@ -63,16 +66,19 @@ from sqlalchemy import Connection, Engine, func, select
 from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from qbt.analytics import drawdown_series
 from qbt.ml.train import CLASS_NAMES, PREDICTS
+from qbt.strategies import learns_from_history, out_of_sample_from
 from qbt_service.catalog import CATALOG, sync_catalog
 from qbt_service.db import jobs, make_engine, metrics, predictions, results, strategies
 from qbt_service.models import (
     PARAMS_MODELS,
     BacktestRequest,
     BacktestRequestBase,
+    parse_request,
     request_hash,
 )
-from qbt_service.prices import find_series
+from qbt_service.prices import find_series, load_frame
 from qbt_service.queue import IdempotencyConflict, enqueue
 from qbt_service.registry import (
     IntegrityError,
@@ -276,6 +282,34 @@ class BacktestJob(BaseModel):
     result: ResultInfo | None = Field(description="About the run, once succeeded.")
 
 
+class BacktestSeries(BaseModel):
+    """A succeeded job's daily series, one entry per trading day."""
+
+    job_id: uuid.UUID
+    strategy: str
+    strategy_version: int = Field(description="The behaviour version the job ran with.")
+    dates: list[date] = Field(description="The trading days, oldest first.")
+    equity: list[float] = Field(
+        description="Growth of 1 after costs: the curve the job's metrics are computed on."
+    )
+    drawdown: list[float] = Field(
+        description="(equity - running peak) / running peak, from "
+                    "qbt.analytics.drawdown_series: 0 at a new high, negative below it. "
+                    "Its minimum is the job's `max_drawdown` metric."
+    )
+    position: list[float] = Field(
+        description="The position held on each day: the signal shifted one day, so a "
+                    "decision at one close earns from the next (0 = flat, 1 = long)."
+    )
+    out_of_sample_from: date | None = Field(
+        description="For a strategy that learns from history (ml_direction): its first "
+                    "out-of-sample day. It holds no position before it (its training "
+                    "period), and the job's metrics cover the FULL period, those flat "
+                    "training days included. Null for a strategy that learns nothing: "
+                    "every day is out of sample."
+    )
+
+
 class ClassInfo(BaseModel):
     label: float = Field(description="The class as the model encodes it.")
     name: str
@@ -471,6 +505,10 @@ def _problem_content(examples: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
 NOT_FOUND_EXAMPLE = _problem_example(
     404, "job-not-found", "Job not found", f"There is no backtest job {EXAMPLE_ID}.")
+NOT_SUCCEEDED_EXAMPLE = _problem_example(
+    409, "job-not-succeeded", "Job has not succeeded",
+    f"Backtest job {EXAMPLE_ID} is running: it has no series until it succeeds. "
+    f"Poll GET /backtests/{EXAMPLE_ID} until its status is succeeded.")
 UNAVAILABLE_EXAMPLE = _problem_example(
     503, "database-unavailable", "Database unavailable",
     DatabaseUnavailable().detail)
@@ -479,6 +517,12 @@ VALIDATION_EXAMPLE = _problem_example(
     "The request has 1 invalid value; see `errors`.",
     errors=[{"loc": ["body", "sma_crossover", "params"], "type": "value_error",
              "msg": "Value error, short_window must be less than long_window"}])
+JOB_ID_EXAMPLE = _problem_example(
+    422, "validation-error", "Invalid request",
+    "The request has 1 invalid value; see `errors`.",
+    errors=[{"loc": ["path", "job_id"], "type": "uuid_parsing",
+             "msg": "Input should be a valid UUID, invalid length: "
+                    "expected length 32 for simple format, found 3"}])
 KEY_REUSED_EXAMPLE = _problem_example(
     422, "idempotency-key-reused", "Idempotency-Key reused",
     "This Idempotency-Key was already used for a different request. Use a new key "
@@ -759,12 +803,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             404: {"model": Problem, "description": "No job has this id.",
                   "content": _problem_content({"not_found": NOT_FOUND_EXAMPLE})},
             422: {"model": ValidationProblem, "description": "The id is not a UUID.",
-                  "content": _problem_content({"validation_error": _problem_example(
-                      422, "validation-error", "Invalid request",
-                      "The request has 1 invalid value; see `errors`.",
-                      errors=[{"loc": ["path", "job_id"], "type": "uuid_parsing",
-                               "msg": "Input should be a valid UUID, invalid length: "
-                                      "expected length 32 for simple format, found 3"}])})},
+                  "content": _problem_content({"validation_error": JOB_ID_EXAMPLE})},
             503: {"model": Problem, "description": DESCRIPTION_503,
                   "headers": {"Retry-After": {"description": "Seconds to wait.",
                                               "schema": {"type": "integer"}}},
@@ -812,6 +851,70 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return BacktestJob(**row, metrics=values,
                            result=ResultInfo(**result) if result is not None else None)
+
+    @app.get(
+        "/backtests/{job_id}/series", response_model=BacktestSeries, tags=["backtests"],
+        summary="Get a succeeded job's daily series",
+        responses={
+            404: {"model": Problem, "description": "No job has this id.",
+                  "content": _problem_content({"not_found": NOT_FOUND_EXAMPLE})},
+            409: {"model": Problem,
+                  "description": "The job exists but hasn't succeeded (queued, running or "
+                                 "failed), so it has no series.",
+                  "content": _problem_content({"not_succeeded": NOT_SUCCEEDED_EXAMPLE})},
+            422: {"model": ValidationProblem, "description": "The id is not a UUID.",
+                  "content": _problem_content({"validation_error": JOB_ID_EXAMPLE})},
+            503: {"model": Problem, "description": DESCRIPTION_503,
+                  "headers": {"Retry-After": {"description": "Seconds to wait.",
+                                              "schema": {"type": "integer"}}},
+                  "content": _problem_content({"database_unavailable": UNAVAILABLE_EXAMPLE})},
+        },
+    )
+    def get_backtest_series(job_id: uuid.UUID) -> BacktestSeries:
+        """
+        The equity curve, drawdown and position of a succeeded job, day by
+        day, as stored when it ran. Read-only: nothing is recomputed except
+        the drawdown (from the stored equity) and, for a learning strategy,
+        its first out-of-sample day (from the job's stored price snapshot
+        and params, exactly as the worker loaded them).
+        """
+        with _transaction(app.state.engine) as conn:
+            row = conn.execute(
+                select(jobs.c.status, jobs.c.request, jobs.c.price_series_id,
+                       strategies.c.version.label("strategy_version"))
+                .select_from(jobs.join(strategies, jobs.c.strategy_id == strategies.c.id))
+                .where(jobs.c.id == job_id)
+            ).mappings().one_or_none()
+            if row is None:
+                raise ProblemError(404, "job-not-found", "Job not found",
+                                   f"There is no backtest job {job_id}.")
+            if row["status"] != "succeeded":
+                detail = (f"Backtest job {job_id} failed: it has no series. Its last_error on "
+                          f"GET /backtests/{job_id} says why."
+                          if row["status"] == "failed" else
+                          f"Backtest job {job_id} is {row['status']}: it has no series until "
+                          f"it succeeds. Poll GET /backtests/{job_id} until its status is "
+                          f"succeeded.")
+                raise ProblemError(409, "job-not-succeeded", "Job has not succeeded", detail)
+            stored = conn.execute(
+                select(results.c.dates, results.c.equity, results.c.position)
+                .where(results.c.job_id == job_id)
+            ).mappings().one()
+            request = parse_request(row["request"])
+            start = None
+            if learns_from_history(request.strategy):
+                # The frame the worker ran on: the job's snapshot, [start, end).
+                frame = load_frame(conn, row["price_series_id"], request.start, request.end)
+                first = out_of_sample_from(request.strategy, frame,
+                                           request.params.model_dump())
+                start = None if first is None else first.date()
+
+        equity = list(stored["equity"])
+        return BacktestSeries(
+            job_id=job_id, strategy=request.strategy,
+            strategy_version=row["strategy_version"], dates=list(stored["dates"]),
+            equity=equity, drawdown=drawdown_series(pd.Series(equity)).tolist(),
+            position=list(stored["position"]), out_of_sample_from=start)
 
     unavailable_503 = {
         "model": Problem, "description": DESCRIPTION_503,

@@ -3,12 +3,14 @@ Each strategy function takes a price DataFrame (with a 'Close' column)
 and returns a pandas Series of positions: 1 = long, 0 = flat.
 """
 
-from collections.abc import Callable
-from typing import cast
+import inspect
+from collections.abc import Callable, Mapping
+from typing import Any, cast
 
 import pandas as pd
 
 from qbt.ml import ml_direction_signal
+from qbt.timesplit import split_date
 
 
 def sma_crossover(df: pd.DataFrame, short_window: int = 50, long_window: int = 200) -> pd.Series:
@@ -160,6 +162,48 @@ STRATEGY_VERSIONS: dict[str, int] = {
     "mean_reversion": 1,
     "ml_direction": 2,
 }
+
+
+# --------------------------------------------------------------------------
+# Out-of-sample start, without running the strategy
+# --------------------------------------------------------------------------
+# A strategy that learns from history records its first out-of-sample day
+# in its signal (qbt.timesplit.OUT_OF_SAMPLE_ATTR) and holds no position
+# before it. Running ml_direction to read that date back means training
+# the model again, so the service computes the same date from the price
+# frame and the params instead. tests/test_out_of_sample_from.py checks,
+# strategy by strategy, that these agree with what each signal records.
+
+def _param(strategy: str, params: Mapping[str, Any], name: str) -> Any:
+    """`params[name]`, or the strategy function's default for it."""
+    if name in params:
+        return params[name]
+    return inspect.signature(STRATEGIES[strategy]).parameters[name].default
+
+
+_OUT_OF_SAMPLE_FROM: dict[str, Callable[[pd.DataFrame, Mapping[str, Any]], pd.Timestamp]] = {
+    "ml_direction": lambda df, params: split_date(
+        df.index, _param("ml_direction", params, "train_frac")),
+}
+
+
+def learns_from_history(strategy: str) -> bool:
+    """True for a strategy whose signal is flat before an out-of-sample start."""
+    if strategy not in STRATEGIES:
+        raise ValueError(f"unknown strategy {strategy!r}; choose from {sorted(STRATEGIES)}")
+    return strategy in _OUT_OF_SAMPLE_FROM
+
+
+def out_of_sample_from(strategy: str, df: pd.DataFrame,
+                       params: Mapping[str, Any]) -> pd.Timestamp | None:
+    """
+    The first day `strategy`'s signal on `df` (with `params`) may hold a
+    position, or None for a strategy that learns nothing (every day is
+    out of sample). The same date the signal records, without running it.
+    """
+    if not learns_from_history(strategy):
+        return None
+    return _OUT_OF_SAMPLE_FROM[strategy](df, params)
 
 
 # --------------------------------------------------------------------------

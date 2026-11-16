@@ -637,6 +637,142 @@
         }
       }
     },
+    "/backtests/{job_id}/series": {
+      "get": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Get a succeeded job's daily series",
+        "description": "The equity curve, drawdown and position of a succeeded job, day by\nday, as stored when it ran. Read-only: nothing is recomputed except\nthe drawdown (from the stored equity) and, for a learning strategy,\nits first out-of-sample day (from the job's stored price snapshot\nand params, exactly as the worker loaded them).",
+        "operationId": "get_backtest_series_backtests__job_id__series_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestSeries"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No job has this id.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Job not found",
+                    "value": {
+                      "type": "/problems/job-not-found",
+                      "title": "Job not found",
+                      "status": 404,
+                      "detail": "There is no backtest job 0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The job exists but hasn't succeeded (queued, running or failed), so it has no series.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_succeeded": {
+                    "summary": "Job has not succeeded",
+                    "value": {
+                      "type": "/problems/job-not-succeeded",
+                      "title": "Job has not succeeded",
+                      "status": 409,
+                      "detail": "Backtest job 0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10 is running: it has no series until it succeeds. Poll GET /backtests/0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10 until its status is succeeded."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The id is not a UUID.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_error": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "/problems/validation-error",
+                      "title": "Invalid request",
+                      "status": 422,
+                      "detail": "The request has 1 invalid value; see `errors`.",
+                      "errors": [
+                        {
+                          "loc": [
+                            "path",
+                            "job_id"
+                          ],
+                          "type": "uuid_parsing",
+                          "msg": "Input should be a valid UUID, invalid length: expected length 32 for simple format, found 3"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unreachable. Retry after `Retry-After` seconds. A POST may or may not have created its job; retrying with the same Idempotency-Key is safe either way.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "database_unavailable": {
+                    "summary": "Database unavailable",
+                    "value": {
+                      "type": "/problems/database-unavailable",
+                      "title": "Database unavailable",
+                      "status": 503,
+                      "detail": "The database could not be reached. Nothing was changed unless a retry says otherwise: retry with the same Idempotency-Key."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/models": {
       "get": {
         "tags": [
@@ -1119,6 +1255,83 @@
           "result"
         ],
         "title": "BacktestJob"
+      },
+      "BacktestSeries": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "Strategy"
+          },
+          "strategy_version": {
+            "type": "integer",
+            "title": "Strategy Version",
+            "description": "The behaviour version the job ran with."
+          },
+          "dates": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Dates",
+            "description": "The trading days, oldest first."
+          },
+          "equity": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Equity",
+            "description": "Growth of 1 after costs: the curve the job's metrics are computed on."
+          },
+          "drawdown": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Drawdown",
+            "description": "(equity - running peak) / running peak, from qbt.analytics.drawdown_series: 0 at a new high, negative below it. Its minimum is the job's `max_drawdown` metric."
+          },
+          "position": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Position",
+            "description": "The position held on each day: the signal shifted one day, so a decision at one close earns from the next (0 = flat, 1 = long)."
+          },
+          "out_of_sample_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Out Of Sample From",
+            "description": "For a strategy that learns from history (ml_direction): its first out-of-sample day. It holds no position before it (its training period), and the job's metrics cover the FULL period, those flat training days included. Null for a strategy that learns nothing: every day is out of sample."
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "strategy",
+          "strategy_version",
+          "dates",
+          "equity",
+          "drawdown",
+          "position",
+          "out_of_sample_from"
+        ],
+        "title": "BacktestSeries",
+        "description": "A succeeded job's daily series, one entry per trading day."
       },
       "BaselineComparison": {
         "properties": {

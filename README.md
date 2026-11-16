@@ -52,7 +52,7 @@ twice.
 
 ```
             curl / client
-                 │  POST /backtests  ·  GET /backtests/{id}  ·  GET /strategies
+                 │  POST /backtests  ·  GET /backtests/{id}[/series]  ·  GET /strategies
                  │  GET /models  ·  GET /models/{version}  ·  POST /predict
                  ▼
  ┌─ api ────────────────────────────┐
@@ -124,8 +124,9 @@ stop is ended by killing the child, which can't write anything. Code:
   draft keeps **409** for a retry that arrives while the original is still
   in flight. That state can't happen here: the job is created by one
   `INSERT`, and a concurrent retry waits on the unique index until the
-  first transaction commits, then sees its job. So this API never returns
-  409.
+  first transaction commits, then sees its job. So `POST /backtests` never
+  returns 409. The API's only 409 is `GET /backtests/{id}/series` for a job
+  that hasn't succeeded: the job exists, but its series doesn't yet.
 - **Database down:** **503** with `Retry-After: 5`. The POST may or may not
   have created its job, and retrying with the same key is safe either way.
 
@@ -314,6 +315,17 @@ curl -s localhost:8000/backtests/e73d550b-b7c5-4094-9835-7ed8fc38fe5c
  "result": {"attempt": 1, "bootstrap_impl": "cpp", "duration_ms": 71, "n_days": 2516, …}, …}
 ```
 
+Its day-by-day series, once it has succeeded:
+
+```bash
+curl -s localhost:8000/backtests/e73d550b-b7c5-4094-9835-7ed8fc38fe5c/series
+```
+
+This returns `dates`, `equity`, `drawdown` and `position`, one entry per
+trading day, plus `out_of_sample_from` for a learning strategy (see
+[Known limitations](#known-limitations)). A job that hasn't succeeded yet
+gets a **409** `job-not-succeeded`.
+
 Errors are problem details, for example a range with no snapshot:
 
 ```
@@ -384,6 +396,17 @@ running both can't provide it.
 
 ### Known limitations
 
+- **For learning strategies, the service's metrics are full-period.**
+  `ml_direction` holds no position before its first out-of-sample day
+  (its training period, the first `train_frac` of the rows), but the
+  metrics a job stores cover the whole requested window, those flat
+  training days included. That dilutes return, Sharpe and the rest.
+  `GET /backtests/{id}/series` returns `out_of_sample_from`, so a client
+  can mark the training period and label the numbers as full-period.
+  Metrics computed over the out-of-sample window only are not built yet.
+  The research results in
+  [`results/summary.md`](results/summary.md#out-of-sample-only-strategies-that-learn)
+  are out-of-sample only.
 - **No authentication.** Anyone who can reach the port can submit jobs. The
   ports are bound to 127.0.0.1.
 - **The served model doesn't beat its baseline**, and each model version

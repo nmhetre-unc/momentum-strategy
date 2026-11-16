@@ -107,6 +107,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/backtests/{job_id}/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a succeeded job's daily series
+         * @description The equity curve, drawdown and position of a succeeded job, day by
+         *     day, as stored when it ran. Read-only: nothing is recomputed except
+         *     the drawdown (from the stored equity) and, for a learning strategy,
+         *     its first out-of-sample day (from the job's stored price snapshot
+         *     and params, exactly as the worker loaded them).
+         */
+        get: operations["get_backtest_series_backtests__job_id__series_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/models": {
         parameters: {
             query?: never;
@@ -289,6 +313,49 @@ export interface components {
             } | null;
             /** @description About the run, once succeeded. */
             result: components["schemas"]["ResultInfo"] | null;
+        };
+        /**
+         * BacktestSeries
+         * @description A succeeded job's daily series, one entry per trading day.
+         */
+        BacktestSeries: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Strategy */
+            strategy: string;
+            /**
+             * Strategy Version
+             * @description The behaviour version the job ran with.
+             */
+            strategy_version: number;
+            /**
+             * Dates
+             * @description The trading days, oldest first.
+             */
+            dates: string[];
+            /**
+             * Equity
+             * @description Growth of 1 after costs: the curve the job's metrics are computed on.
+             */
+            equity: number[];
+            /**
+             * Drawdown
+             * @description (equity - running peak) / running peak, from qbt.analytics.drawdown_series: 0 at a new high, negative below it. Its minimum is the job's `max_drawdown` metric.
+             */
+            drawdown: number[];
+            /**
+             * Position
+             * @description The position held on each day: the signal shifted one day, so a decision at one close earns from the next (0 = flat, 1 = long).
+             */
+            position: number[];
+            /**
+             * Out Of Sample From
+             * @description For a strategy that learns from history (ml_direction): its first out-of-sample day. It holds no position before it (its training period), and the job's metrics cover the FULL period, those flat training days included. Null for a strategy that learns nothing: every day is out of sample.
+             */
+            out_of_sample_from: string | null;
         };
         /** BaselineComparison */
         BaselineComparison: {
@@ -1156,6 +1223,66 @@ export interface operations {
             };
             /** @description No job has this id. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The id is not a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
+            /** @description The database is unreachable. Retry after `Retry-After` seconds. A POST may or may not have created its job; retrying with the same Idempotency-Key is safe either way. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_backtest_series_backtests__job_id__series_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BacktestSeries"];
+                };
+            };
+            /** @description No job has this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The job exists but hasn't succeeded (queued, running or failed), so it has no series. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
