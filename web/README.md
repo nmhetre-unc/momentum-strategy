@@ -1,8 +1,16 @@
 # web: the qbt dashboard
 
-A browser front end for the backtest service (`src/qbt_service`). This is
-step E1, the tooling only: there are no features yet. The page is a heading
-that says so. What is in place is everything features will be built on:
+A browser front end for the backtest service (`src/qbt_service`). It has
+four pages:
+
+| Page    | URL               | What it does                                                                                                                                             |
+| ------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run     | `/`               | Pick a strategy, fill in a parameter form generated from its JSON Schema, submit, and follow the job until it succeeds or fails                          |
+| Results | `/backtests/{id}` | Equity curve, drawdown, the Sharpe ratio with its bootstrap interval, the other metrics, the strategy version                                            |
+| Compare | `/compare?ids=…`  | Two or more succeeded backtests: one metrics table and their equity curves on one chart                                                                  |
+| Model   | `/model`          | The latest model's latest prediction, and next to it, as prominently, whether it beats its baseline (`beats`) and the baseline accuracy it is up against |
+
+Underneath:
 
 - a typed API client generated from the service's own schema;
 - one place where API errors are handled;
@@ -70,19 +78,32 @@ web/
 │   └── check-api.mjs     npm run api:check
 └── src/
     ├── main.tsx          entry point: creates the query client, renders <App>
-    ├── App.tsx           the top-level component (a placeholder for now)
+    ├── App.tsx           the header, navigation, and the page for the current URL
+    ├── router.ts         the client-side router (below)
     ├── queryClient.ts    TanStack Query defaults: retries, caching, error type
+    ├── theme.ts          chart colors, light and dark
+    ├── format.ts         number formatting
+    ├── index.css         the styles
     ├── api/
     │   ├── schema.d.ts   GENERATED from openapi.json; never edit by hand
     │   ├── client.ts     the typed client and unwrap(): data, or a thrown ApiProblem
-    │   └── problem.ts    ApiProblem: the one error type the app sees
-    ├── test/setup.ts     test setup (DOM matchers)
+    │   ├── problem.ts    ApiProblem: the one error type the app sees
+    │   ├── context.ts    which client components use (tests swap in a fake)
+    │   ├── queries.ts    every API call as a hook: polling, submit with retries
+    │   └── types.ts      short names for the generated types
+    ├── components/       shared pieces: Link, charts, loading/error/empty states
+    ├── features/
+    │   ├── run/          RunView.tsx, and form.ts: the form generated from JSON Schema
+    │   ├── results/      ResultsView.tsx, and the metrics table shared with Compare
+    │   ├── compare/      CompareView.tsx, and recentRuns.ts (this browser's runs)
+    │   └── model/        ModelView.tsx
+    ├── test/             setup, a fake API at the fetch layer, typed fixtures
     └── *.test.ts(x)      tests sit next to the code they test
 ```
 
-Features will go in `src/features/<name>/`, with a feature's components,
-queries and tests together. Shared building blocks will go in
-`src/components/`.
+Each page is a _feature_ folder with its components, logic and tests
+together. What more than one page uses lives in `src/components/` and
+`src/api/`.
 
 ## The API client
 
@@ -167,6 +188,192 @@ How the rest of the app gets that:
 - **Retries:** failed queries are retried twice, except 4xx problems. The
   same request would fail again, so a 422 shows at once.
 
+## How the React code works
+
+This walks through the Run page, from the URL to a finished job. Every
+other page is built the same way. The code is in
+`src/features/run/RunView.tsx`; each hook there has a comment saying why
+it's used.
+
+### 1. The URL picks the page
+
+`main.tsx` renders `<App>` inside a `QueryClientProvider`, which gives every
+component below it access to one shared cache of server data.
+
+`App` calls `useLocation()`, which returns the address. `matchRoute("/")`
+returns `{ name: "run" }`, so `App` renders `<RunView />`. When the address
+changes, `useLocation()` makes `App` render again and pick the new page.
+
+> **Rendering** means React calls the component function, and the function
+> returns JSX describing what the page should show. React compares that with
+> the page as it is and changes only what differs. A component renders again
+> whenever its state, its props (the arguments it's given) or a hook's value
+> changes. So a component is a description of the page _for the current
+> data_, not a list of steps that change the page.
+
+### 2. Loading the strategies: loading, error, empty
+
+```tsx
+const strategies = useStrategies();
+```
+
+`useStrategies()` (in `src/api/queries.ts`) is a `useQuery` call. It asks
+`GET /strategies` through the typed client and `unwrap()`. It returns an
+object that is always in exactly one state:
+
+- **`isPending`** on the first render, because nothing has arrived yet.
+  `RunView` shows `<Loading>`.
+- **`isError`** if the call failed. `strategies.error` is an `ApiProblem`,
+  whatever went wrong, and `<ProblemView>` shows its title, detail and
+  type, with a "Try again" button that calls `strategies.refetch()`.
+- **Success, but an empty list.** `<Empty>` says there's nothing to run.
+- **Success with strategies.** `RunView` renders `<RunForm>`.
+
+The data arriving is itself a change, so React renders `RunView` again and
+the `if` chain picks the next branch. Nothing in `RunView` waits for or
+fetches anything by hand.
+
+**Why `RunForm` is a separate component.** Hooks (`useState`, `useQuery`,
+...) must be called in the same order on every render; React tells them
+apart by their order. The form's state needs a strategy to start from, which
+doesn't exist during loading. So the form's hooks live in a component that
+only renders once the strategies exist.
+
+### 3. The form's state, and what is derived from it
+
+```tsx
+const [selected, setSelected] = useState(strategies[0]?.name ?? "");
+const [common, setCommon] = useState(DEFAULT_VALUES);
+const [paramsByStrategy, setParamsByStrategy] = useState({});
+const [showErrors, setShowErrors] = useState(false);
+const [submission, setSubmission] = useState<Submission | null>(null);
+```
+
+`useState` keeps a value between renders and returns a setter. Calling the
+setter stores the new value and renders the component again. These five
+are everything the user has done: picked a strategy, typed into fields,
+pressed submit.
+
+Everything else is **computed from them on each render**, never stored:
+
+```tsx
+const strategy = strategies.find((s) => s.name === selected) ?? strategies[0];
+const params = paramsByStrategy[strategy.name] ?? defaultParams(strategy);
+const checked = validate(strategy, { ...common, params });
+```
+
+So the version shown, the fields, and the validation errors can't fall
+out of step with what the user typed. There is no second copy to update.
+
+### 4. A form generated from JSON Schema
+
+`paramFields(strategy.params_schema)` (in `form.ts`) reads the schema the
+API sent. Each `integer` or `number` property becomes a field with its
+title, description, minimum, maximum and default. The form renders one
+`<NumberField>` per field. A new parameter in the API appears in the form
+with no change here.
+
+Each input is **controlled**: its `value` comes from state, and its
+`onChange` calls a setter.
+
+```tsx
+<input value={value} onChange={(e) => onChange(e.target.value)} />
+```
+
+Typing calls the setter, which re-renders with the new value. React state,
+not the input element, holds the truth. `useId()` gives each input a unique
+id, so its `<label>`, hint and error can point at it.
+
+### 5. Validation that matches the API
+
+`validate()` checks what `POST /backtests` checks:
+
+- each parameter's type and bounds, from the schema;
+- the rules the schema can't express, mirrored from
+  `src/qbt_service/models.py`: short window below long window, the ticker
+  pattern, start before end, and the `cost_bps`, `n_boot` and `seed`
+  bounds.
+
+It returns either the request body or the errors. Errors are shown only
+after the first submit (`showErrors`), then update as the user types.
+
+If the API rejects a request anyway (a rule changed, or no price data),
+its 422 lists where each error is. `fieldErrorsFromProblem()` puts those
+messages on the same fields.
+
+### 6. Submitting, with an Idempotency-Key
+
+```tsx
+const onSubmit = (event) => {
+  event.preventDefault(); // keep the browser from reloading the page
+  setShowErrors(true);
+  if (checked.errors) return;
+  const next = { key: newIdempotencyKey(), body: checked.body };
+  setSubmission(next);
+  send(next);
+};
+```
+
+`send` calls `submit.mutate(...)`. `submit` is a `useMutation` (in
+`queries.ts`): a write that runs only when asked. It tracks its own state
+(`isPending`, `isError`, `error`, `data`).
+
+The key is what makes a retry safe. A request can fail after the API has
+already created the job, for example when the response is lost. Sending
+it again with the **same key** returns that job instead of creating a
+second one. So:
+
+- **Automatic retries** of a transient failure (no response, or a 5xx)
+  reuse the key, because the mutation retries with the same variables.
+- **"Try again"** after the automatic retries are used up resends the
+  stored `submission`: the same body and the same key.
+- **Pressing "Run backtest" again** is a new submission with a new key,
+  even if nothing changed. Editing a field after a failure clears the
+  error (`submit.reset()`), so the next attempt is a new submission.
+
+A 4xx is not retried: the same request would fail the same way.
+
+### 7. Polling the job until it is final
+
+```tsx
+const job = useBacktestJob(submit.data?.id, pollIntervalMs);
+```
+
+Until the POST succeeds there is no id, and the query is disabled: it
+doesn't run. Once `submit.data` holds the accepted job, the same hook
+starts fetching `GET /backtests/{id}`. `refetchInterval` asks `nextPoll()`
+after every response whether to fetch again:
+
+- every second while the job is `queued` or `running`;
+- **never again** once it is `succeeded` or `failed`, or after an error.
+
+TanStack Query owns the timer. When the component unmounts (the user goes
+to another page), the timer goes with it, so there is no `setInterval` to
+remember to clear.
+
+`<JobProgress>` renders whatever the latest response says. When the job
+succeeds it shows a `<Link>` to `/backtests/{id}`. Clicking it calls
+`navigate`, `App` re-renders, `matchRoute` returns the results route, and
+`<ResultsView>` takes over. Its own `useBacktestJob` call finds the job
+already in the cache, so it appears at once.
+
+### 8. The tests
+
+`RunView.test.tsx` renders the real component with the real client,
+`unwrap()` and TanStack Query. Only `fetch` is fake (`src/test/api.tsx`),
+answering from a list of handlers and recording every request. The tests
+check what a user sees and what was sent:
+
+- the generated fields and their defaults;
+- the client-side errors, with nothing posted;
+- the request body;
+- that the same key was used across retries, and a new key for a new
+  submission;
+- that the number of polls stops growing once the job is final or the
+  page is closed.
+
+They find elements the way a user would, by label, role and text.
+
 ## Library choices
 
 Exact versions are in `package.json`, and the whole tree is pinned in
@@ -185,12 +392,37 @@ dependencies, but they weren't individually checked for age.
 | **TypeScript 5.9 (strict)**            | Types                    | TypeScript 7 (the native compiler) and 6.0 exist, but typescript-eslint supports `<6.1` and openapi-typescript asks for `^5`. 5.9.3 is the newest version all the tools support                                                               |
 | **Vite 8**                             | Dev server and build     | Starts in well under a second, reloads modules on save, and builds a static `dist/`. It also proxies `/api` (below)                                                                                                                           |
 | **TanStack Query 5**                   | Server state             | Caching, background refetching, deduplicating identical requests, retries, and loading/error states, all of which hand-written `useEffect` + `fetch` gets wrong. It's built for polling a job until it finishes, which this dashboard will do |
-| **Recharts 3**                         | Charts                   | Charts as React components (`<LineChart>`, `<Line>`), configured in JSX rather than imperatively as with D3. Its SVG output is easy to test and style. That's enough for equity curves and metric comparisons; installed, not used yet        |
+| **Recharts 3**                         | Charts                   | Charts as React components (`<LineChart>`, `<Line>`), configured in JSX rather than imperatively as with D3. Its SVG output is easy to test and style. That's enough for equity curves and metric comparisons                                 |
 | **openapi-typescript + openapi-fetch** | The API client           | See [The API client](#the-api-client)                                                                                                                                                                                                         |
 | **ESLint 10 + typescript-eslint**      | Lint                     | `strictTypeChecked` uses the type checker to catch bugs: floating promises, unnecessary conditions, unsafe `any`. `react-hooks` enforces the rules of hooks, and `react-refresh` keeps hot reload working                                     |
 | **Prettier 3**                         | Formatting               | Formatting is decided by a tool, not in review. `eslint-config-prettier` turns off the ESLint rules that would disagree with it. `npm run lint` checks both                                                                                   |
 | **Vitest 5**                           | Test runner              | Uses Vite's own config and transforms, so tests run the code the way the app does, with no separate Babel/Jest setup. The API is Jest's (`test`, `expect`)                                                                                    |
 | **Testing Library**                    | Component tests          | Tests find elements the way a user does (by role, label and text), not by component internals, so they survive refactoring. `jsdom` provides the browser DOM in Node                                                                          |
+
+## Routing: why no router library
+
+The four pages need only this: turn the address into a page, change the
+address without reloading, and follow the back and forward buttons. That
+takes about 60 lines on the browser's History API (`src/router.ts`):
+
+- `navigate(to)` calls `history.pushState`, which changes the address bar
+  without loading anything, then announces the change.
+- `useLocation()` gives a component the current address and re-renders it
+  when the address changes, by `navigate` or by back/forward (`popstate`).
+- `matchRoute()` turns the address into one of five routes, typed, so
+  `route.id` exists only on the results route.
+- `<Link to>` renders a real `<a href>` (open in new tab and copy link
+  work) but handles a plain click with `navigate`.
+
+A library (React Router, TanStack Router) earns its size with nested
+layouts, per-route data loading, lazy routes and search-param validation.
+None is needed here. If they become needed, the routes are all in
+`matchRoute` and `App.tsx`, so the switch is small.
+
+Hash URLs (`/#/model`) would need no server support at all, but they make
+every URL odd. Real paths need the server to answer every page's URL with
+`index.html` (an "SPA fallback"). Vite's dev server does this already; the
+production server will need the same rule.
 
 ## Talking to the API
 
