@@ -177,5 +177,6 @@ page = st.navigation(
     position="sidebar",
 )
 
-st.title(page.title)
+# No st.title here: each page sets its own, and a second one here showed
+# every title twice (tests/test_app_smoke.py checks for exactly one).
 page.run()

@@ -8,6 +8,7 @@ Runs offline: synthetic prices go straight into session state, so the
 app never fetches data.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -37,7 +38,8 @@ def _prices() -> pd.DataFrame:
 PRICES = _prices()
 
 
-def _render(page: str, state: dict | None = None) -> AppTest:
+def _render(page: str, state: dict | None = None,
+            before_page_run: Callable[[], None] | None = None) -> AppTest:
     at = AppTest.from_file(APP, default_timeout=300)
     at.session_state["prices"] = PRICES
     at.session_state["ticker"] = "SYN"
@@ -45,18 +47,60 @@ def _render(page: str, state: dict | None = None) -> AppTest:
         at.session_state[key] = value
     at.run()
     at.switch_page(page)
+    if before_page_run:
+        before_page_run()
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     assert not at.error, [e.value for e in at.error]
     return at
 
 
-@pytest.mark.parametrize("page", [
-    "pages/backtest_lab.py", "pages/regimes.py", "pages/adaptive_lab.py",
-    "pages/ml_lab.py", "pages/validation.py",
-])
+PAGE_TITLES = {
+    "pages/backtest_lab.py": "Backtest",
+    "pages/regimes.py": "Regimes",
+    "pages/adaptive_lab.py": "Adaptive",
+    "pages/ml_lab.py": "ML lab",
+    "pages/validation.py": "Validation",
+}
+
+
+@pytest.mark.parametrize("page", list(PAGE_TITLES))
 def test_every_page_renders(page):
     _render(page)
+
+
+@pytest.mark.parametrize("page", list(PAGE_TITLES))
+def test_every_page_has_exactly_one_title(page, monkeypatch):
+    """Each page sets its own st.title, and nothing else adds one.
+
+    Counts st.title calls rather than reading at.title, which keeps only
+    one of two titles written before and inside page.run() while a browser
+    shows both. Two runs are checked:
+
+    - the first, the default page reached through app.py: this is where a
+      title written by app.py itself shows up (it did, as a duplicate);
+    - the run after switch_page, which AppTest makes by running the page
+      script directly: the page's own title, once.
+    """
+    import streamlit as st
+
+    titles: list[str] = []
+    through_app: list[str] = []
+    real_title = st.title
+
+    def spy(body, *args, **kwargs):
+        titles.append(body)
+        return real_title(body, *args, **kwargs)
+
+    def first_run_done():
+        through_app.extend(titles)
+        titles.clear()
+
+    monkeypatch.setattr(st, "title", spy)
+    at = _render(page, before_page_run=first_run_done)
+    assert through_app == [PAGE_TITLES["pages/backtest_lab.py"]]
+    assert titles == [PAGE_TITLES[page]]
+    assert [t.value for t in at.title] == [PAGE_TITLES[page]]
 
 
 @pytest.mark.parametrize("tab", ["Where it broke", "Compare strategies"])

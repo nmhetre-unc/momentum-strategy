@@ -1,25 +1,39 @@
 {
   "recorded_at": "2026-11-15",
-  "git_commit": "E3 commit on the dashboard branch, plus the E4 working tree",
+  "git_commit": "streamlit-title branch: the one-title fix and test, on top of the E4 merge",
   "python": {
     "command": "QBT_REQUIRE_DB=1 DATABASE_URL=postgresql+psycopg://qbt:qbt@localhost:5432/qbt pytest --cov=src/qbt --cov=src/qbt_service --cov-report=",
-    "collected": 768,
-    "passed": 767,
+    "collected": 773,
+    "passed": 772,
     "skipped": 1,
     "line_coverage_percent": {
       "total": 94,
       "src/qbt (engine)": 91,
       "src/qbt_service (service)": 98
     },
-    "statements": {"total": 3616, "src/qbt": 2058, "src/qbt_service": 1558}
+    "statements": {
+      "total": 3616,
+      "src/qbt": 2058,
+      "src/qbt_service": 1558
+    }
   },
   "web": {
-    "vitest": {"command": "npm test", "files": 10, "passed": 122},
+    "vitest": {
+      "command": "npm test",
+      "files": 10,
+      "passed": 122
+    },
     "request_contract_cases": {
       "file": "contracts/backtest_requests.json",
       "cases": 72,
-      "checked_by": ["tests/service/test_request_contract.py", "web/src/features/run/form.contract.test.ts"]
+      "checked_by": [
+        "tests/service/test_request_contract.py",
+        "web/src/features/run/form.contract.test.ts"
+      ]
     },
-    "playwright_e2e": {"command": "npm run test:e2e", "passed": 4}
+    "playwright_e2e": {
+      "command": "npm run test:e2e",
+      "passed": 4
+    }
   }
 }

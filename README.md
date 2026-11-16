@@ -39,7 +39,7 @@ Sharpe ratios following Bailey & López de Prado (2014).
   same Compose stack. Its first load is 90.4 kB gzipped (203.4 kB before
   code splitting), and a results page draws its first chart in a median
   559 ms. See [Dashboard](#dashboard).
-- 768 Python tests at 94% line coverage (91% for the engine, 98% for the
+- 773 Python tests at 94% line coverage (91% for the engine, 98% for the
   service), plus 122 unit tests and 4 browser end-to-end tests for the
   dashboard ([`results/tests.json`](results/tests.json)). CI runs on every push: it builds the C++
   extension, runs the suite against Postgres with coverage gates, runs an
@@ -1212,7 +1212,7 @@ Run the CLI:
 python main.py --ticker SPY --strategy momentum --rolling
 ```
 
-Run the tests (768 tests, 94% line coverage; [`results/tests.json`](results/tests.json)). The service's tests need
+Run the tests (773 tests, 94% line coverage; [`results/tests.json`](results/tests.json)). The service's tests need
 Postgres, which Compose provides:
 
 ```bash
