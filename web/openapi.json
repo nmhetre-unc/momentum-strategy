@@ -1,0 +1,2358 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "qbt backtest service",
+    "description": "Submit backtests of the qbt strategies and poll for their results. Jobs run on workers in the background, at least once and deterministically. Errors are RFC 9457 problem details.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/strategies": {
+      "get": {
+        "tags": [
+          "strategies"
+        ],
+        "summary": "List Strategies",
+        "description": "The strategies POST /backtests accepts, with their parameter schemas.",
+        "operationId": "list_strategies_strategies_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health check",
+        "description": "200 if this process can run a query on the database (SELECT 1),\nelse 503. The container healthcheck (python -m qbt_service.health\napi) calls this.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unreachable from this API process.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "database_unavailable": {
+                    "summary": "Database unavailable",
+                    "value": {
+                      "type": "/problems/database-unavailable",
+                      "title": "Database unavailable",
+                      "status": 503,
+                      "detail": "The database could not be reached. Nothing was changed unless a retry says otherwise: retry with the same Idempotency-Key."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backtests": {
+      "post": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Submit a backtest",
+        "description": "Validates the request, picks the newest price snapshot that covers\n[start, end), and queues a job. Returns 202 at once; poll\nGET /backtests/{id} for the outcome.\n\n`params` is checked against the strategy's schema (GET /strategies),\nand omitted fields take their defaults. The stored request has\nevery default filled in, and two requests that validate to the\nsame values are the same request for the Idempotency-Key.\n\nIdempotency (IETF draft-ietf-httpapi-idempotency-key-header): with\nan `Idempotency-Key`, a retry of the same request returns the same\njob with `Idempotent-Replayed: true`; the same key with a different\nrequest gets 422 (`/problems/idempotency-key-reused`). 409, which\nthe draft uses for a retry while the original is still being\nprocessed, can't happen: the job is created atomically, and a\nconcurrent retry waits for it and then replays it.",
+        "operationId": "submit_backtest_backtests_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes the POST safe to retry: the same key with the same request returns the original job instead of creating another. A Structured Field String (\"...\", as in the IETF draft) or the bare value; 1 to 255 printable ASCII characters. Optional.",
+              "examples": [
+                "\"8e03978e-40d5-43e8-bc93-6894a57f9324\""
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes the POST safe to retry: the same key with the same request returns the original job instead of creating another. A Structured Field String (\"...\", as in the IETF draft) or the bare value; 1 to 255 printable ASCII characters. Optional."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/MeanReversionRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MlDirectionRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MomentumRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SmaCrossoverRequest"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "strategy",
+                  "mapping": {
+                    "mean_reversion": "#/components/schemas/MeanReversionRequest",
+                    "ml_direction": "#/components/schemas/MlDirectionRequest",
+                    "momentum": "#/components/schemas/MomentumRequest",
+                    "sma_crossover": "#/components/schemas/SmaCrossoverRequest"
+                  }
+                },
+                "title": "Body"
+              },
+              "examples": {
+                "mean_reversion": {
+                  "summary": "mean_reversion, default parameters",
+                  "value": {
+                    "strategy": "mean_reversion",
+                    "params": {
+                      "period": 14,
+                      "oversold": 30,
+                      "overbought": 70
+                    },
+                    "ticker": "SPY",
+                    "start": "2015-01-01",
+                    "end": "2025-01-01"
+                  }
+                },
+                "ml_direction": {
+                  "summary": "ml_direction, default parameters",
+                  "value": {
+                    "strategy": "ml_direction",
+                    "params": {
+                      "train_frac": 0.7
+                    },
+                    "ticker": "SPY",
+                    "start": "2015-01-01",
+                    "end": "2025-01-01"
+                  }
+                },
+                "momentum": {
+                  "summary": "momentum, default parameters",
+                  "value": {
+                    "strategy": "momentum",
+                    "params": {
+                      "lookback": 20,
+                      "threshold": 0.0
+                    },
+                    "ticker": "SPY",
+                    "start": "2015-01-01",
+                    "end": "2025-01-01"
+                  }
+                },
+                "sma_crossover": {
+                  "summary": "sma_crossover, default parameters",
+                  "value": {
+                    "strategy": "sma_crossover",
+                    "params": {
+                      "short_window": 50,
+                      "long_window": 200
+                    },
+                    "ticker": "SPY",
+                    "start": "2015-01-01",
+                    "end": "2025-01-01"
+                  }
+                },
+                "minimal": {
+                  "summary": "Only the required fields (params, cost_bps, n_boot, seed default)",
+                  "value": {
+                    "strategy": "momentum",
+                    "ticker": "QQQ",
+                    "start": "2012-01-01",
+                    "end": "2022-01-01"
+                  }
+                },
+                "everything": {
+                  "summary": "Every field given",
+                  "value": {
+                    "strategy": "sma_crossover",
+                    "params": {
+                      "short_window": 50,
+                      "long_window": 200
+                    },
+                    "ticker": "SPY",
+                    "start": "2015-01-01",
+                    "end": "2025-01-01",
+                    "cost_bps": 5.0,
+                    "n_boot": 2000,
+                    "seed": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted: the job is queued (or, on a replay, the original job is returned).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestAccepted"
+                },
+                "examples": {
+                  "accepted": {
+                    "summary": "A new job",
+                    "value": {
+                      "id": "0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10",
+                      "status": "queued",
+                      "href": "/backtests/0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10"
+                    }
+                  },
+                  "replayed": {
+                    "summary": "A replay, after the job finished",
+                    "value": {
+                      "id": "0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10",
+                      "status": "succeeded",
+                      "href": "/backtests/0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "description": "/backtests/{id}",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Idempotent-Replayed": {
+                "description": "`true` when an earlier request with this Idempotency-Key created the job.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The Idempotency-Key header is malformed.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "invalid_key": {
+                    "summary": "Invalid Idempotency-Key",
+                    "value": {
+                      "type": "/problems/invalid-idempotency-key",
+                      "title": "Invalid Idempotency-Key",
+                      "status": 400,
+                      "detail": "Idempotency-Key: the key must be 1 to 255 characters."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body is invalid, no price snapshot covers the range, or the Idempotency-Key was used for a different request. `type` says which; only `validation-error` has `errors`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_error": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "/problems/validation-error",
+                      "title": "Invalid request",
+                      "status": 422,
+                      "detail": "The request has 1 invalid value; see `errors`.",
+                      "errors": [
+                        {
+                          "loc": [
+                            "body",
+                            "sma_crossover",
+                            "params"
+                          ],
+                          "type": "value_error",
+                          "msg": "Value error, short_window must be less than long_window"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reused": {
+                    "summary": "Idempotency-Key reused",
+                    "value": {
+                      "type": "/problems/idempotency-key-reused",
+                      "title": "Idempotency-Key reused",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request. Use a new key for a new request."
+                    }
+                  },
+                  "no_price_data": {
+                    "summary": "No price data",
+                    "value": {
+                      "type": "/problems/no-price-data",
+                      "title": "No price data",
+                      "status": 422,
+                      "detail": "No price snapshot for SPY covers [2015-01-01, 2025-01-01). Ingest one first: python -m qbt_service.ingest SPY --start 2015-01-01 --end 2025-01-01"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unreachable. Retry after `Retry-After` seconds. A POST may or may not have created its job; retrying with the same Idempotency-Key is safe either way.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "database_unavailable": {
+                    "summary": "Database unavailable",
+                    "value": {
+                      "type": "/problems/database-unavailable",
+                      "title": "Database unavailable",
+                      "status": 503,
+                      "detail": "The database could not be reached. Nothing was changed unless a retry says otherwise: retry with the same Idempotency-Key."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backtests/{job_id}": {
+      "get": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Get a backtest job",
+        "description": "The job's status, attempts, timestamps and last error, the request\nas stored, and, once it has succeeded, its metrics and run details.\n\nA job can go back from `running` to `queued`: a failed attempt that\nwill be retried, or a worker that died or shut down. `attempts`\ncounts attempts started; `last_error` says why the previous one\nended.",
+        "operationId": "get_backtest_backtests__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestJob"
+                },
+                "examples": {
+                  "queued": {
+                    "summary": "Queued",
+                    "value": {
+                      "id": "0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10",
+                      "status": "queued",
+                      "attempts": 0,
+                      "max_attempts": 3,
+                      "created_at": "2026-11-14T10:00:00.000000Z",
+                      "run_after": "2026-11-14T10:00:00.000000Z",
+                      "started_at": null,
+                      "heartbeat_at": null,
+                      "finished_at": null,
+                      "last_error": null,
+                      "request": {
+                        "strategy": "sma_crossover",
+                        "params": {
+                          "short_window": 50,
+                          "long_window": 200
+                        },
+                        "ticker": "SPY",
+                        "start": "2015-01-01",
+                        "end": "2025-01-01",
+                        "cost_bps": 5.0,
+                        "n_boot": 2000,
+                        "seed": 0
+                      },
+                      "price_series_id": 7,
+                      "strategy_version": 1,
+                      "metrics": null,
+                      "result": null
+                    }
+                  },
+                  "running": {
+                    "summary": "Running",
+                    "value": {
+                      "id": "0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10",
+                      "status": "running",
+                      "attempts": 1,
+                      "max_attempts": 3,
+                      "created_at": "2026-11-14T10:00:00.000000Z",
+                      "run_after": "2026-11-14T10:00:00.000000Z",
+                      "started_at": "2026-11-14T10:00:01.200000Z",
+                      "heartbeat_at": "2026-11-14T10:00:11.200000Z",
+                      "finished_at": null,
+                      "last_error": null,
+                      "request": {
+                        "strategy": "sma_crossover",
+                        "params": {
+                          "short_window": 50,
+                          "long_window": 200
+                        },
+                        "ticker": "SPY",
+                        "start": "2015-01-01",
+                        "end": "2025-01-01",
+                        "cost_bps": 5.0,
+                        "n_boot": 2000,
+                        "seed": 0
+                      },
+                      "price_series_id": 7,
+                      "strategy_version": 1,
+                      "metrics": null,
+                      "result": null
+                    }
+                  },
+                  "succeeded": {
+                    "summary": "Succeeded",
+                    "value": {
+                      "id": "0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10",
+                      "status": "succeeded",
+                      "attempts": 1,
+                      "max_attempts": 3,
+                      "created_at": "2026-11-14T10:00:00.000000Z",
+                      "run_after": "2026-11-14T10:00:00.000000Z",
+                      "started_at": "2026-11-14T10:00:01.200000Z",
+                      "heartbeat_at": "2026-11-14T10:00:01.200000Z",
+                      "finished_at": "2026-11-14T10:00:02.900000Z",
+                      "last_error": null,
+                      "request": {
+                        "strategy": "sma_crossover",
+                        "params": {
+                          "short_window": 50,
+                          "long_window": 200
+                        },
+                        "ticker": "SPY",
+                        "start": "2015-01-01",
+                        "end": "2025-01-01",
+                        "cost_bps": 5.0,
+                        "n_boot": 2000,
+                        "seed": 0
+                      },
+                      "price_series_id": 7,
+                      "strategy_version": 1,
+                      "metrics": {
+                        "annualized_volatility": 0.121,
+                        "cagr": 0.074,
+                        "exposure": 0.81,
+                        "max_drawdown": -0.198,
+                        "num_trades": 9.0,
+                        "sharpe_ratio": 0.66,
+                        "sharpe_ci_low": 0.05,
+                        "sharpe_ci_high": 1.27,
+                        "sortino_ratio": 0.91,
+                        "total_return": 1.04,
+                        "turnover": 0.0036,
+                        "win_rate": 0.54
+                      },
+                      "result": {
+                        "attempt": 1,
+                        "qbt_version": "0.1.0",
+                        "numpy_version": "2.3.4",
+                        "bootstrap_impl": "cpp",
+                        "duration_ms": 1480,
+                        "n_days": 2515,
+                        "created_at": "2026-11-14T10:00:02.900000Z"
+                      }
+                    }
+                  },
+                  "failed": {
+                    "summary": "Failed",
+                    "value": {
+                      "id": "0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10",
+                      "status": "failed",
+                      "attempts": 1,
+                      "max_attempts": 3,
+                      "created_at": "2026-11-14T10:00:00.000000Z",
+                      "run_after": "2026-11-14T10:00:00.000000Z",
+                      "started_at": "2026-11-14T10:00:01.200000Z",
+                      "heartbeat_at": "2026-11-14T10:00:01.200000Z",
+                      "finished_at": "2026-11-14T10:00:01.400000Z",
+                      "last_error": "backtest raised: Traceback (most recent call last): ...",
+                      "request": {
+                        "strategy": "sma_crossover",
+                        "params": {
+                          "short_window": 50,
+                          "long_window": 200
+                        },
+                        "ticker": "SPY",
+                        "start": "2015-01-01",
+                        "end": "2025-01-01",
+                        "cost_bps": 5.0,
+                        "n_boot": 2000,
+                        "seed": 0
+                      },
+                      "price_series_id": 7,
+                      "strategy_version": 1,
+                      "metrics": null,
+                      "result": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No job has this id.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Job not found",
+                    "value": {
+                      "type": "/problems/job-not-found",
+                      "title": "Job not found",
+                      "status": 404,
+                      "detail": "There is no backtest job 0b6c3f5e-8d1a-4a43-9c55-2f1e7d3b9a10."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The id is not a UUID.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_error": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "/problems/validation-error",
+                      "title": "Invalid request",
+                      "status": 422,
+                      "detail": "The request has 1 invalid value; see `errors`.",
+                      "errors": [
+                        {
+                          "loc": [
+                            "path",
+                            "job_id"
+                          ],
+                          "type": "uuid_parsing",
+                          "msg": "Input should be a valid UUID, invalid length: expected length 32 for simple format, found 3"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unreachable. Retry after `Retry-After` seconds. A POST may or may not have created its job; retrying with the same Idempotency-Key is safe either way.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "database_unavailable": {
+                    "summary": "Database unavailable",
+                    "value": {
+                      "type": "/problems/database-unavailable",
+                      "title": "Database unavailable",
+                      "status": 503,
+                      "detail": "The database could not be reached. Nothing was changed unless a retry says otherwise: retry with the same Idempotency-Key."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "List registered models",
+        "description": "Every registered model version, oldest first, each with its\nout-of-sample accuracy next to the baseline it had to beat.",
+        "operationId": "models_list_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelList"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unreachable. Retry after `Retry-After` seconds. A POST may or may not have created its job; retrying with the same Idempotency-Key is safe either way.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "database_unavailable": {
+                    "summary": "Database unavailable",
+                    "value": {
+                      "type": "/problems/database-unavailable",
+                      "title": "Database unavailable",
+                      "status": 503,
+                      "detail": "The database could not be reached. Nothing was changed unless a retry says otherwise: retry with the same Idempotency-Key."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{version}": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Get a model version",
+        "description": "One version with its full evaluation, hyperparameter search and serving input.",
+        "operationId": "model_detail_models__version__get",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No model has this version.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Model not found",
+                    "value": {
+                      "type": "/problems/model-not-found",
+                      "title": "Model not found",
+                      "status": 404,
+                      "detail": "There is no model version 7."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unreachable. Retry after `Retry-After` seconds. A POST may or may not have created its job; retrying with the same Idempotency-Key is safe either way.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "database_unavailable": {
+                    "summary": "Database unavailable",
+                    "value": {
+                      "type": "/problems/database-unavailable",
+                      "title": "Database unavailable",
+                      "status": 503,
+                      "detail": "The database could not be reached. Nothing was changed unless a retry says otherwise: retry with the same Idempotency-Key."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/predict": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Predict",
+        "description": "Scores a model version (the latest unless `version` is given) on the\nlatest complete month in its pinned price snapshot (`as_of`), i.e.\nforecasts the month after as_of. That month's label isn't in the\nsnapshot, so the model never trained on it. Every prediction is\nlogged, and every response carries the model's out-of-sample\naccuracy and the baseline it was measured against.",
+        "operationId": "predict_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PredictRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Prediction"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body is invalid, no model is registered, or the version doesn't exist. `type` says which.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "no_model": {
+                    "summary": "No model registered",
+                    "value": {
+                      "type": "/problems/no-model-registered",
+                      "title": "No model registered",
+                      "status": 422,
+                      "detail": "No model is registered. Train one: python -m qbt_service.train SPY --start 2008-01-01 --end 2025-01-01"
+                    }
+                  },
+                  "unknown_version": {
+                    "summary": "Unknown model version",
+                    "value": {
+                      "type": "/problems/unknown-model-version",
+                      "title": "Unknown model version",
+                      "status": 422,
+                      "detail": "There is no model version 7."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The stored model or its input failed its SHA-256 check. Nothing was scored or logged.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "integrity": {
+                    "summary": "Model failed its integrity check",
+                    "value": {
+                      "type": "/problems/model-integrity-error",
+                      "title": "Model failed its integrity check",
+                      "status": 500,
+                      "detail": "model version 1: the stored artifact doesn't match its SHA-256; refusing to load it"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unreachable. Retry after `Retry-After` seconds. A POST may or may not have created its job; retrying with the same Idempotency-Key is safe either way.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "database_unavailable": {
+                    "summary": "Database unavailable",
+                    "value": {
+                      "type": "/problems/database-unavailable",
+                      "title": "Database unavailable",
+                      "status": 503,
+                      "detail": "The database could not be reached. Nothing was changed unless a retry says otherwise: retry with the same Idempotency-Key."
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ArtifactInfo": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256",
+            "description": "Checked before the model is loaded."
+          },
+          "bytes": {
+            "type": "integer",
+            "title": "Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "format",
+          "sha256",
+          "bytes"
+        ],
+        "title": "ArtifactInfo"
+      },
+      "BacktestAccepted": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "The job id. Poll GET /backtests/{id}."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "The job's status now: `queued` for a new job; on a replay, wherever the original job has got to."
+          },
+          "href": {
+            "type": "string",
+            "title": "Href",
+            "description": "Where to poll; the same as the Location header."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "href"
+        ],
+        "title": "BacktestAccepted"
+      },
+      "BacktestJob": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "`queued` (waiting, or waiting to retry after a failed attempt), `running`, `succeeded` or `failed`. The last two are final."
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts",
+            "description": "Attempts started so far (0 while first queued)."
+          },
+          "max_attempts": {
+            "type": "integer",
+            "title": "Max Attempts",
+            "description": "After this many attempts the job fails."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "run_after": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Run After",
+            "description": "Earliest time a queued job may start; later than created_at while a retry is backing off."
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "When the first attempt started."
+          },
+          "heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heartbeat At",
+            "description": "The running worker's last heartbeat (that of the latest attempt)."
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At",
+            "description": "Set once succeeded or failed."
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error",
+            "description": "Why the latest attempt failed, if it did (kept while a retry is queued; cleared on success)."
+          },
+          "request": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Request",
+            "description": "The request as validated and stored, with every default filled in."
+          },
+          "price_series_id": {
+            "type": "integer",
+            "title": "Price Series Id",
+            "description": "The price snapshot the backtest runs on."
+          },
+          "strategy_version": {
+            "type": "integer",
+            "title": "Strategy Version",
+            "description": "The strategy's behaviour version this job was submitted to (and, once it has run, ran with). A job whose version is no longer current is failed rather than run with newer code; resubmit it."
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metrics",
+            "description": "full_report() metrics, once succeeded; otherwise null. A value that is NaN (e.g. a Sharpe ratio with no variance) is null."
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "About the run, once succeeded."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "attempts",
+          "max_attempts",
+          "created_at",
+          "run_after",
+          "started_at",
+          "heartbeat_at",
+          "finished_at",
+          "last_error",
+          "request",
+          "price_series_id",
+          "strategy_version",
+          "metrics",
+          "result"
+        ],
+        "title": "BacktestJob"
+      },
+      "BaselineComparison": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The baseline this model has to beat (its bar)."
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "accuracy": {
+            "type": "number",
+            "title": "Accuracy",
+            "description": "The baseline's accuracy on the same months."
+          },
+          "difference": {
+            "type": "number",
+            "title": "Difference",
+            "description": "Model accuracy minus baseline accuracy."
+          },
+          "difference_ci": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Difference Ci",
+            "description": "95% paired stationary-bootstrap interval."
+          },
+          "mcnemar_p": {
+            "type": "number",
+            "title": "Mcnemar P",
+            "description": "Exact two-sided McNemar test, same months."
+          },
+          "beats": {
+            "type": "boolean",
+            "title": "Beats",
+            "description": "Interval above 0 and McNemar p < 0.05."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "accuracy",
+          "difference",
+          "difference_ci",
+          "mcnemar_p",
+          "beats"
+        ],
+        "title": "BaselineComparison"
+      },
+      "ClassInfo": {
+        "properties": {
+          "label": {
+            "type": "number",
+            "title": "Label",
+            "description": "The class as the model encodes it."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "name"
+        ],
+        "title": "ClassInfo"
+      },
+      "ClassProbability": {
+        "properties": {
+          "label": {
+            "type": "number",
+            "title": "Label",
+            "description": "The class as the model encodes it."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "probability": {
+            "type": "number",
+            "title": "Probability"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "name",
+          "probability"
+        ],
+        "title": "ClassProbability"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "Health"
+      },
+      "MeanReversionParams": {
+        "properties": {
+          "period": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 5.0,
+            "title": "RSI period",
+            "description": "Averaging window for RSI. Shorter is twitchier.",
+            "default": 14
+          },
+          "oversold": {
+            "type": "integer",
+            "maximum": 40.0,
+            "minimum": 10.0,
+            "title": "Oversold threshold",
+            "description": "RSI level that triggers a buy.",
+            "default": 30
+          },
+          "overbought": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 60.0,
+            "title": "Overbought threshold",
+            "description": "RSI level that triggers an exit.",
+            "default": 70
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MeanReversionParams",
+        "description": "RSI-based: buys when RSI falls below the oversold line, exits when it rises above overbought, and holds in between. It is a bet that short-term moves overshoot and get given back."
+      },
+      "MeanReversionRequest": {
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "const": "mean_reversion",
+            "title": "Strategy"
+          },
+          "params": {
+            "$ref": "#/components/schemas/MeanReversionParams"
+          },
+          "ticker": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Ticker",
+            "description": "Yahoo Finance symbol, e.g. SPY or BRK-B; upper-cased."
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start",
+            "description": "First date of the backtest (inclusive)."
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End",
+            "description": "End of the backtest (exclusive, as in yfinance)."
+          },
+          "cost_bps": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Cost Bps",
+            "description": "One-way transaction cost per unit of position change, in basis points.",
+            "default": 5.0
+          },
+          "n_boot": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 0.0,
+            "title": "N Boot",
+            "description": "Stationary-bootstrap replicates for the Sharpe interval; 0 skips it.",
+            "default": 2000
+          },
+          "seed": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Seed",
+            "description": "Bootstrap seed.",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "strategy",
+          "ticker",
+          "start",
+          "end"
+        ],
+        "title": "MeanReversionRequest"
+      },
+      "MlDirectionParams": {
+        "properties": {
+          "train_frac": {
+            "type": "number",
+            "maximum": 0.9,
+            "minimum": 0.5,
+            "title": "Train fraction",
+            "description": "Share of history used for fitting. The rest is the only part whose performance means anything.",
+            "default": 0.7
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MlDirectionParams",
+        "description": "Trains a classifier (logistic regression or random forest) on lagged returns, moving-average ratios, RSI, volatility and volume to predict whether tomorrow closes higher, then goes long on every predicted up day."
+      },
+      "MlDirectionRequest": {
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "const": "ml_direction",
+            "title": "Strategy"
+          },
+          "params": {
+            "$ref": "#/components/schemas/MlDirectionParams"
+          },
+          "ticker": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Ticker",
+            "description": "Yahoo Finance symbol, e.g. SPY or BRK-B; upper-cased."
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start",
+            "description": "First date of the backtest (inclusive)."
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End",
+            "description": "End of the backtest (exclusive, as in yfinance)."
+          },
+          "cost_bps": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Cost Bps",
+            "description": "One-way transaction cost per unit of position change, in basis points.",
+            "default": 5.0
+          },
+          "n_boot": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 0.0,
+            "title": "N Boot",
+            "description": "Stationary-bootstrap replicates for the Sharpe interval; 0 skips it.",
+            "default": 2000
+          },
+          "seed": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Seed",
+            "description": "Bootstrap seed.",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "strategy",
+          "ticker",
+          "start",
+          "end"
+        ],
+        "title": "MlDirectionRequest"
+      },
+      "ModelDetail": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          },
+          "model_type": {
+            "type": "string",
+            "title": "Model Type"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "predicts": {
+            "type": "string",
+            "title": "Predicts",
+            "description": "What a prediction is about, relative to as_of."
+          },
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/ClassInfo"
+            },
+            "type": "array",
+            "title": "Classes"
+          },
+          "feature_set": {
+            "type": "string",
+            "title": "Feature Set"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "price_series_id": {
+            "type": "integer",
+            "title": "Price Series Id",
+            "description": "The pinned price snapshot it was trained on."
+          },
+          "training_window": {
+            "$ref": "#/components/schemas/TrainingWindow"
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed"
+          },
+          "hyperparameters": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Hyperparameters",
+            "description": "The selected configuration."
+          },
+          "out_of_sample": {
+            "$ref": "#/components/schemas/OutOfSample"
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/BaselineComparison"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "The two lines above in words."
+          },
+          "serving": {
+            "$ref": "#/components/schemas/ServingInput"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactInfo"
+          },
+          "library_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Library Versions"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics",
+            "description": "The full evaluation, including every baseline and the per-fold selections."
+          },
+          "training": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Training",
+            "description": "Hyperparameter search and configuration."
+          },
+          "serving_features": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Serving Features"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "href",
+          "model_type",
+          "target",
+          "predicts",
+          "classes",
+          "feature_set",
+          "features",
+          "price_series_id",
+          "training_window",
+          "seed",
+          "hyperparameters",
+          "out_of_sample",
+          "baseline",
+          "summary",
+          "serving",
+          "artifact",
+          "library_versions",
+          "created_at",
+          "metrics",
+          "training",
+          "serving_features"
+        ],
+        "title": "ModelDetail"
+      },
+      "ModelInfo": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          },
+          "model_type": {
+            "type": "string",
+            "title": "Model Type"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "predicts": {
+            "type": "string",
+            "title": "Predicts",
+            "description": "What a prediction is about, relative to as_of."
+          },
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/ClassInfo"
+            },
+            "type": "array",
+            "title": "Classes"
+          },
+          "feature_set": {
+            "type": "string",
+            "title": "Feature Set"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "price_series_id": {
+            "type": "integer",
+            "title": "Price Series Id",
+            "description": "The pinned price snapshot it was trained on."
+          },
+          "training_window": {
+            "$ref": "#/components/schemas/TrainingWindow"
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed"
+          },
+          "hyperparameters": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Hyperparameters",
+            "description": "The selected configuration."
+          },
+          "out_of_sample": {
+            "$ref": "#/components/schemas/OutOfSample"
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/BaselineComparison"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "The two lines above in words."
+          },
+          "serving": {
+            "$ref": "#/components/schemas/ServingInput"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactInfo"
+          },
+          "library_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Library Versions"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "href",
+          "model_type",
+          "target",
+          "predicts",
+          "classes",
+          "feature_set",
+          "features",
+          "price_series_id",
+          "training_window",
+          "seed",
+          "hyperparameters",
+          "out_of_sample",
+          "baseline",
+          "summary",
+          "serving",
+          "artifact",
+          "library_versions",
+          "created_at"
+        ],
+        "title": "ModelInfo"
+      },
+      "ModelList": {
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelInfo"
+            },
+            "type": "array",
+            "title": "Models"
+          }
+        },
+        "type": "object",
+        "required": [
+          "models"
+        ],
+        "title": "ModelList"
+      },
+      "MomentumParams": {
+        "properties": {
+          "lookback": {
+            "type": "integer",
+            "maximum": 60.0,
+            "minimum": 5.0,
+            "title": "Lookback (days)",
+            "description": "Window over which the trailing return is measured.",
+            "default": 20
+          },
+          "threshold": {
+            "type": "number",
+            "maximum": 0.05,
+            "minimum": -0.05,
+            "title": "Return threshold",
+            "description": "How positive the trailing return must be before going long. Above 0 demands confirmation.",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MomentumParams",
+        "description": "Goes long when the trailing N-day return is above a threshold. Same underlying bet as the crossover — that recent direction persists — expressed more directly."
+      },
+      "MomentumRequest": {
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "const": "momentum",
+            "title": "Strategy"
+          },
+          "params": {
+            "$ref": "#/components/schemas/MomentumParams"
+          },
+          "ticker": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Ticker",
+            "description": "Yahoo Finance symbol, e.g. SPY or BRK-B; upper-cased."
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start",
+            "description": "First date of the backtest (inclusive)."
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End",
+            "description": "End of the backtest (exclusive, as in yfinance)."
+          },
+          "cost_bps": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Cost Bps",
+            "description": "One-way transaction cost per unit of position change, in basis points.",
+            "default": 5.0
+          },
+          "n_boot": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 0.0,
+            "title": "N Boot",
+            "description": "Stationary-bootstrap replicates for the Sharpe interval; 0 skips it.",
+            "default": 2000
+          },
+          "seed": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Seed",
+            "description": "Bootstrap seed.",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "strategy",
+          "ticker",
+          "start",
+          "end"
+        ],
+        "title": "MomentumRequest"
+      },
+      "OutOfSample": {
+        "properties": {
+          "accuracy": {
+            "type": "number",
+            "title": "Accuracy",
+            "description": "Share of out-of-sample months predicted correctly."
+          },
+          "accuracy_ci": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Accuracy Ci",
+            "description": "95% paired stationary-bootstrap interval (blocks of months)."
+          },
+          "n_months": {
+            "type": "integer",
+            "title": "N Months"
+          },
+          "first_test_decision": {
+            "type": "string",
+            "format": "date",
+            "title": "First Test Decision"
+          },
+          "last_test_decision": {
+            "type": "string",
+            "format": "date",
+            "title": "Last Test Decision"
+          },
+          "auc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auc",
+            "description": "ROC AUC; macro one-vs-rest for regime."
+          },
+          "log_loss": {
+            "type": "number",
+            "title": "Log Loss"
+          },
+          "brier": {
+            "type": "number",
+            "title": "Brier",
+            "description": "Multiclass Brier score (sum over classes)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "accuracy",
+          "accuracy_ci",
+          "n_months",
+          "first_test_decision",
+          "last_test_decision",
+          "auc",
+          "log_loss",
+          "brier"
+        ],
+        "title": "OutOfSample"
+      },
+      "PredictRequest": {
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "A registered version; omitted: the latest."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PredictRequest"
+      },
+      "Prediction": {
+        "properties": {
+          "prediction_id": {
+            "type": "integer",
+            "title": "Prediction Id",
+            "description": "This prediction's row in the prediction log."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "model_version": {
+            "type": "integer",
+            "title": "Model Version"
+          },
+          "model_href": {
+            "type": "string",
+            "title": "Model Href"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "predicts": {
+            "type": "string",
+            "title": "Predicts"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "prediction": {
+            "type": "number",
+            "title": "Prediction",
+            "description": "The most probable class."
+          },
+          "prediction_name": {
+            "type": "string",
+            "title": "Prediction Name"
+          },
+          "probabilities": {
+            "items": {
+              "$ref": "#/components/schemas/ClassProbability"
+            },
+            "type": "array",
+            "title": "Probabilities"
+          },
+          "features_sha256": {
+            "type": "string",
+            "title": "Features Sha256",
+            "description": "SHA-256 of the exact input scored."
+          },
+          "out_of_sample": {
+            "$ref": "#/components/schemas/OutOfSample"
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/BaselineComparison"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prediction_id",
+          "created_at",
+          "model_version",
+          "model_href",
+          "target",
+          "predicts",
+          "as_of",
+          "prediction",
+          "prediction_name",
+          "probabilities",
+          "features_sha256",
+          "out_of_sample",
+          "baseline",
+          "summary"
+        ],
+        "title": "Prediction"
+      },
+      "Problem": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Identifies the kind of problem; compare this, not `title`."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Short summary of the kind of problem."
+          },
+          "status": {
+            "type": "integer",
+            "title": "Status",
+            "description": "The HTTP status code."
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "What went wrong with this request."
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail"
+        ],
+        "title": "Problem",
+        "description": "An RFC 9457 problem details object."
+      },
+      "ResultInfo": {
+        "properties": {
+          "attempt": {
+            "type": "integer",
+            "title": "Attempt",
+            "description": "The attempt that produced the result."
+          },
+          "qbt_version": {
+            "type": "string",
+            "title": "Qbt Version"
+          },
+          "numpy_version": {
+            "type": "string",
+            "title": "Numpy Version"
+          },
+          "bootstrap_impl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bootstrap Impl",
+            "description": "`cpp` or `numpy` (bit-identical); null when n_boot is 0."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms",
+            "description": "Time spent in the backtest itself."
+          },
+          "n_days": {
+            "type": "integer",
+            "title": "N Days",
+            "description": "Trading days in the backtest."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attempt",
+          "qbt_version",
+          "numpy_version",
+          "bootstrap_impl",
+          "duration_ms",
+          "n_days",
+          "created_at"
+        ],
+        "title": "ResultInfo"
+      },
+      "ServingInput": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of",
+            "description": "The latest complete month end in the snapshot; POST /predict forecasts the month after it."
+          },
+          "features_sha256": {
+            "type": "string",
+            "title": "Features Sha256"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "features_sha256"
+        ],
+        "title": "ServingInput"
+      },
+      "SmaCrossoverParams": {
+        "properties": {
+          "short_window": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 5.0,
+            "title": "Short SMA window",
+            "description": "Days in the fast average. Shorter reacts sooner and whipsaws more.",
+            "default": 50
+          },
+          "long_window": {
+            "type": "integer",
+            "maximum": 300.0,
+            "minimum": 50.0,
+            "title": "Long SMA window",
+            "description": "Days in the slow average. 200 is conventional, which is itself a reason to test whether it matters.",
+            "default": 200
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SmaCrossoverParams",
+        "description": "Goes long when the short moving average is above the long one, flat otherwise. The two averages are a crude trend filter: the short one tracks recent price, the long one tracks the established level, and the crossover is the moment recent price decisively left the old level behind."
+      },
+      "SmaCrossoverRequest": {
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "const": "sma_crossover",
+            "title": "Strategy"
+          },
+          "params": {
+            "$ref": "#/components/schemas/SmaCrossoverParams"
+          },
+          "ticker": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Ticker",
+            "description": "Yahoo Finance symbol, e.g. SPY or BRK-B; upper-cased."
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start",
+            "description": "First date of the backtest (inclusive)."
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End",
+            "description": "End of the backtest (exclusive, as in yfinance)."
+          },
+          "cost_bps": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Cost Bps",
+            "description": "One-way transaction cost per unit of position change, in basis points.",
+            "default": 5.0
+          },
+          "n_boot": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 0.0,
+            "title": "N Boot",
+            "description": "Stationary-bootstrap replicates for the Sharpe interval; 0 skips it.",
+            "default": 2000
+          },
+          "seed": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Seed",
+            "description": "Bootstrap seed.",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "strategy",
+          "ticker",
+          "start",
+          "end"
+        ],
+        "title": "SmaCrossoverRequest"
+      },
+      "StrategyInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "family": {
+            "type": "string",
+            "title": "Family"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "params_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params Schema",
+            "description": "JSON Schema of `params` for POST /backtests with this strategy."
+          },
+          "defaults": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Defaults",
+            "description": "The values used for omitted params."
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Behaviour version. It goes up whenever the strategy would compute different positions for the same request; a stored job keeps the version it ran (`strategy_version` on GET /backtests/{id})."
+          },
+          "schema_hash": {
+            "type": "string",
+            "title": "Schema Hash",
+            "description": "SHA-256 of params_schema; changes whenever the schema does."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "family",
+          "description",
+          "params_schema",
+          "defaults",
+          "version",
+          "schema_hash"
+        ],
+        "title": "StrategyInfo"
+      },
+      "StrategyList": {
+        "properties": {
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyInfo"
+            },
+            "type": "array",
+            "title": "Strategies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "strategies"
+        ],
+        "title": "StrategyList"
+      },
+      "TrainingWindow": {
+        "properties": {
+          "first_decision": {
+            "type": "string",
+            "format": "date",
+            "title": "First Decision"
+          },
+          "last_decision": {
+            "type": "string",
+            "format": "date",
+            "title": "Last Decision"
+          },
+          "last_label_end": {
+            "type": "string",
+            "format": "date",
+            "title": "Last Label End",
+            "description": "When the last training label became known."
+          },
+          "n_months": {
+            "type": "integer",
+            "title": "N Months"
+          }
+        },
+        "type": "object",
+        "required": [
+          "first_decision",
+          "last_decision",
+          "last_label_end",
+          "n_months"
+        ],
+        "title": "TrainingWindow"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ValidationErrorItem": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Loc",
+            "description": "Where: ['body', ...] or ['header', ...] etc."
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationErrorItem"
+      },
+      "ValidationProblem": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Identifies the kind of problem; compare this, not `title`."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Short summary of the kind of problem."
+          },
+          "status": {
+            "type": "integer",
+            "title": "Status",
+            "description": "The HTTP status code."
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "What went wrong with this request."
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ValidationErrorItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors",
+            "description": "One entry per invalid value; only when `type` is /problems/validation-error."
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail"
+        ],
+        "title": "ValidationProblem",
+        "description": "A 422 problem. Only `validation-error` problems carry `errors`."
+      }
+    }
+  }
+}
