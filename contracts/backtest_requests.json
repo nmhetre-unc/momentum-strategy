@@ -1,0 +1,1234 @@
+{
+  "description": "POST /backtests request bodies and whether the API accepts them. tests/service/test_request_contract.py checks the API against every case, web/src/features/run/form.contract.test.ts checks the dashboard's client-side validation. Every case gives every field and every parameter, as the form always does. Seeds above 2**53 - 1 are left out: the API accepts them, the form refuses them (a JavaScript number can't hold them exactly).",
+  "cases": [
+    {
+      "name": "sma_crossover: defaults",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: defaults",
+      "valid": true,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 20,
+          "threshold": 0.0
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: defaults",
+      "valid": true,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 14,
+          "oversold": 30,
+          "overbought": 70
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ml_direction: defaults",
+      "valid": true,
+      "body": {
+        "strategy": "ml_direction",
+        "params": {
+          "train_frac": 0.7
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: smallest windows",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 5,
+          "long_window": 50
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: largest windows",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 100,
+          "long_window": 300
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: short just below long",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 99,
+          "long_window": 100
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: short equal to long",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 50
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: short above long, both in range",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 60,
+          "long_window": 55
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: short below minimum",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 4,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: short above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 101,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: long below minimum",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 49
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: long above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 301
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "sma: fractional window",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 10.5,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: shortest lookback",
+      "valid": true,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 5,
+          "threshold": 0.0
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: longest lookback",
+      "valid": true,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 60,
+          "threshold": 0.0
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: lowest threshold",
+      "valid": true,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 20,
+          "threshold": -0.05
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: highest threshold",
+      "valid": true,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 20,
+          "threshold": 0.05
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: integer threshold for a float field",
+      "valid": true,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 20,
+          "threshold": 0
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: lookback below minimum",
+      "valid": false,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 4,
+          "threshold": 0.0
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: lookback above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 61,
+          "threshold": 0.0
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: fractional lookback",
+      "valid": false,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 20.5,
+          "threshold": 0.0
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: threshold below minimum",
+      "valid": false,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 20,
+          "threshold": -0.051
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "momentum: threshold above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "momentum",
+        "params": {
+          "lookback": 20,
+          "threshold": 0.0501
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: edges",
+      "valid": true,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 5,
+          "oversold": 40,
+          "overbought": 60
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: other edges",
+      "valid": true,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 30,
+          "oversold": 10,
+          "overbought": 90
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: period below minimum",
+      "valid": false,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 4,
+          "oversold": 30,
+          "overbought": 70
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: period above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 31,
+          "oversold": 30,
+          "overbought": 70
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: fractional period",
+      "valid": false,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 14.5,
+          "oversold": 30,
+          "overbought": 70
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: oversold below minimum",
+      "valid": false,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 14,
+          "oversold": 9,
+          "overbought": 70
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: oversold above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 14,
+          "oversold": 41,
+          "overbought": 70
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: overbought below minimum",
+      "valid": false,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 14,
+          "oversold": 30,
+          "overbought": 59
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "mean_reversion: overbought above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "mean_reversion",
+        "params": {
+          "period": 14,
+          "oversold": 30,
+          "overbought": 91
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ml_direction: smallest train_frac",
+      "valid": true,
+      "body": {
+        "strategy": "ml_direction",
+        "params": {
+          "train_frac": 0.5
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ml_direction: largest train_frac",
+      "valid": true,
+      "body": {
+        "strategy": "ml_direction",
+        "params": {
+          "train_frac": 0.9
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ml_direction: train_frac below minimum",
+      "valid": false,
+      "body": {
+        "strategy": "ml_direction",
+        "params": {
+          "train_frac": 0.49
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ml_direction: train_frac above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "ml_direction",
+        "params": {
+          "train_frac": 0.91
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'qqq'",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "qqq",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker ' spy '",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": " spy ",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'BRK-B'",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "BRK-B",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker '^GSPC'",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "^GSPC",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'EURUSD=X'",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "EURUSD=X",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'RDS.A'",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "RDS.A",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'ABCDEFGHIJKLMNO'",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "ABCDEFGHIJKLMNO",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker ''",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker '   '",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "   ",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'ABCDEFGHIJKLMNOP'",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "ABCDEFGHIJKLMNOP",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'SP Y'",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SP Y",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'SPY!'",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY!",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'SPY/X'",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY/X",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "ticker 'ABCDEFGHIJKLMNOPQRSTU'",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "ABCDEFGHIJKLMNOPQRSTU",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "dates: one day apart",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2024-12-31",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "dates: leap day",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2024-02-29",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "dates: start equal to end",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2020-01-01",
+        "end": "2020-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "dates: start after end",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2021-01-01",
+        "end": "2020-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "dates: not a leap year",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2023-02-29",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "dates: month 13",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2024-13-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "dates: day 32",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2024-01-32",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "dates: empty",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "cost_bps: zero",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 0,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "cost_bps: maximum",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 100,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "cost_bps: fractional",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 2.5,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "cost_bps: negative",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": -0.01,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "cost_bps: above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 100.01,
+        "n_boot": 2000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "n_boot: zero",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 0,
+        "seed": 0
+      }
+    },
+    {
+      "name": "n_boot: maximum",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 5000,
+        "seed": 0
+      }
+    },
+    {
+      "name": "n_boot: above maximum",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 5001,
+        "seed": 0
+      }
+    },
+    {
+      "name": "n_boot: negative",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": -1,
+        "seed": 0
+      }
+    },
+    {
+      "name": "n_boot: fractional",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2.5,
+        "seed": 0
+      }
+    },
+    {
+      "name": "seed: large",
+      "valid": true,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 123456789
+      }
+    },
+    {
+      "name": "seed: negative",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": -1
+      }
+    },
+    {
+      "name": "seed: fractional",
+      "valid": false,
+      "body": {
+        "strategy": "sma_crossover",
+        "params": {
+          "short_window": 50,
+          "long_window": 200
+        },
+        "ticker": "SPY",
+        "start": "2015-01-01",
+        "end": "2025-01-01",
+        "cost_bps": 5,
+        "n_boot": 2000,
+        "seed": 1.5
+      }
+    }
+  ]
+}

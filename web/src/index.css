@@ -1,0 +1,372 @@
+/* Plain CSS with a few color tokens; dark values follow the OS setting. */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --text: #0b0b0b;
+  --text-secondary: #52514e;
+  --muted: #6b6a66;
+  --border: rgba(11, 11, 11, 0.12);
+  --accent: #2a78d6;
+  --critical: #b52f2f;
+  --good: #006300;
+  --note-bg: #fdf3dc;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text: #f0efec;
+    --text-secondary: #c3c2b7;
+    --muted: #a3a29b;
+    --border: rgba(255, 255, 255, 0.12);
+    --accent: #6da7ec;
+    --critical: #e66767;
+    --good: #0ca30c;
+    --note-bg: #3a2f14;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1rem 2rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.app-header nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.app-header nav a[aria-current="page"] {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--text);
+}
+
+main {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.run-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem 1.25rem;
+}
+
+.run-form legend {
+  font-weight: 600;
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.add-id input {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--critical);
+}
+
+.strategy-picker {
+  margin-bottom: 1rem;
+}
+
+.hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.field-error {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--critical);
+}
+
+button {
+  font: inherit;
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.link-button {
+  background: none;
+  color: var(--accent);
+  border: none;
+  padding: 0 0.25rem;
+  text-decoration: underline;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+}
+
+.badge.warn {
+  display: block;
+  width: fit-content;
+  margin-top: 0.25rem;
+  background: var(--note-bg);
+  color: var(--text);
+}
+
+.status {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin: 1rem 0;
+}
+
+.status.problem {
+  border-color: var(--critical);
+}
+
+.problem-title,
+.empty-title {
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.problem-type {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.notice {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: var(--note-bg);
+}
+
+.job,
+.model-card,
+.picker {
+  margin-top: 1.5rem;
+}
+
+.job-status.failed {
+  color: var(--critical);
+}
+
+.job-status.succeeded {
+  color: var(--good);
+}
+
+.job-header {
+  color: var(--text-secondary);
+}
+
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 3rem;
+  margin: 1rem 0;
+}
+
+.headline-item,
+.headline-pair > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.headline-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.headline-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.ci {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.chart {
+  margin: 1.5rem 0;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.chart figcaption {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.5rem;
+}
+
+.chart-title {
+  font-weight: 700;
+}
+
+.chart-note {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.metrics {
+  border-collapse: collapse;
+  margin: 1rem 0;
+  display: block;
+  overflow-x: auto;
+}
+
+.metrics caption {
+  text-align: left;
+  font-weight: 700;
+}
+
+.metrics th,
+.metrics td {
+  text-align: left;
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics .sharpe .headline-value {
+  font-size: 1rem;
+}
+
+.selection {
+  padding-left: 1.25rem;
+}
+
+.check {
+  display: block;
+}
+
+.add-id {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.add-id input {
+  max-width: 26rem;
+}
+
+.add-id .field-error {
+  flex-basis: 100%;
+}
+
+.model-headlines {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem;
+}
+
+.headline-panel {
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.headline-panel h3 {
+  margin-top: 0;
+}
+
+.headline-panel.does-not-beat {
+  border: 2px solid var(--critical);
+}
+
+.headline-panel.beats {
+  border: 2px solid var(--good);
+}
+
+/* The prediction and the baseline verdict use the same size on purpose. */
+.headline-big {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0.25rem 0;
+  line-height: 1.2;
+}
+
+/* Space between the Predict button and the prediction under it. */
+.headline-panel > button + * {
+  margin-top: 1rem;
+}
+
+.headline-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+}
+
+.probabilities {
+  padding-left: 1.25rem;
+}

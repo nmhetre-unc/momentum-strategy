@@ -1,0 +1,13 @@
+# Allow-list: the image needs the lock file, the build config and src/.
+*
+!package.json
+!package-lock.json
+!.npmrc
+!index.html
+!vite.config.ts
+!tsconfig*.json
+!src/
+!nginx/
+**/*.test.ts
+**/*.test.tsx
+src/test/

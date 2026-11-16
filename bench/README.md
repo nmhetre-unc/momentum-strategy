@@ -9,6 +9,8 @@ bootstrap implementations inside one process.
 | `service_bench.py` | The orchestrator. It runs every measurement 3 times, checks for AC power before each run, and writes JSON plus the results table. The module docstring describes each method. |
 | `loadgen.py` | Async open-loop load generators: Poisson POSTs, bursts, and fixed-rate GETs. Latency is measured from each request's scheduled send time. |
 | `environment.py` | Records the host CPU, power state and Windows power plan, the Docker engine, and the CPUs and memory of the VM it runs in. Every result includes this. |
+| `web_bench.py` | The dashboard's production build through nginx: gzipped bundle sizes, Lighthouse performance and time to first chart, with the same power guard. Runs the browser part (`web/scripts/measure-web.mjs`) in the Playwright image. |
+| `results/web/` | `bundle_before_split.json`, `web.json` and `README.md` (the table). |
 | `results/service/` | `throughput.json`, `control.json`, `latency.json`, `get.json`, `kill.json`, `predict.json` (POST /predict at a fixed rate, once a model is registered) and `README.md` (the table). |
 
 ```bash
