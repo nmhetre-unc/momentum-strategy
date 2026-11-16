@@ -40,20 +40,21 @@ page gets a generic 404 instead. This happened with `/backtests/{id}/series`.
 is reused. The end-to-end tests and CI use `docker compose up --build` for
 the same reason.
 
-| Command                | What it does                                                                             |
-| ---------------------- | ---------------------------------------------------------------------------------------- |
-| `npm run dev`          | Development server with instant reload; `/api` is forwarded to the API                   |
-| `npm run build`        | Type-check, then build the static site into `dist/`                                      |
-| `npm run preview`      | Serve `dist/` locally, to check a build                                                  |
-| `npm run lint`         | ESLint, then Prettier's formatting check; any warning fails                              |
-| `npm run format`       | Rewrite every file in Prettier's format                                                  |
-| `npm run typecheck`    | TypeScript only, no output files                                                         |
-| `npm test`             | Run the tests once (`npm run test:watch` re-runs on save)                                |
-| `npm run api:export`   | Write `openapi.json` from the Python code (no server needed)                             |
-| `npm run api:fetch`    | Write `openapi.json` from a running API (`QBT_API_URL`, default `http://127.0.0.1:8000`) |
-| `npm run api:generate` | Regenerate `src/api/schema.d.ts` from `openapi.json`                                     |
-| `npm run api:check`    | Fail if `openapi.json` or `schema.d.ts` is stale (below)                                 |
-| `npm run test:e2e`     | Playwright against the Compose stack, built fresh ([below](#end-to-end-tests))           |
+| Command                    | What it does                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| `npm run dev`              | Development server with instant reload; `/api` is forwarded to the API                   |
+| `npm run build`            | Type-check, then build the static site into `dist/`                                      |
+| `npm run preview`          | Serve `dist/` locally, to check a build                                                  |
+| `npm run lint`             | ESLint, then Prettier's formatting check; any warning fails                              |
+| `npm run format`           | Rewrite every file in Prettier's format                                                  |
+| `npm run typecheck`        | TypeScript only, no output files                                                         |
+| `npm test`                 | Run the tests once (`npm run test:watch` re-runs on save)                                |
+| `npm run api:export`       | Write `openapi.json` from the Python code (no server needed)                             |
+| `npm run api:fetch`        | Write `openapi.json` from a running API (`QBT_API_URL`, default `http://127.0.0.1:8000`) |
+| `npm run api:generate`     | Regenerate `src/api/schema.d.ts` from `openapi.json`                                     |
+| `npm run api:check`        | Fail if `openapi.json` or `schema.d.ts` is stale (below)                                 |
+| `npm run test:e2e`         | Playwright against the Compose stack, built fresh ([below](#end-to-end-tests))           |
+| `npm run docs:screenshots` | The README's screenshots (`docs/dashboard-*.png`), from a stack built fresh              |
 
 ## The ideas, briefly
 
@@ -91,11 +92,13 @@ web/
 ├── e2e/
 │   ├── app.spec.ts       the end-to-end tests
 │   ├── stack.mjs         the Compose stack they run against (built fresh)
-│   └── run.mjs           npm run test:e2e
+│   ├── run.mjs           npm run test:e2e
+│   └── screenshots.mjs   npm run docs:screenshots
 ├── scripts/
 │   ├── fetch-schema.mjs  npm run api:fetch
 │   ├── check-api.mjs     npm run api:check
-│   └── measure-web.mjs   Lighthouse and time to first chart (bench/web_bench.py)
+│   ├── measure-web.mjs   Lighthouse and time to first chart (bench/web_bench.py)
+│   └── screenshots.mjs   captures each view (run by e2e/screenshots.mjs)
 └── src/
     ├── main.tsx          entry point: creates the query client, renders <App>
     ├── App.tsx           the header, navigation, and the page for the current URL

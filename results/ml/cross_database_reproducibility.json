@@ -1,0 +1,26 @@
+{
+  "question": "Four fresh Compose stacks in E3 registered four different artifact SHA-256s for the same `train SPY --start 2008-01-01 --end 2025-01-01`. Is training nondeterministic, or did the price snapshots differ?",
+  "date": "2026-11-15",
+  "git_commit": "E3 commit on the dashboard branch (web image and service image built fresh)",
+  "method": [
+    "Two independent Compose projects (qbt-repro-a, qbt-repro-b), each built fresh with its own Postgres: up --build, ingest SPY 2008-01-01..2025-01-01 from Yahoo Finance, train with the default config (LightGBM, regime target, base+hmm features, seed 0).",
+    "Compared the snapshots bar by bar (load_frame on each database).",
+    "Copied stack A's snapshot into stack B's database with qbt_service.prices.store_snapshot (the ingest path), confirmed the stored content_sha256 equals A's, and ran `train` again in stack B, which picks the newest covering snapshot (the copy)."
+  ],
+  "snapshots": {
+    "a_series_1": "e11239b8c4547b8a84f37c4d1d126b7992af02ed4fa53b202b4674e2e7882f7c",
+    "b_series_1": "297abf67f2e9f9c5d781e464bf3e5f47c3153a8c5c75ace08b0449351d56f5d8",
+    "same_dates_and_bar_count": true,
+    "n_bars": 4279,
+    "bars_differing_in_close_high_low_open": 3540,
+    "max_relative_difference": 9.34e-07,
+    "volume_identical": true,
+    "b_series_2_copy_of_a": "e11239b8c4547b8a84f37c4d1d126b7992af02ed4fa53b202b4674e2e7882f7c"
+  },
+  "artifacts": {
+    "a_v1_on_a_series_1": {"artifact_sha256": "58a984e13ab5eed298dc6c82624864a9ea9b6b16e48df44e6076411da55b8bac", "serving_features_sha256": "78a7b94dfcb533218b7c4887106bfdae13372b30e179f22a84bbf7681dbd8546"},
+    "b_v1_on_b_series_1": {"artifact_sha256": "842ce4a5eef96bc27f66a08470154e7d89a8623e449e2e9193688143a42af8bf", "serving_features_sha256": "f4afc38ef6f9b4f055d5f4cf2deed59ccbd312ccf038e2812c79c1dc6f36cbbf"},
+    "b_v2_on_copy_of_a_series_1": {"artifact_sha256": "58a984e13ab5eed298dc6c82624864a9ea9b6b16e48df44e6076411da55b8bac", "serving_features_sha256": "78a7b94dfcb533218b7c4887106bfdae13372b30e179f22a84bbf7681dbd8546"}
+  },
+  "conclusion": "Same snapshot and seed give a byte-identical artifact (and serving-features hash) across two separate databases and containers. Two Yahoo downloads made minutes apart differ in the adjusted OHLC prices by up to 9.34e-07 relative on 3540 of 4279 bars, so each fresh stack stores a different snapshot and trains a different artifact. The E3 stacks were removed with down -v, so their own snapshot hashes were not kept; they are inferred to have differed in the same way."
+}

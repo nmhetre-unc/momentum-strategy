@@ -20,7 +20,8 @@
     "api:fetch": "node scripts/fetch-schema.mjs",
     "api:generate": "openapi-typescript openapi.json --output src/api/schema.d.ts",
     "api:check": "node scripts/check-api.mjs",
-    "test:e2e": "node e2e/run.mjs"
+    "test:e2e": "node e2e/run.mjs",
+    "docs:screenshots": "node e2e/screenshots.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "5.105.1",

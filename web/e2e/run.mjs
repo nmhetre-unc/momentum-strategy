@@ -16,10 +16,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { NETWORK, BASE_URL, down, up } from "./stack.mjs";
-
-export const PLAYWRIGHT_IMAGE =
-  "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f";
+import { BASE_URL, NETWORK, PLAYWRIGHT_IMAGE, down, up } from "./stack.mjs";
 
 const WEB = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);

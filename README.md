@@ -35,10 +35,16 @@ Sharpe ratios following Bailey & López de Prado (2014).
   leases and fencing, and Docker Compose. With 4 workers it runs 926
   backtests/min, a job starts 8 ms after it is submitted at 50% load, and a
   SIGKILLed worker loses no jobs. See [Running as a service](#running-as-a-service).
-- 653 tests at 94% line coverage (91% for the engine, 98% for the service).
-  CI runs on every push: it builds the C++ extension, runs the suite against
-  Postgres with coverage gates, and runs an end-to-end test of the Compose
-  stack.
+- A React + TypeScript dashboard for the service, served by nginx in the
+  same Compose stack. Its first load is 90.4 kB gzipped (203.4 kB before
+  code splitting), and a results page draws its first chart in a median
+  559 ms. See [Dashboard](#dashboard).
+- 768 Python tests at 94% line coverage (91% for the engine, 98% for the
+  service), plus 122 unit tests and 4 browser end-to-end tests for the
+  dashboard ([`results/tests.json`](results/tests.json)). CI runs on every push: it builds the C++
+  extension, runs the suite against Postgres with coverage gates, runs an
+  end-to-end test of the Compose stack, and runs the dashboard's checks and
+  browser tests against a freshly built stack.
 
 ## Running as a service
 
@@ -655,6 +661,161 @@ one.
 - **Reduced load.** The load was reduced from the laptop benchmarks (step 9)
   to fit 2 vCPUs, with 1 repetition (2 for kill).
 
+## Dashboard
+
+A web front end for the backtest service: React and strict TypeScript,
+built by Vite, served by nginx as one more Compose service. It is separate
+from the Streamlit app above. Streamlit explores the research results; this
+dashboard drives the service. The code and its design notes are in
+[`web/`](web/README.md).
+
+### What it does
+
+| Run | Results |
+|---|---|
+| [![Run page](docs/dashboard-run.png)](docs/dashboard-run.png) | [![Results page](docs/dashboard-results.png)](docs/dashboard-results.png) |
+| **Compare** | **Model** |
+| [![Compare page](docs/dashboard-compare.png)](docs/dashboard-compare.png) | [![Model page](docs/dashboard-model.png)](docs/dashboard-model.png) |
+
+- **Run.** Pick a strategy. Its parameter form is generated from the
+  strategy's JSON Schema, served by `GET /strategies`. Submit the run with an
+  `Idempotency-Key`, then follow the job until it finishes.
+- **Results.** The headline metrics (Sharpe with its 90% bootstrap
+  interval), the equity curve and drawdown, and every stored metric. For a strategy that
+  learns from history, its training period is shaded, and the metrics are
+  labelled *full period* because they include it (see Known limitations).
+- **Compare.** Up to 8 runs side by side, as overlaid equity curves
+  and one metrics table. The page's URL carries the selection
+  (`/compare?ids=…`), so it can be shared.
+- **Model.** The served model's out-of-sample accuracy next to its
+  baseline's, at the same size, with the verdict (it does not beat it). A
+  prediction is made only when *Predict* is pressed, because every
+  `POST /predict` is logged.
+
+The screenshots are captured by Playwright from a stack built fresh
+(`npm run docs:screenshots` in `web/`). That stack ingests SPY, trains the
+model, and runs `sma_crossover` (the Run page's defaults), `momentum` and
+`ml_direction` on 2015–2025.
+
+### How it talks to the API
+
+- **A typed client generated from the schema.** The service exports its
+  OpenAPI schema from its own request and response models
+  (`web/openapi.json`). `openapi-typescript` turns that into TypeScript
+  types, and every call goes through `openapi-fetch` using them. A renamed
+  field or a changed route is therefore a compile error, not a runtime
+  surprise.
+- **A staleness check.** `npm run api:check` fails if `openapi.json` no
+  longer matches the Python code, or the generated types no longer match
+  `openapi.json`. CI runs it.
+- **One validation contract for both sides.**
+  [`contracts/backtest_requests.json`](contracts/backtest_requests.json)
+  holds 72 request cases, each marked valid or invalid with the field at
+  fault. The API's tests (`tests/service/test_request_contract.py`) and the
+  form's tests (`web/src/features/run/form.contract.test.ts`) both run
+  them, so the form rejects exactly what the API would. Writing the
+  contract found the form accepting impossible dates such as 2023-02-29.
+- **Errors in one place.** Every API error is RFC 9457 problem details.
+  The client turns each into one `ApiProblem` type, and one component
+  shows it.
+
+### Security
+
+- **Same origin.** nginx serves the site and proxies `/api/*` to the API
+  inside the Compose network. The browser sees a single origin, so the API
+  needs no CORS headers and has none. The dev server's proxy does the
+  same.
+- **A strict Content-Security-Policy that the app really passes.** The
+  policy allows scripts, styles and connections from this origin only,
+  with no `'unsafe-inline'`, no objects and no framing. It is sent with
+  `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
+  Every end-to-end test fails on any CSP violation the browser reports.
+  A deliberate inline script and inline style were checked to be blocked
+  and reported.
+- **Hardened like the other containers.** nginx runs as a non-root user
+  on a read-only root filesystem, binds to 127.0.0.1, and has a
+  healthcheck.
+- **No authentication,** as for the API (see Known limitations above).
+
+### Run it
+
+```bash
+docker compose up -d --build --wait     # db, migrate, api, worker, web
+docker compose run --rm ingest SPY --start 2008-01-01 --end 2025-01-01
+docker compose run --rm train SPY --start 2008-01-01 --end 2025-01-01   # for the Model page
+# http://localhost:8080
+```
+
+**Always pass `--build`.** Otherwise Compose reuses old images that lack
+newer API routes. For development with instant reload, run `npm run dev`
+in `web/` instead (http://localhost:5173), against `docker compose up -d
+--build api`.
+
+Browser tests: `npm run test:e2e` in `web/`. It builds the whole stack
+fresh as its own Compose project, then runs Playwright in its Docker
+image. The tests:
+
+- pick a strategy, run it, and check that the equity curve's SVG path has
+  hundreds of points;
+- check that the Model page sends no `POST` until Predict is pressed;
+- open a results URL directly, proving nginx's SPA fallback;
+- check the cache headers, the 404 for a missing asset, and problem+json
+  through the proxy.
+
+### Measured
+
+All numbers are from
+[`bench/results/web/`](bench/results/web/README.md), produced by
+`bench/web_bench.py`. The production build was served by nginx from a
+freshly built stack, on one laptop (Intel Core 7 150U, on AC power, with
+the power guard on).
+
+| | Result |
+|---|---|
+| First load, gzipped, before code splitting | 203.4 kB |
+| First load, gzipped, after | **90.4 kB**. Recharts and the chart pages (115.7 kB) load only when a chart page opens |
+| Time to first chart, results page | **559 ms** median, 520–630 ms over 10 cold loads |
+| Lighthouse performance, Run page | **100** median (100–100, 3 runs) |
+| Lighthouse performance, results page | **70** median (70–72, 3 runs) |
+
+- **Why the results page scores 70: Total Blocking Time** (1.4–1.7 s).
+  The page draws two SVG charts of about 2,500 daily points each, and
+  Lighthouse's default mobile profile slows the CPU 4x. Loading is not the
+  problem: First Contentful Paint is 0.75 s, the same as the Run page.
+  Plotting fewer points, or drawing to a canvas, would be the fixes. Neither
+  has been tried.
+- **A results page opened directly** loads 204.1 kB, 0.7 kB more than
+  before the split. The split helps the Run and Model pages, not that one.
+- **Time to first chart** is unthrottled. It runs from the start of
+  navigation until the equity curve's path has data in it, including both
+  API calls.
+- **Caveats.** The browser ran in a container on the same Docker VM as the
+  stack, the development stack was running idle alongside, and Lighthouse
+  uses *simulated* throttling. These are one machine's numbers, for
+  comparing before and after, not a field measurement.
+
+### Known limitations
+
+- **Recent runs live in this browser only.** The API has no endpoint that
+  lists jobs, so Compare's picker shows the last 20 runs submitted from
+  this browser, kept in `localStorage`. They are lost if site data is
+  cleared or in a private window, and are not shared between browsers. A
+  run from elsewhere can still be added by its job id, or by URL.
+- **Full-period metrics for learning strategies.** The service stores
+  metrics over the whole requested window, `ml_direction`'s flat training
+  period included. The dashboard shades that period and labels those
+  numbers *full period* rather than presenting them as out-of-sample. Its
+  out-of-sample results are in
+  [`results/summary.md`](results/summary.md#out-of-sample-only-strategies-that-learn).
+- **`npm audit` reports 8 moderate findings, one advisory.** It is a
+  denial of service in `minimatch`, reached only through ESLint and
+  `typescript-eslint`. These are lint tools: `npm audit --omit=dev` finds
+  0, and none of it ships in the site. The fix is `eslint` 10.15.0, which
+  meets the repo's two-week minimum release age on or after 2026-11-27.
+  `typescript-eslint` has no fixed release yet. `npm audit fix --force`
+  would downgrade it, a breaking change, and was not run. Details are in
+  [web/README.md](web/README.md#dependency-audit).
+
 ## Performance
 
 **What was hot.** Profiling the full results run (`scripts/regenerate_results.py`:
@@ -942,7 +1103,14 @@ engineering demonstration ([Model serving](#model-serving)):
   byte-identical artifact (JSON wrapping LightGBM's text model, never
   pickle), stored with its SHA-256. The hash is checked on every load,
   and the served input is checked against its own hash. Retraining an
-  identical model finds the existing version.
+  identical model finds the existing version. This was confirmed across
+  two separate databases and containers: a copy of one stack's snapshot
+  trained in the other gave the same artifact hash. Two fresh Yahoo
+  downloads of the same range are *not* the same snapshot. Adjusted
+  prices differed by up to 9.3e-7 (relative) on 3,540 of 4,279 bars, so
+  they train different artifacts
+  ([`results/ml/cross_database_reproducibility.json`](results/ml/cross_database_reproducibility.json)).
+  Reproducing a model means reusing its snapshot, not downloading again.
 - **Honest `/predict`.** Every response carries the out-of-sample
   accuracy (0.808 over 104 months) next to `rules_regime_lookup`'s 0.827,
   the difference interval, the McNemar p, `beats: false`, and a sentence
@@ -1044,7 +1212,7 @@ Run the CLI:
 python main.py --ticker SPY --strategy momentum --rolling
 ```
 
-Run the tests (653 tests, 94% line coverage). The service's tests need
+Run the tests (768 tests, 94% line coverage; [`results/tests.json`](results/tests.json)). The service's tests need
 Postgres, which Compose provides:
 
 ```bash

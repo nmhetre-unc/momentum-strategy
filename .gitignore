@@ -4,6 +4,8 @@ __pycache__/
 *.png
 # C2 plots are committed results (scripts/ml_c2_report.py).
 !results/ml/*.png
+# README screenshots (cd web && npm run docs:screenshots).
+!docs/*.png
 *.egg-info/
 dist/
 build/

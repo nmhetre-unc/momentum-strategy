@@ -356,6 +356,11 @@ button:disabled {
   line-height: 1.2;
 }
 
+/* Space between the Predict button and the prediction under it. */
+.headline-panel > button + * {
+  margin-top: 1rem;
+}
+
 .headline-pair {
   display: flex;
   flex-wrap: wrap;

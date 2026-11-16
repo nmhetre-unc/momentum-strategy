@@ -22,6 +22,10 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const PROJECT = process.env.QBT_E2E_PROJECT ?? "qbt-e2e";
 export const NETWORK = `${PROJECT}_default`;
+/** Chromium and its system libraries; the same version as @playwright/test. */
+export const PLAYWRIGHT_IMAGE =
+  "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f";
+
 export const BASE_URL = "http://web:8080";
 
 // Prices for the backtests the tests submit (2015-2025) and for training,
