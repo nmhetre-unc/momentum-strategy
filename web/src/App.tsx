@@ -1,11 +1,21 @@
 /** The application shell: the header and navigation, and the page for the current URL. */
+import { lazy, Suspense } from "react";
+
 import { Link } from "./components/Link";
-import { Empty } from "./components/status";
-import { CompareView } from "./features/compare/CompareView";
+import { Empty, Loading } from "./components/status";
 import { ModelView } from "./features/model/ModelView";
-import { ResultsView } from "./features/results/ResultsView";
 import { RunView } from "./features/run/RunView";
 import { matchRoute, useLocation, type Route } from "./router";
+
+// The two pages with charts are loaded only when first opened: they bring
+// Recharts, most of the app's code, which the Run and Model pages don't
+// need. Vite puts each lazy import in its own file (a "chunk").
+const ResultsView = lazy(() =>
+  import("./features/results/ResultsView").then((m) => ({ default: m.ResultsView })),
+);
+const CompareView = lazy(() =>
+  import("./features/compare/CompareView").then((m) => ({ default: m.CompareView })),
+);
 
 function Page({ route }: { route: Route }) {
   switch (route.name) {
@@ -51,7 +61,10 @@ export function App() {
         </nav>
       </header>
       <main>
-        <Page route={route} />
+        {/* Suspense: what to show while a lazy page's code is downloading. */}
+        <Suspense fallback={<Loading label="Loading the page…" />}>
+          <Page route={route} />
+        </Suspense>
       </main>
     </>
   );

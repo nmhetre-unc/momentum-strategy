@@ -19,7 +19,8 @@
     "api:export": "python ../scripts/export_openapi.py --out openapi.json",
     "api:fetch": "node scripts/fetch-schema.mjs",
     "api:generate": "openapi-typescript openapi.json --output src/api/schema.d.ts",
-    "api:check": "node scripts/check-api.mjs"
+    "api:check": "node scripts/check-api.mjs",
+    "test:e2e": "node e2e/run.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "5.105.1",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
@@ -44,6 +46,7 @@
     "eslint-plugin-react-refresh": "0.5.7",
     "globals": "17.14.0",
     "jsdom": "30.1.3",
+    "lighthouse": "13.6.0",
     "openapi-typescript": "7.13.0",
     "prettier": "3.9.10",
     "typescript": "5.9.3",

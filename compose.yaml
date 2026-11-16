@@ -1,10 +1,11 @@
-# The backtest service: Postgres, a one-shot migration, the API and workers.
+# The backtest service: Postgres, a one-shot migration, the API, workers and
+# the dashboard (web, nginx).
 #
-#   docker compose up -d --build                  db, migrate, api, 1 worker
+#   docker compose up -d --build                  db, migrate, api, 1 worker, web
 #   docker compose up -d --scale worker=4         more workers
 #   docker compose run --rm ingest SPY --start 2005-01-01 --end 2025-01-01
 #   docker compose run --rm train SPY --start 2008-01-01 --end 2025-01-01
-#   curl -s localhost:8000/strategies
+#   curl -s localhost:8000/strategies             (or the dashboard: http://localhost:8080)
 #   curl -s -X POST localhost:8000/predict
 #   docker compose down                           stop (add -v to drop the data)
 #
@@ -130,6 +131,30 @@ services:
     # orchestrator (Swarm, Kubernetes, Nomad) would replace it.
     restart: unless-stopped
     # No container_name, so `--scale worker=N` works.
+
+  # The dashboard (web/): the built site served by nginx, with /api/
+  # proxied to the api service, one origin, so no CORS. http://localhost:8080
+  web:
+    image: qbt-web:dev
+    build: web
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      - "127.0.0.1:${QBT_WEB_PORT:-8080}:8080"
+    # nginx resolves "api" once, at start-up.
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # nginx answering (busybox wget, in the image); not the API's health.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+      start_interval: 1s
+    restart: unless-stopped
 
   # One-shot: download prices from Yahoo Finance into the database.
   #   docker compose run --rm ingest SPY QQQ --start 2005-01-01 --end 2025-01-01

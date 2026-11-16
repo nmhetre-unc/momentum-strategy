@@ -286,12 +286,17 @@ full evaluation. Errors are problem details: `no-model-registered` and
 Requires Docker with Compose v2.
 
 ```bash
-docker compose up -d --build --wait     # db -> migrate -> api + 1 worker
+docker compose up -d --build --wait     # db -> migrate -> api + 1 worker, web
 docker compose up -d --scale worker=4   # optional: more workers
 docker compose run --rm ingest SPY --start 2015-01-01 --end 2025-01-01
 
 curl -s localhost:8000/strategies       # names and parameter schemas
 ```
+
+The dashboard is at http://localhost:8080. nginx serves the built site and
+proxies `/api` to the API on the same origin; see [web/README.md](web/README.md).
+Its measurements (bundle size, Lighthouse, time to first chart) are in
+[`bench/results/web/`](bench/results/web/README.md).
 
 Submit a backtest (`end` is exclusive, as in yfinance):
 

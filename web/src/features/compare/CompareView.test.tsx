@@ -89,7 +89,8 @@ test("recent runs and typed ids change the selection, which lives in the URL", a
   const user = userEvent.setup();
   renderWithApi(<App />, fakeApi(both).fetch);
 
-  await user.click(screen.getByRole("checkbox", { name: /sma_crossover · SPY/ }));
+  // The Compare page is loaded lazily (App.tsx): find* waits for it.
+  await user.click(await screen.findByRole("checkbox", { name: /sma_crossover · SPY/ }));
   expect(window.location.search).toBe(`?ids=${JOB_ID}`);
   expect(screen.getByText("Pick at least two completed backtests")).toBeInTheDocument();
 

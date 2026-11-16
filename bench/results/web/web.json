@@ -1,0 +1,239 @@
+{
+  "measurement": "web",
+  "environment": {
+    "recorded_at": "2026-11-16T02:35:45+00:00",
+    "host": {
+      "cpu_model": "Intel(R) Core(TM) 7 150U",
+      "windows": {
+        "physical_cores": 10,
+        "logical_processors": 12,
+        "max_clock_mhz": 1800,
+        "ram_gib": 15.7,
+        "battery_status_code": 2,
+        "power_plan": "Balanced"
+      },
+      "power": {
+        "AC1.online": "1",
+        "BAT1.status": "Full",
+        "BAT1.capacity": "100"
+      },
+      "on_ac_power": true,
+      "wslconfig": "absent (WSL defaults: all logical CPUs, 50% of host RAM)"
+    },
+    "wsl_distro": {
+      "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+      "logical_cpus": 12,
+      "loadavg_1_5_15": [
+        1.5654296875,
+        1.7568359375,
+        1.40869140625
+      ]
+    },
+    "docker": {
+      "operating_system": "Docker Desktop",
+      "server_version": "29.9.3",
+      "kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "vm_cpus": 12,
+      "vm_memory_bytes": 8162783232,
+      "vm_memory_gib": 7.6,
+      "storage_driver": "overlayfs",
+      "cgroup_version": "2",
+      "compose_version": "5.7.0"
+    },
+    "image": "sha256:689550c2f167127a91edcbca1884d908fdb1653c668d55560c9b3f1d32aa294f",
+    "git_commit": "8f2067f+dirty",
+    "python": "3.12.16",
+    "web_image": "sha256:d0c9fe28aa76fb125c50cf5a3250f82db6540709da5e9e567ee381aaa8ca5aa3"
+  },
+  "config": {
+    "project": "qbt-web-bench",
+    "nginx_gzip_level": 6,
+    "backtest": {
+      "strategy": "sma_crossover",
+      "ticker": "SPY",
+      "start": "2015-01-01",
+      "end": "2025-01-01",
+      "cost_bps": 5,
+      "n_boot": 2000,
+      "seed": 0,
+      "params": {
+        "short_window": 50,
+        "long_window": 200
+      }
+    },
+    "job_id": "0c820825-b1f8-4996-a9f3-c66618b93398"
+  },
+  "bundle": {
+    "initial_gzip_bytes": 90350,
+    "initial_raw_bytes": 290632,
+    "lazy_gzip_bytes": 115655,
+    "lazy_raw_bytes": 407481,
+    "files": {
+      "CompareView-CWKaZwJb.js": {
+        "gzip_bytes": 1881,
+        "encoding": "gzip",
+        "raw_bytes": 4092,
+        "initial": false
+      },
+      "ResultsView-DCmspDQ5.js": {
+        "gzip_bytes": 1299,
+        "encoding": "gzip",
+        "raw_bytes": 3227,
+        "initial": false
+      },
+      "index-6E99bddr.css": {
+        "gzip_bytes": 1475,
+        "encoding": "gzip",
+        "raw_bytes": 4456,
+        "initial": true
+      },
+      "index-BhWUyF0s.js": {
+        "gzip_bytes": 88875,
+        "encoding": "gzip",
+        "raw_bytes": 286176,
+        "initial": true
+      },
+      "metrics-CudOo5WU.js": {
+        "gzip_bytes": 112475,
+        "encoding": "gzip",
+        "raw_bytes": 400162,
+        "initial": false
+      }
+    },
+    "started": "2026-11-16T02:35:48+00:00",
+    "ended": "2026-11-16T02:35:49+00:00",
+    "power_events": [],
+    "discarded_attempts": 0
+  },
+  "browser": {
+    "pages": {
+      "results": "http://web:8080/backtests/0c820825-b1f8-4996-a9f3-c66618b93398",
+      "run": "http://web:8080/"
+    },
+    "lighthouse": {
+      "results": [
+        {
+          "score": 70,
+          "audits_ms": {
+            "first-contentful-paint": 755.6179999999999,
+            "largest-contentful-paint": 2402.4269999999997,
+            "total-blocking-time": 1717.5,
+            "speed-index": 2526.734449992615,
+            "cumulative-layout-shift": 0
+          },
+          "lighthouse_version": "13.6.0",
+          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "warnings": []
+        },
+        {
+          "score": 70,
+          "audits_ms": {
+            "first-contentful-paint": 757.384,
+            "largest-contentful-paint": 2473.076,
+            "total-blocking-time": 1743,
+            "speed-index": 2575.6483640056194,
+            "cumulative-layout-shift": 0
+          },
+          "lighthouse_version": "13.6.0",
+          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "warnings": []
+        },
+        {
+          "score": 72,
+          "audits_ms": {
+            "first-contentful-paint": 754.4279999999999,
+            "largest-contentful-paint": 2449.642,
+            "total-blocking-time": 1392,
+            "speed-index": 2351.0638420036316,
+            "cumulative-layout-shift": 0
+          },
+          "lighthouse_version": "13.6.0",
+          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "warnings": []
+        }
+      ],
+      "run": [
+        {
+          "score": 100,
+          "audits_ms": {
+            "first-contentful-paint": 752.1020000000001,
+            "largest-contentful-paint": 1653.153,
+            "total-blocking-time": 0,
+            "speed-index": 752.1020000000001,
+            "cumulative-layout-shift": 0
+          },
+          "lighthouse_version": "13.6.0",
+          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "warnings": []
+        },
+        {
+          "score": 100,
+          "audits_ms": {
+            "first-contentful-paint": 751.3679999999999,
+            "largest-contentful-paint": 1652.052,
+            "total-blocking-time": 0,
+            "speed-index": 751.3679999999999,
+            "cumulative-layout-shift": 0
+          },
+          "lighthouse_version": "13.6.0",
+          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "warnings": []
+        },
+        {
+          "score": 100,
+          "audits_ms": {
+            "first-contentful-paint": 751.742,
+            "largest-contentful-paint": 1652.6129999999998,
+            "total-blocking-time": 5,
+            "speed-index": 751.742,
+            "cumulative-layout-shift": 0
+          },
+          "lighthouse_version": "13.6.0",
+          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "warnings": []
+        }
+      ]
+    },
+    "first_chart_ms": [
+      523.9000000059605,
+      519.6000000089407,
+      563.7999999970198,
+      533.9000000059605,
+      533.2999999970198,
+      629.6999999880791,
+      619.2000000029802,
+      604.2999999970198,
+      591.5,
+      554.4000000059605
+    ],
+    "browser_version": "156.0.8078.80",
+    "started": "2026-11-16T02:35:50+00:00",
+    "ended": "2026-11-16T02:36:46+00:00",
+    "power_events": [],
+    "discarded_attempts": 0
+  },
+  "summary": {
+    "lighthouse_performance": {
+      "results": {
+        "median": 70,
+        "min": 70,
+        "max": 72,
+        "n": 3
+      },
+      "run": {
+        "median": 100,
+        "min": 100,
+        "max": 100,
+        "n": 3
+      }
+    },
+    "first_chart_ms": {
+      "median": 559.1000000014901,
+      "min": 519.6000000089407,
+      "max": 629.6999999880791,
+      "n": 10
+    },
+    "initial_gzip_kb": 90.3,
+    "lazy_gzip_kb": 115.7
+  }
+}

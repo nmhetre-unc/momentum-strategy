@@ -29,6 +29,10 @@ docker compose up -d --build api   # from the repo root: the API the dev server 
 npm run dev          # http://localhost:5173
 ```
 
+Or the production build, as it ships: `docker compose up -d --build` from
+the repo root, then http://localhost:8080 (nginx; see
+[Serving it](#serving-it-nginx)).
+
 **Always pass `--build`.** Without it, Compose reuses whatever `api` image
 it built last. That image silently lacks every route added since, and the
 page gets a generic 404 instead. This happened with `/backtests/{id}/series`.
@@ -49,6 +53,7 @@ the same reason.
 | `npm run api:fetch`    | Write `openapi.json` from a running API (`QBT_API_URL`, default `http://127.0.0.1:8000`) |
 | `npm run api:generate` | Regenerate `src/api/schema.d.ts` from `openapi.json`                                     |
 | `npm run api:check`    | Fail if `openapi.json` or `schema.d.ts` is stale (below)                                 |
+| `npm run test:e2e`     | Playwright against the Compose stack, built fresh ([below](#end-to-end-tests))           |
 
 ## The ideas, briefly
 
@@ -77,12 +82,20 @@ web/
 ├── package-lock.json     the full dependency tree, pinned (committed)
 ├── .nvmrc  .npmrc        Node version; npm settings (exact versions, strict engines)
 ├── vite.config.ts        dev server, /api proxy, build, and the test runner's settings
-├── tsconfig*.json        TypeScript: app code (strict) and the Vite config file
+├── tsconfig*.json        TypeScript: app code (strict), the Vite config, the e2e tests
 ├── eslint.config.js      lint rules
 ├── .prettierrc.json      formatting rules
+├── Dockerfile            the production image: vite build, then nginx
+├── nginx/                nginx.conf and the security headers it sends
+├── playwright.config.ts  the end-to-end test runner's settings
+├── e2e/
+│   ├── app.spec.ts       the end-to-end tests
+│   ├── stack.mjs         the Compose stack they run against (built fresh)
+│   └── run.mjs           npm run test:e2e
 ├── scripts/
 │   ├── fetch-schema.mjs  npm run api:fetch
-│   └── check-api.mjs     npm run api:check
+│   ├── check-api.mjs     npm run api:check
+│   └── measure-web.mjs   Lighthouse and time to first chart (bench/web_bench.py)
 └── src/
     ├── main.tsx          entry point: creates the query client, renders <App>
     ├── App.tsx           the header, navigation, and the page for the current URL
@@ -165,8 +178,8 @@ npm run api:check      # passes once both are current
 
 The comparison is of parsed JSON because the two ways of getting the schema
 format numbers differently: Python's export writes `5.0` where a fetched
-copy says `5`. The committed file comes from `api:export`. `api:check` is
-not in CI yet; adding a web job is a later step.
+copy says `5`. The committed file comes from `api:export`. CI's `web` job
+runs `api:check`.
 
 ## Errors: problem details, handled in one place
 
@@ -420,6 +433,8 @@ dependencies, but they weren't individually checked for age.
 | **Prettier 3**                         | Formatting               | Formatting is decided by a tool, not in review. `eslint-config-prettier` turns off the ESLint rules that would disagree with it. `npm run lint` checks both                                                                                   |
 | **Vitest 5**                           | Test runner              | Uses Vite's own config and transforms, so tests run the code the way the app does, with no separate Babel/Jest setup. The API is Jest's (`test`, `expect`)                                                                                    |
 | **Testing Library**                    | Component tests          | Tests find elements the way a user does (by role, label and text), not by component internals, so they survive refactoring. `jsdom` provides the browser DOM in Node                                                                          |
+| **Playwright**                         | End-to-end tests         | Drives a real Chromium against the real stack. Its locators find elements by role and label, like Testing Library, and it waits for them, so there are no sleeps. Its versioned Docker image carries the browser and its system libraries     |
+| **Lighthouse**                         | Measurement only         | The standard page-performance score, run by `scripts/measure-web.mjs` for `bench/web_bench.py`. Not used by the app or the tests                                                                                                              |
 
 ## Routing: why no router library
 
@@ -443,8 +458,9 @@ None is needed here. If they become needed, the routes are all in
 
 Hash URLs (`/#/model`) would need no server support at all, but they make
 every URL odd. Real paths need the server to answer every page's URL with
-`index.html` (an "SPA fallback"). Vite's dev server does this already; the
-production server will need the same rule.
+`index.html` (an "SPA fallback"). Vite's dev server does this, and so does
+the production nginx (`try_files $uri /index.html`); an end-to-end test
+opens a results URL directly to prove it.
 
 ## Talking to the API
 
@@ -457,10 +473,8 @@ against a running API: `/api/health` returned 200, an unknown job id
 returned a `application/problem+json` 404, and an invalid body returned a
 problem+json 422, all through the proxy.
 
-**In production,** `npm run build` produces static files. The API needs no
-change _if_ they are served from the same origin as the API, with a reverse
-proxy (nginx, Caddy, a load balancer) sending `/api/*` to the API and
-everything else to `dist/`. That's what the dev proxy imitates.
+**In production,** nginx does the same (below): `/api/*` goes to the API,
+everything else is the built site, one origin, so still no CORS.
 
 Two cases would need changes, not made here:
 
@@ -472,3 +486,98 @@ Two cases would need changes, not made here:
   open to one IP. A page served over HTTPS can't call it: browsers block
   mixed content. It would need HTTPS in front, or the same-origin proxy
   above.
+
+## Serving it: nginx
+
+`web/Dockerfile` builds the site with `vite build`, then copies `dist/` into
+nginx. Compose runs it as the `web` service on `127.0.0.1:8080`, like the
+other services:
+
+- **Hardened like the others.** It runs as a non-root user (uid 101,
+  nginx-unprivileged) on a read-only root filesystem. Its pid file and
+  temp files live in a `/tmp` tmpfs, and its logs go to stdout/stderr.
+- **Healthcheck:** `GET /healthz`, which nginx answers itself, so it
+  reports nginx's health, not the API's.
+- **`/api/*`** is proxied to `api:8000` with the prefix stripped. Responses,
+  problem details included, pass through unchanged.
+- **Every other path** is a file from `dist/` or, failing that,
+  `index.html` (the SPA fallback). Under `/assets/` a missing file is a
+  real 404, so a stale page asking for an old chunk fails visibly instead
+  of receiving HTML as JavaScript.
+- **Caching.** Vite puts a hash of each file's content in its name, so
+  `/assets/*` is cached for a year (`immutable`). `index.html` is
+  `no-cache`, so a deploy is picked up on the next load.
+- **Security headers,** on every response including errors:
+  - a Content-Security-Policy allowing only this origin (`script-src 'self'`,
+    `style-src 'self'`, `connect-src 'self'`, no objects, no framing);
+  - `X-Content-Type-Options: nosniff`;
+  - `Referrer-Policy: no-referrer`.
+
+  The app needs no `'unsafe-inline'`. React and Recharts set styles
+  through the DOM, which CSP allows. The end-to-end tests fail on any
+  CSP violation the browser reports, and a deliberate inline script and
+  inline style were checked to be blocked and reported.
+
+- **gzip** (level 6) for JavaScript, CSS, JSON and SVG.
+
+**Code splitting.** The Results and Compare pages are loaded with
+`React.lazy` (`App.tsx`), so Recharts, most of the code, is downloaded only
+when a chart page opens. Measured through nginx
+([bench/results/web/](../bench/results/web/README.md)): the initial load
+went from 203.4 kB to 90.4 kB gzipped.
+
+## End to end tests
+
+```bash
+npm run test:e2e                     # about 1.5 minutes
+npm run test:e2e -- --grep Model     # arguments go to playwright test
+npm run test:e2e -- --keep           # leave the stack running afterwards
+```
+
+1. **The stack.** `e2e/stack.mjs` starts its own Compose project
+   (`qbt-e2e`), so it never touches your development stack. It **always**
+   builds every image fresh with `docker compose up --build`, for the reason
+   in [Quick start](#quick-start). Then it ingests SPY 2008–2025 and
+   trains a model, which needs network access to Yahoo Finance.
+2. **The tests** (`e2e/app.spec.ts`) run in the Playwright image of the same
+   version as `@playwright/test`. It has Chromium and the system libraries
+   Chromium needs, which a WSL distro may lack. The container joins the
+   stack's network and reaches nginx as `http://web:8080`:
+   - pick a strategy, run it, and see the chart: the equity curve's SVG
+     path has hundreds of points;
+   - the Model page sends no POST until Predict is pressed, then exactly one;
+   - a results URL opened directly loads, through the SPA fallback;
+   - cache headers, the asset 404, and problem+json through the proxy.
+
+   Every test also fails on a CSP violation, a page error or a console error.
+
+3. **Tear down:** `down -v`, unless `--keep`.
+
+CI's `web` job runs lint, typecheck, unit tests, `api:check`, the build and
+`npm run test:e2e`. On a failure it uploads the Playwright report and
+prints the service logs.
+
+## Dependency audit
+
+`npm audit` reports 8 moderate findings. They are all one advisory,
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249):
+a denial of service in `minimatch` <11.0.1 from crafted glob patterns.
+
+The 8 entries are `minimatch` itself and seven packages that depend on it:
+`eslint` and six `typescript-eslint` packages. **All of them are lint
+tooling.** `npm audit --omit=dev` finds 0 vulnerabilities, and nothing
+from them is in the built site. The globs they match come from this
+repo's ESLint config, not from untrusted input.
+
+No fix was applied, because none is safe and non-breaking today:
+
+- **`eslint` 10.15.0** depends on a fixed `minimatch` (^11.0.5). But it was
+  released on 2026-11-13, inside the two-week minimum age every dependency
+  here must meet. Upgrading is a patch-level change once it is old enough
+  (after 2026-11-27).
+- **`@typescript-eslint/typescript-estree`** asks for `minimatch` ^10.2.2.
+  No release of it is outside the vulnerable range yet, so the fix would
+  be forcing `minimatch` 11 on it (an `overrides` entry). That crosses a
+  major version it didn't ask for.
+- **`npm audit fix --force`** proposes typescript-eslint 8.36.0, a
+  downgrade it labels breaking. It was not run.

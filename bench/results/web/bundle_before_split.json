@@ -1,0 +1,89 @@
+{
+  "measurement": "bundle_before_split",
+  "environment": {
+    "recorded_at": "2026-11-16T02:29:10+00:00",
+    "host": {
+      "cpu_model": "Intel(R) Core(TM) 7 150U",
+      "windows": {
+        "physical_cores": 10,
+        "logical_processors": 12,
+        "max_clock_mhz": 1800,
+        "ram_gib": 15.7,
+        "battery_status_code": 2,
+        "power_plan": "Balanced"
+      },
+      "power": {
+        "AC1.online": "1",
+        "BAT1.status": "Full",
+        "BAT1.capacity": "100"
+      },
+      "on_ac_power": true,
+      "wslconfig": "absent (WSL defaults: all logical CPUs, 50% of host RAM)"
+    },
+    "wsl_distro": {
+      "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+      "logical_cpus": 12,
+      "loadavg_1_5_15": [
+        1.732421875,
+        1.275390625,
+        1.0546875
+      ]
+    },
+    "docker": {
+      "operating_system": "Docker Desktop",
+      "server_version": "29.9.3",
+      "kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "vm_cpus": 12,
+      "vm_memory_bytes": 8162783232,
+      "vm_memory_gib": 7.6,
+      "storage_driver": "overlayfs",
+      "cgroup_version": "2",
+      "compose_version": "5.7.0"
+    },
+    "image": "sha256:199310df9753a1cd424b61c952e2f0ec814ca6c0ac50231ce6a7f8eabd2b2a1d",
+    "git_commit": "8f2067f+dirty",
+    "python": "3.12.16",
+    "web_image": "sha256:d93e381b5a01058a0f8972de98a46e47a8fc87c533f3cf104bb04835d88ccec8"
+  },
+  "config": {
+    "project": "qbt-web-bench",
+    "nginx_gzip_level": 6,
+    "backtest": {
+      "strategy": "sma_crossover",
+      "ticker": "SPY",
+      "start": "2015-01-01",
+      "end": "2025-01-01",
+      "cost_bps": 5,
+      "n_boot": 2000,
+      "seed": 0,
+      "params": {
+        "short_window": 50,
+        "long_window": 200
+      }
+    }
+  },
+  "bundle": {
+    "initial_gzip_bytes": 203390,
+    "initial_raw_bytes": 695866,
+    "lazy_gzip_bytes": 0,
+    "lazy_raw_bytes": 0,
+    "files": {
+      "index-6E99bddr.css": {
+        "gzip_bytes": 1475,
+        "encoding": "gzip",
+        "raw_bytes": 4456,
+        "initial": true
+      },
+      "index-uB6uMEmJ.js": {
+        "gzip_bytes": 201915,
+        "encoding": "gzip",
+        "raw_bytes": 691410,
+        "initial": true
+      }
+    },
+    "started": "2026-11-16T02:29:15+00:00",
+    "ended": "2026-11-16T02:29:16+00:00",
+    "power_events": [],
+    "discarded_attempts": 0
+  }
+}
